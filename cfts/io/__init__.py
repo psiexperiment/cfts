@@ -1,70 +1,48 @@
-import logging
-log = logging.getLogger(__name__)
-
 import functools
-from glob import glob
-import json
-import shutil
 from pathlib import Path
-import os.path
 
-import bcolz
 import numpy as np
 import pandas as pd
-from scipy import signal
-
-from . import Signal
 
 
-# Max size of LRU cache
-MAXSIZE = 1024
+class Recording:
+
+    def __init__(self, base_path):
+        bp = Path(base_path)
+        self.base_path = bp
+        self.carray_names = {d.parent.stem for d in bp.glob('*/meta')}
+        self.ctable_names = {d.parent.parent.stem for d in bp.glob('*/*/meta')}
+        self.ttable_names = {d.stem for d in bp.glob('*.csv')}
+
+    def __getattr__(self, attr):
+        if attr in self.carray_names:
+            return self._load_bcolz_signal(attr)
+        if attr in self.ctable_names:
+            return self._load_bcolz_table(attr)
+        elif attr in self.ttable_names:
+            return self._load_text_table(attr)
+
+    def __repr__(self):
+        n_signals = len(self.carray_names)
+        n_tables = len(self.ctable_names)
+        return f'<Dataset with {n_signals} signals and {n_tables} tables>'
+
+    @functools.lru_cache()
+    def _load_bcolz_signal(self, name):
+        from .bcolz_tools import BcolzSignal
+        return BcolzSignal(self.base_path / name)
+
+    @functools.lru_cache()
+    def _load_bcolz_table(self, name):
+        from .bcolz_tools import load_ctable_as_df
+        return load_ctable_as_df(self.base_path / name)
+
+    @functools.lru_cache()
+    def _load_text_table(self, name):
+        import pandas as pd
+        return pd.read_csv((self.base_path / name).with_suffix('.csv'))
 
 
-def repair_carray_size(path):
-    chunk_wildcard = os.path.join(path, 'data', '*.blp')
-    sizes_filename = os.path.join(path, 'meta', 'sizes')
-    storage_filename = os.path.join(path, 'meta', 'storage')
-
-    with open(sizes_filename, 'r') as fh:
-        sizes = json.load(fh)
-
-    with open(storage_filename, 'r') as fh:
-        storage = json.load(fh)
-
-    if sizes['shape'] != [0]:
-        raise ValueError('Data seems fine')
-
-    chunklen = storage['chunklen']
-    n_chunks = len(glob(chunk_wildcard))
-    sizes['shape'] = [n_chunks * chunklen]
-
-    # Backup the file before overwriting.
-    shutil.copy(sizes_filename, sizes_filename + '.old')
-    with open(sizes_filename, 'w') as fh:
-        json.dump(sizes, fh)
-
-
-def load_ctable_as_df(path, decode=True, archive=True):
-    csv_path = f'{path}.csv'
-    if os.path.exists(csv_path):
-        return pd.io.parsers.read_csv(csv_path)
-    table = bcolz.ctable(rootdir=path)
-    df = table.todataframe()
-    if decode:
-        for c in table.cols:
-            if table[c].dtype.char == 'S':
-                df[c] = df[c].str.decode('utf8')
-
-    if archive:
-        df.to_csv(csv_path, index=False)
-    return df
-
-
-def get_unique_columns(df, exclude=None):
-    return [c for c in df if (len(df[c].unique()) > 1) and (c not in exclude)]
-
-
-<<<<<<< HEAD
 class Signal:
 
     def get_epochs(self, md, offset, duration, detrend=None, columns='auto'):
@@ -98,7 +76,6 @@ class Signal:
         if not m.all():
             i = np.flatnonzero(~m)
             log.warn('Missing epochs %d', i)
-            print(f'Missing epochs {i}')
 
         values = np.concatenate([self[i:i+samples][np.newaxis] \
                                  for i in indices[m]])
@@ -134,34 +111,3 @@ class Signal:
     def get_random_segments_filtered(self, n, *args, **kwargs):
         fn = functools.partial(self.get_random_segments, n)
         return self._get_segments_filtered(fn, *args, **kwargs)
-
-
-class Recording:
-    pass
-
-
-class BcolzRecording(Recording):
-
-    def __init__(self, base_path):
-        self.base_path = Path(base_path)
-        carray_names = set(d.parts[-2] for d in self.base_path.glob('*/meta'))
-        ctable_names = set(d.parts[-3] for d in self.base_path.glob('*/*/meta'))
-        self.carray_names = carray_names
-        self.ctable_names = ctable_names
-
-    def __getattr__(self, attr):
-        return self._load_bcolz(attr)
-
-    def __repr__(self):
-        carray = ', '.join(self.carray_names)
-        ctable = ', '.join(self.ctable_names)
-        return f'<Dataset with {carray} signals and {ctable} tables>'
-
-    @functools.lru_cache(maxsize=MAXSIZE)
-    def _load_bcolz(self, name):
-        if name in self.carray_names:
-            return BcolzSignal(self.base_path / name)
-        elif name in self.ctable_names:
-            return load_ctable_as_df(self.base_path / name)
-        else:
-            raise AttributeError(name)
