@@ -1,0 +1,119 @@
+context:
+  meta: {}
+  parameters:
+    acquisition:
+      f2_frequency:
+        expression: '8000'
+        rove: true
+      f2_level:
+        expression: '80'
+        rove: true
+    averaging_settings:
+      n_fft:
+        expression: '4'
+        rove: false
+      n_time:
+        expression: '8'
+        rove: false
+      response_window:
+        expression: 50e-3
+        rove: false
+    hardware_settings:
+      primary_channel:
+        rove: false
+        selected: Speaker 1
+      secondary_channel:
+        rove: false
+        selected: Speaker 2
+    inear_calibration:
+      calibration_gain:
+        expression: '-30'
+        rove: false
+    microphone_channel_settings:
+      microphone_channel:
+        rove: false
+        selected: Starship microphone (PXI1Slot6/ai1)
+      microphone_input_gain:
+        expression: '40'
+        rove: false
+    primary:
+      primary_tone_phase:
+        expression: '0'
+        rove: false
+      primary_tone_polarity:
+        rove: false
+        selected: positive
+      primary_tone_start_time:
+        expression: '0.0'
+        rove: false
+    primary_settings:
+      f2_f1_ratio:
+        expression: '1.2'
+        rove: false
+      l1_l2_difference:
+        expression: '10'
+        rove: false
+      max_dpoae_noise_floor:
+        expression: '0.0'
+        rove: false
+    result:
+      dpoae_noise_floor: {}
+      dpoae_spl: {}
+      f1_noise_floor: {}
+      f1_spl: {}
+      f2_noise_floor: {}
+      f2_spl: {}
+      ts_end: {}
+    secondary:
+      secondary_tone_phase:
+        expression: '0'
+        rove: false
+      secondary_tone_polarity:
+        rove: false
+        selected: positive
+      secondary_tone_start_time:
+        expression: '0.0'
+        rove: false
+  selectors:
+    actual:
+      context_item_order:
+      - f2_frequency
+      - f2_level
+      order: ascending
+      settings:
+      - f2_frequency: 8000
+        f2_level: 80
+      - f2_frequency: 8000
+        f2_level: 80
+      - f2_frequency: 8000
+        f2_level: 80
+    default:
+      context_item_order:
+      - f2_frequency
+      - f2_level
+      context_settings: !!python/object/new:atom.catom.atomdict
+        dictitems:
+          f2_frequency:
+            end: 45.2
+            start: 5.6
+            step: 0.5
+          f2_level:
+            end: 80.0
+            start: 10.0
+            step: 5.0
+dpoae_io_viewbox:
+  y_max: 63.15720739139432
+  y_min: -164.3896168694837
+dpoae_threshold_view:
+  y_max: 100.0
+  y_min: -20.0
+event_log:
+  column_widths:
+    event: 100
+    timestamp: 1050
+signal_fft_view_vb:
+  y_max: 100.0
+  y_min: -10.0
+signal_view_vb:
+  y_max: 0.2
+  y_min: -0.2

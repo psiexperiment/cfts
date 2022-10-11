@@ -1,0 +1,29 @@
+context:
+  meta: {}
+  parameters:
+    ? ''
+    : input_channel:
+        rove: false
+        selected: Speaker 1 monitor (PXI1Slot8/ai0)
+      input_gain:
+        expression: '40'
+        rove: false
+      input_range:
+        expression: '10'
+        rove: false
+      reference_frequency:
+        expression: '1000.0'
+        rove: false
+      reference_level:
+        expression: '114'
+        rove: false
+      sample_duration:
+        expression: '2'
+        rove: false
+  selectors: {}
+microphone_fft_view_view:
+  y_max: 100.0
+  y_min: -10.0
+microphone_signal_view_view:
+  y_max: 0.2
+  y_min: -0.2

@@ -1,0 +1,122 @@
+context:
+  meta: {}
+  parameters:
+    .ContextRow:
+      amplifier_gain:
+        expression: '100000.0'
+        rove: false
+      amplifier_highpass:
+        expression: '10'
+        rove: false
+      amplifier_lowpass:
+        expression: '10000.0'
+        rove: false
+    digital_filter_settings:
+      digital_filter:
+        expression: 'False'
+        rove: false
+      digital_highpass:
+        expression: '300'
+        rove: false
+      digital_lowpass:
+        expression: '3000'
+        rove: false
+    hardware_settings:
+      eeg_channel:
+        rove: false
+        selected: EEG (PXI1Slot7/ai0)
+      target_channel:
+        rove: false
+        selected: Speaker 1
+    inear_calibration:
+      calibration_gain:
+        expression: '-30'
+        rove: false
+    microphone_channel_settings:
+      microphone_channel:
+        rove: false
+        selected: Starship microphone (PXI1Slot6/ai1)
+      microphone_input_gain:
+        expression: '40'
+        rove: false
+    target:
+      depth:
+        expression: '1'
+        rove: false
+      duration:
+        expression: '30'
+        rove: false
+      fc:
+        expression: '8000.0'
+        rove: true
+      fm:
+        expression: '110'
+        rove: true
+      target_mod_delay:
+        expression: '0.0'
+        rove: false
+      target_mod_direction:
+        rove: false
+        selected: positive
+      target_sam_tone_rise_time:
+        expression: '0.1'
+        rove: false
+      target_sam_tone_start_time:
+        expression: '0.0'
+        rove: false
+      target_tone_level:
+        expression: '60.0'
+        rove: true
+      target_tone_phase:
+        expression: '0'
+        rove: false
+      target_tone_polarity:
+        rove: false
+        selected: positive
+  selectors:
+    default:
+      context_item_order:
+      - fm
+      - fc
+      - target_tone_level
+      context_settings: !!python/object/new:atom.catom.atomdict
+        dictitems:
+          fc:
+            end: 8.0
+            start: 8.0
+            step: 1
+          fm:
+            end: 1000.0
+            start: 110
+            step: 890.0
+          target_SAM_fm:
+            end: 1000.0
+            start: 110.0
+            step: 890.0
+          target_mod_fm:
+            end: 100.0
+            start: 10.0
+            step: 10.0
+          target_tone_frequency:
+            end: 45.2
+            start: 5.6
+            step: 1.0
+          target_tone_level:
+            end: 80.0
+            start: 20.0
+            step: 20.0
+eeg_fft_viewbox:
+  y_max: -0.5
+  y_min: -64.60804027434239
+eeg_view_vb:
+  y_max: 1.2323841529374806
+  y_min: -1.1448690975847011
+mic_segment_fft_viewbox:
+  y_max: 80.45744584080492
+  y_min: -5.649591417570946
+signal_fft_view_vb:
+  y_max: 100.0
+  y_min: -10.0
+signal_view_vb:
+  y_max: 0.2
+  y_min: -0.2

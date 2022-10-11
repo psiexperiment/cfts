@@ -1,0 +1,111 @@
+context:
+  meta: {}
+  parameters:
+    .ContextRow:
+      amplifier_gain:
+        expression: '100000.0'
+        rove: false
+      amplifier_highpass:
+        expression: '10'
+        rove: false
+      amplifier_lowpass:
+        expression: '10000.0'
+        rove: false
+    digital_filter_settings:
+      digital_filter:
+        expression: 'False'
+        rove: false
+      digital_highpass:
+        expression: '300'
+        rove: false
+      digital_lowpass:
+        expression: '3000'
+        rove: false
+    hardware_settings:
+      eeg_channel:
+        rove: false
+        selected: EEG (PXI1Slot7/ai0)
+      target_channel:
+        rove: false
+        selected: Speaker 1
+    inear_calibration:
+      calibration_gain:
+        expression: '-30'
+        rove: false
+    microphone_channel_settings:
+      microphone_channel:
+        rove: false
+        selected: Starship microphone (PXI1Slot6/ai1)
+      microphone_input_gain:
+        expression: '40'
+        rove: false
+    target:
+      coerce_samples:
+        expression: 'True'
+        rove: false
+      duration:
+        expression: '30'
+        rove: false
+      duty_cycle:
+        expression: '0.25'
+        rove: false
+      fc:
+        expression: '8000.0'
+        rove: true
+      fm:
+        expression: '110'
+        rove: false
+      target_mod_depth:
+        expression: '1.0'
+        rove: false
+      target_ram_tone_start_time:
+        expression: '0.0'
+        rove: false
+      target_tone_level:
+        expression: '60'
+        rove: true
+      target_tone_polarity:
+        rove: false
+        selected: positive
+  selectors:
+    default:
+      context_item_order:
+      - fc
+      - target_tone_level
+      context_settings: !!python/object/new:atom.catom.atomdict
+        dictitems:
+          fc:
+            end: 8.0
+            start: 8.0
+            step: 1
+          fm:
+            end: 110
+            start: 110
+            step: 1
+          target_mod_fm:
+            end: 1000.0
+            start: 110.0
+            step: 890.0
+          target_tone_frequency:
+            end: 45.2
+            start: 5.6
+            step: 1.0
+          target_tone_level:
+            end: 60.0
+            start: 60.0
+            step: 20.0
+eeg_fft_viewbox:
+  y_max: 182.95757853024995
+  y_min: -197.27692953128525
+eeg_view_vb:
+  y_max: 2.5238459366903627
+  y_min: -3.2715508971614304
+mic_segment_fft_viewbox:
+  y_max: 146.88913279134044
+  y_min: -63.02727009503084
+signal_fft_view_vb:
+  y_max: 100.0
+  y_min: -10.0
+signal_view_vb:
+  y_max: 0.2
+  y_min: -0.2
