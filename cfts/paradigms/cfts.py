@@ -85,7 +85,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'memr_interleaved', 'MEMR (interleaved click)', 'ear', [
+    'memr_interleaved_click', 'MEMR (interleaved click)', 'ear', [
         {'manifest': CFTS_PATH + 'memr.InterleavedMEMRManifest', 'attrs': {'probe': 'click'}},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedClickProbeMixin', 'required': True},
@@ -98,7 +98,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'memr_interleaved', 'MEMR (interleaved chirp)', 'ear', [
+    'memr_interleaved_chirp', 'MEMR (interleaved chirp)', 'ear', [
         {'manifest': CFTS_PATH + 'memr.InterleavedMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpProbeMixin', 'required': True},

@@ -144,6 +144,8 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
 
         CFTSSelector:
             label = 'MEMR stimuli'
+            can_manage = ['elicitor_bandlimited_noise_level']
+            user_managed = False
 
     Extension:
         id = EXPERIMENT + '.commands'

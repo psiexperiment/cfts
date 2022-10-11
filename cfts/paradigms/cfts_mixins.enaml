@@ -115,7 +115,7 @@ CONTEXT_ITEM_DETAIL = {
 
     # MEMR
     'elicitor_bandlimited_noise_level': {
-        'user_friendly_name': 'Elicitor level',
+        'user_friendly_name': 'levels',
         'step_unit': 'dB',
         'unit': 'dB SPL',
     }
