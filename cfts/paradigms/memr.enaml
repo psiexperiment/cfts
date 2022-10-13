@@ -23,7 +23,7 @@ from psi.data.api import FFTContainer, TimeContainer, ViewBox
 from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
 
 from .cfts_mixins import CFTSSelector, EEGInput, PTMicrophoneInput
-from ..core.io_mixins import QueuedEpochChannelOutput
+from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
@@ -347,7 +347,7 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
 
         Expression:
             parameter = 'probe_chirp_delay'
-            expression = '0'
+            expression = 'elicitor_envelope_start_time - analysis_window'
 
 
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
