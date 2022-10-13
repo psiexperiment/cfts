@@ -13,7 +13,7 @@ from psi.controller.calibration.api import ChirpCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
 from psi.data.sinks.api import DisplayValue, BinaryStore
 
-from ..core.io_mixins import ChannelInput, ChannelInputManifest, \
+from psi.paradigms.core.io_mixins import ChannelInput, ChannelInputManifest, \
     QueuedEpochChannelOutput
 
 
