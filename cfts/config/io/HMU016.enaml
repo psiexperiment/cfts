@@ -1,0 +1,171 @@
+from pathlib import Path
+
+from enaml.workbench.api import PluginManifest, Extension
+import numpy as np
+import pandas as pd
+
+from psi import get_config
+
+from psi.controller.engines.nidaq import (NIDAQEngine,
+                                          NIDAQHardwareAIChannel,
+                                          NIDAQHardwareAOChannel)
+
+from psiaudio.calibration import FlatCalibration
+from psiaudio.calibration import InterpCalibration
+from psi.controller.input import Transform
+
+
+def mv_to_C(mv):
+    c = (mv-0.050)/0.020 + 35
+    m = (c < 35) | (c > 40)
+    c[m] = np.nan
+    return c
+
+
+def cal_from_epl(name):
+    base_path = Path('c:/Data/Probe Tube Calibrations')
+    filename = base_path / f'{name}_ProbeTube.calib'
+    with filename.open('r') as fh:
+        for line in fh:
+            if line.startswith('Freq(Hz)'):
+                break
+        cal = pd.read_csv(fh, sep='\t',
+                          names=['freq', 'SPL', 'phase'])
+    return InterpCalibration.from_spl(cal['freq'], cal['SPL'],
+                                      phase=cal['phase'])
+
+
+enamldef IOManifest(PluginManifest): manifest:
+
+    Extension:
+        id = 'backend'
+        point = 'psi.controller.io'
+
+        NIDAQEngine:
+            name = 'NI_misc'
+            hw_ai_monitor_period = 0.125
+
+            NIDAQHardwareAIChannel:
+                label = 'EEG'
+                name = 'eeg_channel'
+                channel = 'Dev1/ai0'
+                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                fs = 25e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'differential'
+                terminal_coupling = 'DC'
+                unit = 'V'
+
+        NIDAQEngine:
+            name = 'NI_audio'
+            master_clock = True
+
+            hw_ai_monitor_period = 0.125
+            hw_ao_monitor_period = 0.125
+            hw_ao_buffer_size = 5
+
+            ########################################################
+            # Calibration channel
+            ########################################################
+            NIDAQHardwareAIChannel:
+                label = 'Calibration microphone'
+                name = 'reference_microphone_channel'
+                channel = 'PXI1Slot3/ai1'
+                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'DC'
+                gain = 40
+                calibration_user_editable = True
+                max_range = (-10, 10)
+
+            ########################################################
+            # Left starship
+            ########################################################
+            NIDAQHardwareAOChannel:
+                label = 'Left starship (primary)'
+                name = 'starship_left_primary'
+                channel = 'PXI1Slot3/ao0'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-1, 1)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                calibration = FlatCalibration.as_attenuation()
+                #: The nominal max range in the spec sheet is higher, but we clip it to a
+                #: reasonable range to avoid damaging connected equipment.
+                max_range = (-1.0, 1.0)
+
+            NIDAQHardwareAOChannel:
+                label = 'Left starship (secondary)'
+                name = 'starship_left_secondary'
+                channel = 'PXI1Slot3/ao1'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-1, 1)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                calibration = FlatCalibration.as_attenuation()
+
+            NIDAQHardwareAIChannel:
+                label = 'Left starship microphone'
+                name = 'starship_left_microphone'
+                channel = 'PXI1Slot3/ai0'
+                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'DC'
+                gain = 40
+                calibration = cal_from_epl('EP2')
+
+            ########################################################
+            # Right starship
+            ########################################################
+            NIDAQHardwareAOChannel:
+                label = 'Right starship (primary)'
+                name = 'starship_right_primary'
+                channel = 'PXI1Slot4/ao0'
+                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-1, 1)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                calibration = FlatCalibration.as_attenuation()
+                #: The nominal max range in the spec sheet is higher, but we clip it to a
+                #: reasonable range to avoid damaging connected equipment.
+                max_range = (-1.0, 1.0)
+
+            NIDAQHardwareAOChannel:
+                label = 'Right starship (secondary)'
+                name = 'starship_right_secondary'
+                channel = 'PXI1Slot4/ao1'
+                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-1, 1)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                calibration = FlatCalibration.as_attenuation()
+
+            NIDAQHardwareAIChannel:
+                label = 'Right starship microphone'
+                name = 'starship_right_microphone'
+                channel = 'PXI1Slot4/ai0'
+                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'DC'
+                gain = 40
+                calibration_user_editable = True
