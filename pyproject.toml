@@ -25,6 +25,9 @@ test = ["pytest", "pytest-console-scripts", "matplotlib"] # Matplotlib is used i
 zarr-backend = ["zarr"]
 dev = ["coloredlogs"]
 
+[project.scripts]
+cfts-zip-data = "cfts.io.postprocess:zip_data"
+
 [build-system]
 requires = ["setuptools>=61.2", "wheel", "setuptools_scm[toml]>=3.4.3"]
 build-backend = "setuptools.build_meta"
