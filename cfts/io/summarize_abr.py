@@ -413,6 +413,7 @@ def main():
     process_files(args.filenames, args.offset, args.duration, filter_settings,
                   args.reprocess)
 
+
 def main_auto():
     parser = argparse.ArgumentParser('Filter and summarize ABR files in folder')
     parser.add_argument('folder', type=str, help='Folder containing ABR data')
