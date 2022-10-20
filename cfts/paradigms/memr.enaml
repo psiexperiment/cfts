@@ -1,19 +1,21 @@
 import logging
 log = logging.getLogger(__name__)
 
+from atom.api import Float, Int
+from enaml.core.api import d_
 from enaml.workbench.api import Extension
 from enaml.workbench.core.api import Command
 
 import numpy as np
 
-from psiaudio.pipeline import coroutine
+from psiaudio.pipeline import concat, coroutine, PipelineData
 from psiaudio.queue import BlockedFIFOSignalQueue
 from psiaudio import util
 
 from psi.context.api import ContextGroup, Expression, Parameter
 from psi.controller.api import (
-    Blocked, ControllerManifest, Coroutine, ExperimentAction, ExtractEpochs,
-    Synchronized
+    Blocked, ControllerManifest, Coroutine, EpochInput, ExperimentAction,
+    ExtractEpochs, Synchronized
 )
 from psi.core.enaml.api import ExperimentManifest
 from psi.token.primitives import (
@@ -22,7 +24,11 @@ from psi.token.primitives import (
 from psi.data.api import FFTContainer, TimeContainer, ViewBox
 from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
 
-from .cfts_mixins import CFTSSelector, EEGInput, PTMicrophoneInput
+from psi.data.api import (
+    EpochTimeContainer, GroupedEpochAveragePlot, GroupedEpochFFTPlot
+)
+
+from .cfts_mixins import CalMicrophoneInput, CFTSSelector, EEGInput, PTMicrophoneInput
 from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
@@ -46,12 +52,6 @@ def configure_interleaved_memr(event):
             probe.add_setting(setting, averages=averages, total_duration=trial_duration)
             elicitor.add_setting(setting, averages=averages, total_duration=trial_duration)
 
-    names = context.get_names()
-    formatter = context.get_selector().get_formatter(names)
-    container = data.find_plot_container('memr_fft_container')
-    container.buttons = sorted(context.unique_values(names))
-    container.fmt_button_cb = formatter
-
     # Then figure out the maximum scaling factor required for that level.
     # Multiply to convert from RMS to peak to peak and add 1% headroom.
     #max_sf = {}
@@ -64,36 +64,63 @@ def configure_interleaved_memr(event):
 
 
 @coroutine
-def analyze_interleaved_memr(fs, workbench, probe, target):
-    data = workbench.get_plugin('psi.data')
-    vb_time = data.find_viewbox('probe_time_vb')
-    vb_fft = data.find_viewbox('probe_fft_vb')
-    vb_memr = data.find_viewbox('memr_fft_vb')
+def stack_repeats(repeat_period, target):
+    while True:
+        new_data = []
+        for data in (yield):
+            s_repeat = int(round(repeat_period * data.fs))
+            data_repeat = np.asarray(data).reshape((-1, data.n_channels, s_repeat))
+            for i, d in enumerate(data_repeat):
+                new_d = PipelineData(d, fs=data.fs, s0=0, channel=data.channel,
+                                     metadata=data.metadata.copy())
+                new_d.add_metadata('repeat', i)
+                new_data.append(new_d)
 
+        new_data = concat(new_data, axis='epoch')
+        target(new_data)
+
+
+class StackRepeats(EpochInput):
+
+    duration = d_(Float()).tag(metadata=True)
+
+    def configure_callback(self):
+        cb = super().configure_callback()
+        return stack_repeats(self.duration, cb).send
+
+
+@coroutine
+def extract_stim(lb, ub, target):
+    ilb, iub = None, None
     while True:
         data = (yield)
-        target(data)
-        for d in data:
-            md = d.metadata
-            n = md[f'probe_{probe}_n'] - 1
+        if iub is None:
+            ilb = int(round(lb * data.fs))
+            iub = int(round(ub * data.fs))
+        target(data[..., ilb:iub])
 
-            a_lb = int(round(md[f'probe_{probe}_delay'] * fs))
-            a_d = int(round(md['analysis_window'] * fs))
-            a_ub = a_lb + a_d
 
-            s_repeat = int(round(md['repeat_period'] * fs))
-            clicks = np.asarray(d)[0, :].reshape((-1, s_repeat))
-            clicks = clicks[:, a_lb:a_ub]
-            psd = util.db(util.psd_df(clicks, fs=fs))
+class ExtractStim(EpochInput):
 
-            t = np.arange(clicks.shape[-1]) / fs
-            vb_time.plot(t, clicks[0], color='seagreen')
-            vb_time.plot(t, clicks[1:].mean(axis=0), color='coral')
-            vb_fft.plot(psd.columns, psd.iloc[0], color='seagreen', log_x=True)
-            vb_fft.plot(psd.columns, psd.iloc[1:].mean(axis=0), color='coral', log_x=True)
+    lb = d_(Float()).tag(metadata=True)
+    ub = d_(Float()).tag(metadata=True)
 
-            memr = psd.iloc[1:].mean(axis=0) - psd.iloc[0]
-            vb_memr.plot(memr.index, memr.values, log_x=True)
+    def configure_callback(self):
+        cb = super().configure_callback()
+        return extract_stim(self.lb, self.ub, cb).send
+
+
+class GroupedMEMRPlot(GroupedEpochFFTPlot):
+
+    final_probe = d_(Int())
+
+    def _y(self, epoch):
+        b = [e for e in epoch if e.metadata['repeat'] == 0]
+        r = [e for e in epoch if e.metadata['repeat'] == self.final_probe]
+        b = np.array(concat(b, axis='epoch'))[:, self.channel]
+        r = np.array(concat(r, axis='epoch'))[:, self.channel]
+        result = util.db(util.psd(r, self.source.fs)) - util.db(util.psd(b, self.source.fs))
+        return result.mean(axis=0)
 
 
 enamldef BaseMEMRManifest(ControllerManifest): manifest:
@@ -114,13 +141,28 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
+        CalMicrophoneInput:
+            pass
+
         PTMicrophoneInput:
             ExtractEpochs: extract:
                 name = 'memr'
-                Coroutine:
-                    name = 'memr_analyzed'
-                    coroutine = analyze_memr_cb
-                    args = (fs, workbench, probe)
+                StackRepeats:
+                    name = 'memr_repeat'
+                    duration = C.repeat_period
+                    ExtractStim:
+                        # Add a bit of padding to capture the tail end of the
+                        # probe due to acoustic delays
+                        name = 'probe'
+                        lb = C.probe_delay
+                        ub = C.probe_delay + C.probe_duration + 1e-3
+
+                    ExtractStim:
+                        # Add a bit of padding to capture the tail end of the
+                        # probe due to acoustic delays
+                        name = 'elicitor'
+                        lb = C.elicitor_envelope_start_time
+                        ub = C.elicitor_envelope_start_time + C.elicitor_duration
 
         Synchronized:
             name = 'memr_stim'
@@ -190,7 +232,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
 
         BinaryStore:
             name = 'memr_binary_store'
-            continuous_inputs = ['microphone']
+            continuous_inputs = ['microphone', 'cal_microphone']
 
         TextStore:
             name = 'memr_store'
@@ -200,30 +242,72 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.plots'
         point = 'psi.data.plots'
 
-        TimeContainer:
+        EpochTimeContainer: probe_time_container:
             name = 'probe_time_container'
             label = 'Probe waveform'
-            span = 11e-3
 
-            ViewBox:
+            max_buttons = 4
+            fmt_button_cb << \
+                C.get_selector().get_formatter(probe_plot.tab_grouping)
+
+            ViewBox: probe_time_vb:
                 name = 'probe_time_vb'
                 y_mode = 'mouse'
                 save_limits = True
 
-        FFTContainer:
+                GroupedEpochAveragePlot: probe_plot:
+                    source_name = 'probe'
+                    plot_grouping = ['repeat']
+                    plot_keys = [(k,) for k in range(C.elicitor_n + 1)]
+                    autogenerate_keys = 'tab'
+                    tab_grouping << C.get_names()
+                    tab_keys >> probe_time_container.buttons
+                    selected_tab := probe_time_container.current_button
+                    auto_select := probe_time_container.auto_select
+                    fmt_plot_label_cb = lambda x, s: f'Probe {x[0]}'
+
+        FFTContainer: probe_fft_container:
             name = 'probe_fft_container'
-            label = 'Probe PSD'
-            freq_lb = 5.6e3
-            freq_ub = 45e3
+            label = 'Probe and Elicitor PSD'
+            freq_lb = 0.5e3
+            freq_ub = 50e3
+
+            max_buttons = 4
+            fmt_button_cb << \
+                C.get_selector().get_formatter(probe_fft_plot.tab_grouping)
 
             ViewBox:
                 name = 'probe_fft_vb'
                 y_mode = 'mouse'
                 save_limits = True
 
+                GroupedEpochFFTPlot: probe_fft_plot:
+                    source_name = 'probe'
+                    plot_grouping = ['repeat']
+                    autogenerate_keys = 'tab'
+                    plot_keys = [(k,) for k in range(C.elicitor_n + 1)]
+                    tab_grouping << C.get_names()
+                    tab_keys >> probe_fft_container.buttons
+                    selected_tab := probe_fft_container.current_button
+                    auto_select := probe_fft_container.auto_select
+                    apply_calibration = True
+                    fmt_plot_label_cb = lambda x, s: f'Probe {x[0]}'
+
+                GroupedEpochFFTPlot: elicitor_fft_plot:
+                    source_name = 'elicitor'
+                    plot_grouping = ['repeat']
+                    autogenerate_keys = 'tab'
+                    plot_keys = [(k,) for k in range(C.elicitor_n + 1)]
+                    tab_grouping << C.get_names()
+                    tab_keys >> probe_fft_container.buttons
+                    selected_tab := probe_fft_container.current_button
+                    auto_select := probe_fft_container.auto_select
+                    apply_calibration = True
+                    fmt_plot_label_cb = lambda x, s: f'Elicitor {x[0]}'
+
         FFTContainer:
             name = 'memr_fft_container'
-            label = 'MEMR PSD'
+            label = 'MEMR'
             freq_lb = 5.6e3
             freq_ub = 45e3
 
@@ -231,6 +315,13 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 name = 'memr_fft_vb'
                 y_mode = 'mouse'
                 save_limits = True
+
+                GroupedMEMRPlot:
+                    final_probe = C.elicitor_n
+                    name = 'memr_fft_plot'
+                    source_name = 'probe'
+                    plot_grouping << C.get_names()
+                    pen_width = 2
 
 
 enamldef InterleavedElicitorMixin(ExperimentManifest):
@@ -324,6 +415,14 @@ enamldef InterleavedClickProbeMixin(ExperimentManifest):
             parameter = 'probe_click_delay'
             expression = '11.2e-3 - probe_bandlimited_click_window / 2'
 
+        Expression:
+            parameter = 'probe_delay'
+            expression = 'probe_click_delay'
+
+        Expression:
+            parameter = 'probe_duration'
+            expression = 'probe_bandlimited_click_window'
+
 
 enamldef InterleavedChirpProbeMixin(ExperimentManifest):
 
@@ -348,6 +447,14 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_chirp_delay'
             expression = 'elicitor_envelope_start_time - analysis_window'
+
+        Expression:
+            parameter = 'probe_delay'
+            expression = 'probe_chirp_delay'
+
+        Expression:
+            parameter = 'probe_duration'
+            expression = 'probe_chirp_duration'
 
 
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
