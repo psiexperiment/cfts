@@ -123,6 +123,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_coupling = 'DC'
                 gain = 40
                 calibration_user_editable = True
+                calibration = FlatCalibration.from_mv_pa(1)
 
             NIDAQHardwareAIChannel:
                 label = 'Starship microphone'
