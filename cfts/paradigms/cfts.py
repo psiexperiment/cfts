@@ -137,6 +137,30 @@ ParadigmDescription(
 )
 
 
+ParadigmDescription(
+    'memr_simultaneous_chirp', 'MEMR (simultaneous chirp)', 'ear', [
+        {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
+        {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
+        temperature_mixin,
+        microphone_mixin,
+        microphone_fft_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
+    ]
+)
+
+
+ParadigmDescription(
+    'memr_simultaneous_click', 'MEMR (simultaneous click)', 'ear', [
+        {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'click'}},
+        {'manifest': CFTS_PATH + 'memr.SimultaneousClickProbeMixin', 'required': True},
+        temperature_mixin,
+        microphone_mixin,
+        microphone_fft_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
+    ]
+)
+
+
 
 ParadigmDescription(
     'inear_speaker_calibration_chirp', 'In-ear speaker calibration (chirp)', 'ear', [
