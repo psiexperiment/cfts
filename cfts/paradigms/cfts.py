@@ -25,8 +25,8 @@ microphone_fft_mixin = {
         'id': 'microphone_fft_view',
         'title': 'Microphone (PSD)',
         'fft_time_span': 0.25,
-        'fft_freq_lb': 5,
-        'fft_freq_ub': 64000,
+        'fft_freq_lb': 500,
+        'fft_freq_ub': 50000,
         'source_name': 'microphone',
         'y_label': 'Microphone (dB)'
     }

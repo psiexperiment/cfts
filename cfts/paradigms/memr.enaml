@@ -12,7 +12,8 @@ from psiaudio.pipeline import concat, coroutine, PipelineData
 from psiaudio.queue import BlockedFIFOSignalQueue, GroupedFIFOSignalQueue
 from psiaudio import util
 
-from psi.context.api import ContextGroup, Expression, Parameter
+from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
+                             EnumParameter, Expression, Parameter)
 from psi.controller.api import (
     Blocked, ControllerManifest, Coroutine, EpochInput, ExperimentAction,
     ExtractEpochs, Synchronized
@@ -211,6 +212,57 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
             user_managed = False
 
     Extension:
+        id = EXPERIMENT + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'memr'
+            label = 'MEMR'
+
+            ContextRow:
+                name = 'elicitor'
+                fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh, 'Hz and equalize?', elicitor_eq]
+
+                Parameter: elicitor_fl:
+                    name = 'elicitor_fl'
+                    default = 8e3
+                    scope = 'trial'
+
+                Parameter: elicitor_fh:
+                    name = 'elicitor_fh'
+                    default = 16e3
+                    scope = 'trial'
+
+                BoolParameter: elicitor_eq:
+                    name = 'elicitor_equalize'
+                    default = False
+                    scope = 'trial'
+
+            ContextRow:
+                name = 'probe'
+                fmt = ['Probe', probe_fl, 'to', probe_fh, 'Hz at', probe_level, 'dB SPL and equalize?', probe_eq]
+
+                Parameter: probe_fl:
+                    name = 'probe_fl'
+                    default = 4e3
+                    scope = 'trial'
+
+                Parameter: probe_fh:
+                    name = 'probe_fh'
+                    default = 32e3
+                    scope = 'trial'
+
+                Parameter: probe_level:
+                    name = 'probe_level'
+                    default = 75
+                    scope = 'trial'
+
+                BoolParameter: probe_eq:
+                    name = 'probe_equalize'
+                    default = False
+                    scope = 'trial'
+
+    Extension:
         id = EXPERIMENT + '.commands'
         point = 'enaml.workbench.core.commands'
 
@@ -271,39 +323,41 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
         id = EXPERIMENT + '.interleaved_elicitor.items'
         point = 'psi.context.items'
 
-        ContextGroup:
-            name = 'memr'
-            label = 'MEMR'
+        Parameter:
+            name = 'elicitor_n'
+            label = 'Elicitor pulses'
+            default = 4
+            group_name = 'memr'
 
-            Parameter:
-                name = 'elicitor_n'
-                label = 'Elicitor pulses'
-                default = 4
+        Parameter:
+            name = 'repeat_period'
+            label = 'Stim repeat period'
+            default = 186e-3
+            group_name = 'memr'
 
-            Parameter:
-                name = 'repeat_period'
-                label = 'Stim repeat period'
-                default = 186e-3
+        Parameter:
+            name = 'trial_period'
+            label = 'Trial repeat period'
+            default = 1.580
+            group_name = 'memr'
 
-            Parameter:
-                name = 'trial_period'
-                label = 'Trial repeat period'
-                default = 1.580
+        Parameter:
+            name = 'trial_n'
+            label = 'Number of trials'
+            default = 2
+            group_name = 'memr'
 
-            Parameter:
-                name = 'trial_n'
-                label = 'Number of trials'
-                default = 2
+        Parameter:
+            name = 'elicitor_duration'
+            label = 'Elicitor duration'
+            default = 116e-3
+            group_name = 'memr'
 
-            Parameter:
-                name = 'elicitor_duration'
-                label = 'Elicitor duration'
-                default = 116e-3
-
-            Parameter:
-                name = 'analysis_window'
-                label = 'Analysis window'
-                default = 46.4e-3
+        Parameter:
+            name = 'analysis_window'
+            label = 'Analysis window'
+            default = 46.4e-3
+            group_name = 'memr'
 
         Expression:
             parameter = 'elicitor_noise_n'
@@ -328,6 +382,22 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
         Expression:
             parameter = 'elicitor_envelope_start_time'
             expression = 'repeat_period - elicitor_duration'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fl'
+            expression = 'elicitor_fl'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fh'
+            expression = 'elicitor_fh'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_equalize'
+            expression = 'elicitor_equalize'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_seed'
+            expression = '1'
 
 
 enamldef InterleavedClickProbeMixin(ExperimentManifest):
@@ -362,6 +432,22 @@ enamldef InterleavedClickProbeMixin(ExperimentManifest):
             parameter = 'probe_duration'
             expression = 'probe_bandlimited_click_window'
 
+        Expression:
+            parameter = 'probe_bandlimited_click_flb'
+            expression = 'probe_fl'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_fub'
+            expression = 'probe_fh'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_level'
+            expression = 'probe_level'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_window'
+            expression = '5e-3'
+
 
 enamldef InterleavedChirpProbeMixin(ExperimentManifest):
 
@@ -392,8 +478,43 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
             expression = 'probe_chirp_delay'
 
         Expression:
-            parameter = 'probe_duration'
-            expression = 'probe_chirp_duration'
+            parameter = 'probe_chirp_start_frequency'
+            expression = 'probe_fl'
+
+        Expression:
+            parameter = 'probe_chirp_end_frequency'
+            expression = 'probe_fh'
+
+        Expression:
+            parameter = 'probe_chirp_level'
+            expression = 'probe_level'
+
+        ContextRow:
+            fmt = ['Probe', probe_duration, 'sec with', probe_window, 'window']
+            group_name = 'memr'
+
+            Parameter: probe_duration:
+                name = 'probe_duration'
+                default = 2e-3
+
+            EnumParameter: probe_window:
+                name = 'probe_window'
+                choices = {
+                    'hann': '"hann"',
+                    'boxcar': '"boxcar"',
+                }
+
+        Expression:
+            parameter = 'probe_chirp_duration'
+            expression = 'probe_duration'
+
+        Expression:
+            parameter = 'probe_chirp_window'
+            expression = 'probe_window'
+
+        Expression:
+            parameter = 'probe_chirp_equalize'
+            expression = 'probe_equalize'
 
 
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
@@ -411,7 +532,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
             hide = ['delay']
             Cos2Envelope:
                 BandlimitedFIRNoise:
-                    pass
+                    hide = ['polarity']
 
         Repeat: probe:
             name = 'click'
@@ -509,13 +630,14 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
         FFTContainer:
             name = 'memr_fft_container'
             label = 'MEMR'
-            freq_lb = 5.6e3
-            freq_ub = 45e3
+            freq_lb = 4e3
+            freq_ub = 32e3
 
             ViewBox:
                 name = 'memr_fft_vb'
                 y_mode = 'mouse'
-                save_limits = True
+                y_min = -5
+                y_max = 5
 
                 GroupedInterleavedMEMRPlot:
                     final_probe = C.elicitor_n
@@ -581,6 +703,22 @@ enamldef SimultaneousClickProbeMixin(ExperimentManifest):
             parameter = 'probe_duration'
             expression = 'probe_bandlimited_click_window'
 
+        Expression:
+            parameter = 'probe_bandlimited_click_flb'
+            expression = 'probe_fl'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_fub'
+            expression = 'probe_fh'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_level'
+            expression = 'probe_level'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_window'
+            expression = '5e-3'
+
 
 enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
 
@@ -599,8 +737,43 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
             expression = 'probe_rate'
 
         Expression:
-            parameter = 'probe_duration'
-            expression = 'probe_chirp_duration'
+            parameter = 'probe_chirp_start_frequency'
+            expression = 'probe_fl'
+
+        Expression:
+            parameter = 'probe_chirp_end_frequency'
+            expression = 'probe_fh'
+
+        Expression:
+            parameter = 'probe_chirp_level'
+            expression = 'probe_level'
+
+        ContextRow:
+            fmt = ['Probe', probe_duration, 'sec with', probe_window, 'window']
+            group_name = 'memr'
+
+            Parameter: probe_duration:
+                name = 'probe_duration'
+                default = 2e-3
+
+            EnumParameter: probe_window:
+                name = 'probe_window'
+                choices = {
+                    'hann': '"hann"',
+                    'boxcar': '"boxcar"',
+                }
+
+        Expression:
+            parameter = 'probe_chirp_duration'
+            expression = 'probe_duration'
+
+        Expression:
+            parameter = 'probe_chirp_window'
+            expression = 'probe_window'
+
+        Expression:
+            parameter = 'probe_chirp_equalize'
+            expression = 'probe_equalize'
 
 
 enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
@@ -669,39 +842,41 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         id = EXPERIMENT + '.simultaneous_memr.context'
         point = 'psi.context.items'
 
-        ContextGroup:
-            name = 'memr'
-            label = 'MEMR'
+        Parameter:
+            name = 'trial_duration'
+            label = 'Trial duration'
+            default = 11
+            group_name = 'memr'
 
-            Parameter:
-                name = 'trial_duration'
-                label = 'Trial duration'
-                default = 11
+        Parameter:
+            name = 'trial_n'
+            label = 'Number of trials'
+            default = 2
+            group_name = 'memr'
 
-            Parameter:
-                name = 'trial_n'
-                label = 'Number of trials'
-                default = 2
+        Parameter:
+            name = 'probe_rate'
+            label = 'Probe rate'
+            default = 40
+            group_name = 'memr'
 
-            Parameter:
-                name = 'probe_rate'
-                label = 'Probe rate'
-                default = 40
+        Parameter:
+            name = 'elicitor_onset'
+            label = 'Elicitor onset'
+            default = 6
+            group_name = 'memr'
 
-            Parameter:
-                name = 'elicitor_onset'
-                label = 'Elicitor onset'
-                default = 6
+        Parameter:
+            name = 'elicitor_duration'
+            label = 'Elicitor duration'
+            default = 3
+            group_name = 'memr'
 
-            Parameter:
-                name = 'elicitor_duration'
-                label = 'Elicitor duration'
-                default = 3
-
-            Parameter:
-                name = 'norm_window'
-                label = 'Normalization window'
-                default = 1
+        Parameter:
+            name = 'norm_window'
+            label = 'Normalization window'
+            default = 1
+            group_name = 'memr'
 
         Expression:
             parameter = 'probe_n'
@@ -714,6 +889,26 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         Expression:
             parameter = 'elicitor_noise_duration'
             expression = 'elicitor_duration'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fl'
+            expression = 'elicitor_fl'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fh'
+            expression = 'elicitor_fh'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_equalize'
+            expression = 'elicitor_equalize'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_seed'
+            expression = '1'
+
+        Expression:
+            parameter = 'elicitor_noise_rise_time'
+            expression = '100e-3'
 
     Extension:
         id = EXPERIMENT + '.plots'
@@ -773,13 +968,14 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         FFTContainer:
             name = 'memr_fft_container'
             label = 'MEMR'
-            freq_lb = 5.6e3
-            freq_ub = 45e3
+            freq_lb = 4e3
+            freq_ub = 32e3
 
             ViewBox:
                 name = 'memr_fft_vb'
                 y_mode = 'mouse'
-                save_limits = True
+                y_min = -5
+                y_max = 5
 
                 GroupedSimultaneousMEMRPlot:
                     name = 'memr_fft_plot'
