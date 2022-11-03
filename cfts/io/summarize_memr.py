@@ -5,11 +5,11 @@ import matplotlib.pyplot as plt
 from psiaudio.plot import waterfall_plot
 from psiaudio import util
 
-from .memr import MEMRFile
+from .memr import InterleavedMEMRFile, SimultaneousMEMRFile
 
 
-def process_file(filename):
-    fh = MEMRFile(filename)
+def process_interleaved_file(filename):
+    fh = InterleavedMEMRFile(filename)
     output_dir = filename.parent / filename.stem
     output_dir.mkdir(exist_ok=True)
     filename_template = f'{filename.stem} {{}}.pdf'
@@ -17,8 +17,8 @@ def process_file(filename):
     # Load variables we need from the file
     cal = fh.microphone.get_calibration()
     period = fh.get_setting('repeat_period')
-    probe_delay = fh.get_setting('probe_chirp_delay')
-    probe_duration = fh.get_setting('probe_chirp_duration')
+    probe_delay = fh.get_setting('probe_delay')
+    probe_duration = fh.get_setting('probe_duration')
     elicitor_delay = fh.get_setting('elicitor_envelope_start_time')
     elicitor_fl = fh.get_setting('elicitor_fl')
     elicitor_fh = fh.get_setting('elicitor_fh')
@@ -97,6 +97,79 @@ def process_file(filename):
     figure.savefig(output_dir / filename_template.format('MEMR'))
 
 
+def process_simultaneous_file(filename):
+    fh = SimultaneousMEMRFile(filename)
+    output_dir = filename.parent / filename.stem
+    output_dir.mkdir(exist_ok=True)
+    filename_template = f'{filename.stem} {{}}.pdf'
+
+    cal = fh.microphone.get_calibration()
+    repeats = fh.get_repeats()
+    probe_window = fh.get_setting('probe_duration') + 1.5e-3
+    probes = repeats.loc[:, :probe_window]
+    probe_mean = probes.groupby(['elicitor_level', 'group']).mean()
+    probe_spl = cal.get_db(util.psd_df(probe_mean, fs=fh.microphone.fs))
+    probe_spl_mean = probe_spl.groupby(['elicitor_level', 'group']).mean()
+    baseline = probe_spl_mean.xs('baseline', level='group')
+    elicitor = probe_spl_mean.xs('elicitor_ss', level='group')
+    memr = elicitor - baseline
+
+    epochs = fh.get_epochs()
+    onset = fh.get_setting('elicitor_onset')
+    duration = fh.get_setting('elicitor_duration')
+    elicitor = epochs.loc[:, onset:onset+duration]
+    elicitor_waveform = elicitor.loc[1].groupby(['elicitor_level']).mean()
+    elicitor_spl = cal.get_db(util.psd_df(elicitor, fs=fh.microphone.fs)).dropna(axis='columns')
+    elicitor_spl_mean = elicitor_spl.groupby('elicitor_level').mean()
+
+    figure, axes = plt.subplots(2, 2, figsize=(8, 8), sharex=True, sharey=True)
+    t = probe_mean.columns * 1e3
+    for (group, g_df), ax in zip(probe_mean.groupby('group'), axes.flat):
+        ax.set_title(f'{group}')
+        for level, row in g_df.iterrows():
+            ax.plot(t, row, lw=1, label=f'{level[0]} dB SPL')
+    for ax in axes[1]:
+        ax.set_xlabel('Time (ms)')
+    for ax in axes[:, 0]:
+        ax.set_ylabel('Signal (V)')
+    axes[0, 1].legend(bbox_to_anchor=(1, 1), loc='upper left')
+    figure.savefig(output_dir / filename_template.format('probe waveform'))
+
+    figure, axes = plt.subplots(2, 2, figsize=(8, 8), sharex=True, sharey=True)
+    for (group, g_df), ax in zip(probe_spl_mean.iloc[:, 1:].groupby('group'), axes.flat):
+        ax.set_title(f'{group}')
+        for level, row in g_df.iterrows():
+            ax.plot(row.index, row, lw=1, label=f'{level[0]} dB SPL')
+    for ax in axes[1]:
+        ax.set_xlabel('Frequency (kHz)')
+    for ax in axes[:, 0]:
+        ax.set_ylabel('PSD (dB SPL)')
+    axes[0, 1].legend(bbox_to_anchor=(1, 1), loc='upper left')
+    axes[0, 0].set_xscale('octave')
+    axes[0, 0].axis(xmin=4e3, xmax=32e3)
+    figure.savefig(output_dir / filename_template.format('probe PSD'))
+
+    figure, ax = plt.subplots(1, 1, figsize=(6, 6))
+    for level, row in memr.iloc[:, 1:].iterrows():
+        ax.plot(row, label=f'{level} dB SPL')
+    ax.set_xscale('octave')
+    ax.axis(xmin=4e3, xmax=32e3, ymin=-5, ymax=5)
+    ax.legend(bbox_to_anchor=(1, 1), loc='upper left')
+    ax.set_xlabel('Frequency (kHz)')
+    ax.set_ylabel('MEMR (dB re baseline)')
+    figure.savefig(output_dir / filename_template.format('MEMR'))
+
+    figure, ax = plt.subplots(1, 1, figsize=(6, 1 * len(elicitor_waveform)))
+    waterfall_plot(ax, elicitor_waveform, 'elicitor_level',
+                   plotkw={'lw': 0.1, 'color': 'k'})
+    figure.savefig(output_dir / filename_template.format('elicitor waveform'))
+
+    figure, ax = plt.subplots(1, 1, figsize=(6, 1 * len(elicitor_spl_mean)))
+    waterfall_plot(ax, elicitor_spl_mean, 'elicitor_level',
+                   plotkw={'lw': 0.1, 'color': 'k'}, scale_method='mean')
+    figure.savefig(output_dir / filename_template.format('elicitor PSD'))
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -104,11 +177,14 @@ def main():
     args = parser.parse_args()
     for path in args.path:
         try:
-            process_file(Path(path))
+            path = Path(path)
+            if 'interleaved' in path.stem:
+                process_interleaved_file(path)
+            elif 'simultaneous' in path.stem:
+                process_simultaneous_file(path)
         except Exception as e:
-            print(e)
+            print(path)
 
 
 if __name__ == '__main__':
     main()
-
