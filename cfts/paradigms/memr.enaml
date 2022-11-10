@@ -29,7 +29,7 @@ from psi.data.api import (
     EpochTimeContainer, GroupedEpochAveragePlot, GroupedEpochFFTPlot
 )
 
-from .cfts_mixins import CalMicrophoneInput, CFTSSelector, EEGInput, PTMicrophoneInput
+from .cfts_mixins import CFTSSelector, EEGInput, PTMicrophoneInput
 from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
@@ -179,12 +179,15 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
-        CalMicrophoneInput:
-            pass
-
         PTMicrophoneInput:
+            name = 'probe_microphone'
+            label = 'Probe microphone'
             ExtractEpochs: extract:
                 name = 'memr'
+
+        PTMicrophoneInput:
+            name = 'elicitor_microphone'
+            label = 'Elicitor microphone'
 
         Synchronized:
             name = 'memr_stim'
@@ -305,7 +308,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
 
         BinaryStore:
             name = 'memr_binary_store'
-            continuous_inputs = ['microphone', 'cal_microphone']
+            continuous_inputs = ['probe_microphone', 'elicitor_microphone']
 
         TextStore:
             name = 'memr_store'
@@ -471,11 +474,7 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
 
         Expression:
             parameter = 'probe_chirp_delay'
-            expression = 'elicitor_envelope_start_time - analysis_window'
-
-        Expression:
-            parameter = 'probe_delay'
-            expression = 'probe_chirp_delay'
+            expression = 'probe_delay'
 
         Expression:
             parameter = 'probe_chirp_start_frequency'
@@ -488,6 +487,12 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_chirp_level'
             expression = 'probe_level'
+
+        Parameter:
+            name = 'probe_delay'
+            label = 'probe delay'
+            default = 10e-3
+            group_name = 'memr'
 
         ContextRow:
             fmt = ['Probe', probe_duration, 'sec with', probe_window, 'window']
