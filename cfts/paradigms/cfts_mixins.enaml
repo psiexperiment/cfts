@@ -370,8 +370,15 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
         point = 'psi.controller.calibration.channels'
 
         ChirpCalibrate:
-            name = f'memr_chirp_calibration'
-            label = 'Chirp calibration'
-            input_name = 'microphone'
-            outputs = {'probe': [], 'elicitor': []}
+            name = f'memr_probe_calibration'
+            label = 'Probe calibration'
+            input_name = 'probe_microphone'
+            outputs = {'probe': []}
+            gain << C.calibration_gain
+
+        ChirpCalibrate:
+            name = f'memr_elicitor_calibration'
+            label = 'Elicitor calibration'
+            input_name = 'elicitor_microphone'
+            outputs = {'elicitor': []}
             gain << C.calibration_gain
