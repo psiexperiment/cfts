@@ -1,3 +1,6 @@
+import logging
+log = logging.getLogger(__name__)
+
 from pathlib import Path
 
 from enaml.workbench.api import PluginManifest, Extension
@@ -59,7 +62,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 unit = 'V'
 
         NIDAQEngine:
-            name = 'NI_audio'
+            name = 'NI_audio_1'
             master_clock = True
 
             hw_ai_monitor_period = 0.125
@@ -88,8 +91,8 @@ enamldef IOManifest(PluginManifest): manifest:
             # Left starship
             ########################################################
             NIDAQHardwareAOChannel:
-                label = 'Left starship (primary)'
-                name = 'starship_left_primary'
+                label = 'Starship A (primary)'
+                name = 'starship_A_primary'
                 channel = 'PXI1Slot3/ao0'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
@@ -102,8 +105,8 @@ enamldef IOManifest(PluginManifest): manifest:
                 max_range = (-1.0, 1.0)
 
             NIDAQHardwareAOChannel:
-                label = 'Left starship (secondary)'
-                name = 'starship_left_secondary'
+                label = 'starship A (secondary)'
+                name = 'starship_A_secondary'
                 channel = 'PXI1Slot3/ao1'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
@@ -113,8 +116,8 @@ enamldef IOManifest(PluginManifest): manifest:
                 calibration = FlatCalibration.as_attenuation()
 
             NIDAQHardwareAIChannel:
-                label = 'Left starship microphone'
-                name = 'starship_left_microphone'
+                label = 'starship A microphone'
+                name = 'starship_A_microphone'
                 channel = 'PXI1Slot3/ai0'
                 start_trigger = '/PXI1Slot3/ao/StartTrigger'
                 fs = 100e3
@@ -124,16 +127,22 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'DC'
                 gain = 40
-                calibration = cal_from_epl('EP2')
+                calibration = cal_from_epl('MMM1')
 
+        NIDAQEngine:
             ########################################################
             # Right starship
             ########################################################
+            name = 'NI_audio_starship_2'
+
+            hw_ai_monitor_period = 0.125
+            hw_ao_monitor_period = 0.125
+            hw_ao_buffer_size = 5
+
             NIDAQHardwareAOChannel:
-                label = 'Right starship (primary)'
-                name = 'starship_right_primary'
+                label = 'Starship B (primary)'
+                name = 'starship_B_primary'
                 channel = 'PXI1Slot4/ao0'
-                start_trigger = '/PXI1Slot3/ao/StartTrigger'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-1, 1)
@@ -145,10 +154,9 @@ enamldef IOManifest(PluginManifest): manifest:
                 max_range = (-1.0, 1.0)
 
             NIDAQHardwareAOChannel:
-                label = 'Right starship (secondary)'
-                name = 'starship_right_secondary'
+                label = 'Starship B (secondary)'
+                name = 'starship_B_secondary'
                 channel = 'PXI1Slot4/ao1'
-                start_trigger = '/PXI1Slot3/ao/StartTrigger'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-1, 1)
@@ -157,10 +165,10 @@ enamldef IOManifest(PluginManifest): manifest:
                 calibration = FlatCalibration.as_attenuation()
 
             NIDAQHardwareAIChannel:
-                label = 'Right starship microphone'
-                name = 'starship_right_microphone'
+                label = 'starship B microphone'
+                name = 'starship_B_microphone'
                 channel = 'PXI1Slot4/ai0'
-                start_trigger = '/PXI1Slot3/ao/StartTrigger'
+                start_trigger = '/PXI1Slot4/ao/StartTrigger'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-10, 10)
@@ -168,4 +176,4 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'DC'
                 gain = 40
-                calibration_user_editable = True
+                calibration = cal_from_epl('MMM3')
