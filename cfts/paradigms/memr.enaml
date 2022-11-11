@@ -15,8 +15,8 @@ from psiaudio import util
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, Expression, Parameter)
 from psi.controller.api import (
-    Blocked, ControllerManifest, Coroutine, EpochInput, ExperimentAction,
-    ExtractEpochs, Synchronized
+    Blocked, ContinuousInput, ControllerManifest, Coroutine, EpochInput,
+    ExperimentAction, ExtractEpochs, Synchronized, QueuedEpochOutput
 )
 from psi.core.enaml.api import ExperimentManifest
 from psi.token.primitives import (
@@ -29,8 +29,7 @@ from psi.data.api import (
     EpochTimeContainer, GroupedEpochAveragePlot, GroupedEpochFFTPlot
 )
 
-from .cfts_mixins import CFTSSelector, EEGInput, PTMicrophoneInput
-from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
+from .cfts_mixins import CFTSSelector, EEGInput
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
@@ -179,29 +178,25 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
-        PTMicrophoneInput:
-            name = 'probe_microphone'
-            label = 'Probe microphone'
-            ExtractEpochs: extract:
-                name = 'memr'
-
-        PTMicrophoneInput:
-            name = 'elicitor_microphone'
-            label = 'Elicitor microphone'
+        ExtractEpochs: extract:
+            source_name = 'probe_microphone'
+            name = 'memr'
 
         Synchronized:
             name = 'memr_stim'
-            QueuedEpochChannelOutput:
+            QueuedEpochOutput:
                 name = 'probe'
                 label = 'Probe'
+                target_name = 'probe_primary'
                 auto_decrement = True
                 token = workbench.get_plugin('psi.token').get_token(probe)
                 queue ::
                     self.connect(extract.added_queue.append, 'added')
                     self.connect(extract.removed_queue.append, 'removed')
-            QueuedEpochChannelOutput:
+            QueuedEpochOutput:
                 name = 'elicitor'
                 label = 'Elicitor'
+                target_name = 'elicitor_secondary'
                 token = workbench.get_plugin('psi.token').get_token('noise')
                 auto_decrement = True
 
@@ -663,6 +658,9 @@ def configure_simultaneous_memr(event):
     elicitor = controller.get_output('elicitor')
     probe.queue = GroupedFIFOSignalQueue(2)
     elicitor.queue = GroupedFIFOSignalQueue(2)
+
+    if probe.engine == elicitor.engine:
+        controller._master_engine = probe.engine
 
     for polarity in (1, -1):
         for setting in context.iter_settings('default', 1):

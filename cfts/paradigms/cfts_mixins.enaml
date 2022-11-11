@@ -1,14 +1,19 @@
 import logging
 log = logging.getLogger(__name__)
 
+import itertools
+
 from enaml.workbench.api import Extension
 import numpy as np
 
 from psiaudio.util import octave_space
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
-                             FriendlyCartesianProduct, Parameter)
-from psi.controller.api import DecimateTo, Downsample, IIRFilter
+                             EnumParameter, FriendlyCartesianProduct,
+                             Parameter)
+from psi.controller.api import (ContinuousInput, DecimateTo, Downsample,
+                                get_hw_ai_choices, get_hw_ao_choices,
+                                IIRFilter, MUXOutput)
 from psi.controller.calibration.api import ChirpCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
 from psi.data.sinks.api import DisplayValue, BinaryStore
@@ -382,3 +387,69 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             input_name = 'elicitor_microphone'
             outputs = {'elicitor': []}
             gain << C.calibration_gain
+
+
+def list_starships(workbench):
+    ai = get_hw_ai_choices(workbench)
+    ao = get_hw_ao_choices(workbench)
+
+    starships = {}
+    for channel in itertools.chain(ai.values(), ao.values()):
+        # Strip quotation marks off 
+        _, channel = channel[1:-1].split('::')
+        if channel.startswith('starship'):
+            _, starship_id, starship_output = channel.split('_')
+            starships.setdefault(starship_id, []).append(starship_output)
+
+    choices = {}
+    for name, channels in starships.items():
+        for c in ('microphone', 'primary', 'secondary'):
+            if c not in channels:
+                raise ValueError(f'Must define starship_{name}_{c} channel')
+        choices[name] = f'"starship_{name}"'
+    return choices
+
+
+enamldef Starship(ExperimentManifest): manifest:
+
+    title = manifest.id.capitalize()
+
+    Extension:
+        id = manifest.id + '.io'
+        point = 'psi.controller.io'
+
+        ContinuousInput:
+            name = f'{manifest.name}_microphone'
+            source_name = 'hw_ai::' + getattr(C, f'{manifest.name}') + '_microphone'
+            source::
+                channel.gain = getattr(C, f'{manifest.name}_input_gain')
+
+        MUXOutput:
+            name = f'{manifest.name}_primary'
+            target_name = 'hw_ao::' + getattr(C, f'{manifest.name}') + '_primary'
+
+        MUXOutput:
+            name = f'{manifest.name}_secondary'
+            target_name = 'hw_ao::' + getattr(C, f'{manifest.name}') + '_secondary'
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        ContextRow:
+            name = f'{manifest.name}_starship_settings'
+            fmt = [f'{manifest.title} starship', starship, 'with', gain, 'dB gain']
+            group_name = 'hardware_settings'
+
+            EnumParameter: starship:
+                name = f'{manifest.name}'
+                label = f'{manifest.title}'
+                choices = list_starships(workbench)
+                scope = 'experiment'
+
+            Parameter: gain:
+                name = f'{manifest.name}_input_gain'
+                label = f'{manifest.title} input gain (dB)'
+                dtype = 'float64'
+                default = 40
+                scope = 'experiment'
