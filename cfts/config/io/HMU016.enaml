@@ -30,7 +30,7 @@ def cal_from_epl(name):
             if line.startswith('Freq(Hz)'):
                 break
         cal = pd.read_csv(fh, sep='\t',
-                          names=['freq', 'SPL', 'phase'])
+                          names=['freq', 'SPL', 'phase', 'unsmoothed_SPL'])
     return InterpCalibration.from_spl(cal['freq'], cal['SPL'],
                                       phase=cal['phase'])
 
