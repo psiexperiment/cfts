@@ -12,8 +12,8 @@ from psiaudio.pipeline import coroutine
 from psiaudio.queue import InterleavedFIFOSignalQueue
 
 from psi.controller.api import (
-    ControllerManifest, ExperimentEvent, ExtractEpochs,
-    ExperimentAction, Input
+    ControllerManifest, ExperimentEvent, ExtractEpochs, ExperimentAction,
+    Input, QueuedEpochOutput,
 )
 
 from psi.context.api import BoolParameter, ContextGroup, Expression, Parameter
@@ -24,7 +24,7 @@ from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
 from psi.data.api import (FFTContainer, GroupedEpochFFTPlot, PlotContainer,
                           ResultPlot, ViewBox)
 
-from .cfts_mixins import CFTSSelector, EEGInput, PTMicrophoneInput, SpeakerOutput
+from .cfts_mixins import CFTSSelector, EEGInput
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
@@ -83,14 +83,15 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
-        PTMicrophoneInput:
-            ExtractEpochs: extract_mic:
-                epoch_size = getattr(C, f'target_{selected_token}_duration')
-                name = 'mic_segment'
+        ExtractEpochs: extract_mic:
+            source_name = 'system_microphone'
+            epoch_size = getattr(C, f'target_{selected_token}_duration')
+            name = 'mic_segment'
 
-        SpeakerOutput: output:
+        QueuedEpochOutput: output:
             name = 'target'
             queue = InterleavedFIFOSignalQueue()
+            target_name = 'system_output'
             auto_decrement = True
             token << workbench.get_plugin('psi.token').get_token(selected_token)
             initialized ::
@@ -185,7 +186,7 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
 
         BinaryStore:
             name = 'continuous_store'
-            continuous_inputs = ['microphone', 'eeg']
+            continuous_inputs = ['system_microphone', 'eeg']
 
     Extension:
         id = EXPERIMENT + '.workspace'

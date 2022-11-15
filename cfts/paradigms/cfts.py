@@ -9,11 +9,19 @@ CORE_PATH = 'psi.paradigms.core.'
 ################################################################################
 # Single-starship paradigms (ABR, EFR, DPOAE, IEC)
 ################################################################################
-starship_mixin = {
+selectable_starship_mixin = {
     'manifest': CFTS_PATH + 'cfts_mixins.Starship',
     'required': True,
-    'attrs': {'id': 'system', 'title': 'Starship'}
+    'attrs': {'id': 'system', 'title': 'Starship', 'output_mode': 'select'}
 }
+
+
+dual_starship_mixin = {
+    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'required': True,
+    'attrs': {'id': 'system', 'title': 'Starship', 'output_mode': 'dual'}
+}
+
 
 
 microphone_mixin = {
@@ -78,7 +86,7 @@ efr_microphone_fft_mixin = {
 ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
     'abr_io', 'ABR (input-output)', 'ear', [
-        starship_mixin,
+        selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOSimpleManifest'},
         temperature_mixin,
         eeg_mixin,
@@ -89,7 +97,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'dpoae_io', 'DPOAE (input-output)', 'ear', [
-        starship_mixin,
+        dual_starship_mixin,
         {'manifest': CFTS_PATH + 'dpoae_io.DPOAEIOSimpleManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.DPOAEInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -101,7 +109,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'efr_sam', 'SAM EFR', 'ear', [
-        starship_mixin,
+        selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'efr.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -114,7 +122,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'efr_ram', 'RAM EFR', 'ear', [
-        starship_mixin,
+        selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'efr.RAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.RAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -127,7 +135,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'inear_speaker_calibration_chirp', 'In-ear speaker calibration (chirp)', 'ear', [
-        starship_mixin,
+        selectable_starship_mixin,
         {'manifest': CAL_PATH + 'speaker_calibration.BaseSpeakerCalibrationManifest'},
         {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},

@@ -3,6 +3,7 @@ log = logging.getLogger(__name__)
 
 import itertools
 
+from enaml.core.api import Conditional
 from enaml.workbench.api import Extension
 import numpy as np
 
@@ -414,6 +415,7 @@ enamldef Starship(ExperimentManifest): manifest:
 
     id = 'starship'
     title = manifest.id.capitalize().replace('_', ' ')
+    attr output_mode = 'dual'
 
     Extension:
         id = manifest.id + '.io'
@@ -425,21 +427,35 @@ enamldef Starship(ExperimentManifest): manifest:
             source::
                 channel.gain = getattr(C, f'{manifest.name}_input_gain')
 
-        MUXOutput:
-            name = f'{manifest.name}_primary'
-            target_name = 'hw_ao::' + getattr(C, f'{manifest.name}') + '_primary'
+        Conditional:
+            condition = manifest.output_mode == 'dual'
 
-        MUXOutput:
-            name = f'{manifest.name}_secondary'
-            target_name = 'hw_ao::' + getattr(C, f'{manifest.name}') + '_secondary'
+            MUXOutput:
+                name = f'{manifest.name}_primary'
+                target_name = 'hw_ao::' + getattr(C, f'{manifest.name}') + '_primary'
+
+            MUXOutput:
+                name = f'{manifest.name}_secondary'
+                target_name = 'hw_ao::' + getattr(C, f'{manifest.name}') + '_secondary'
+
+        Conditional:
+            condition = manifest.output_mode == 'select'
+
+            MUXOutput:
+                name = f'{manifest.name}_output'
+                target_name = 'hw_ao::' \
+                    + getattr(C, f'{manifest.name}') + '_' \
+                    + getattr(C, f'{manifest.name}_output')
 
     Extension:
         id = manifest.id + '.context'
         point = 'psi.context.items'
 
         ContextRow:
+            fmt = [f'{manifest.title}', starship, 'with', gain, 'dB gain'] \
+                if manifest.output_mode == 'dual' \
+                else [f'{manifest.title}', starship, 'with', gain, 'dB gain using', output, 'output']
             name = f'{manifest.name}_starship_settings'
-            fmt = [f'{manifest.title}', starship, 'with', gain, 'dB gain']
             group_name = 'hardware_settings'
 
             EnumParameter: starship:
@@ -454,3 +470,8 @@ enamldef Starship(ExperimentManifest): manifest:
                 dtype = 'float64'
                 default = 40
                 scope = 'experiment'
+
+            EnumParameter: output:
+                name = f'{manifest.name}_output'
+                choices = {'primary': '"primary"',
+                            'secondary': '"secondary"'}

@@ -62,7 +62,7 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
         QueuedEpochOutput: output:
             name = 'target'
             label = 'target'
-            target_name = 'system_primary'
+            target_name = 'system_output'
             token = tone_burst
             configurable = False
             initialized ::
