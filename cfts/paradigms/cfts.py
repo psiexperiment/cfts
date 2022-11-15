@@ -6,6 +6,9 @@ CFTS_PATH = 'cfts.paradigms.'
 CORE_PATH = 'psi.paradigms.core.'
 
 
+################################################################################
+# Single-starship paradigms (ABR, EFR, DPOAE, IEC)
+################################################################################
 starship_mixin = {
     'manifest': CFTS_PATH + 'cfts_mixins.Starship',
     'required': True,
@@ -98,6 +101,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'efr_sam', 'SAM EFR', 'ear', [
+        starship_mixin,
         {'manifest': CFTS_PATH + 'efr.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -110,6 +114,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'efr_ram', 'RAM EFR', 'ear', [
+        starship_mixin,
         {'manifest': CFTS_PATH + 'efr.RAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.RAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -120,6 +125,19 @@ ParadigmDescription(
 )
 
 
+ParadigmDescription(
+    'inear_speaker_calibration_chirp', 'In-ear speaker calibration (chirp)', 'ear', [
+        starship_mixin,
+        {'manifest': CAL_PATH + 'speaker_calibration.BaseSpeakerCalibrationManifest'},
+        {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
+        {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
+    ]
+)
+
+
+################################################################################
+# Two-starship paradigms for MEMR
+################################################################################
 elicitor_mic_mixin = {
     'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
     'attrs': {
@@ -178,6 +196,20 @@ probe_mic_fft_mixin = {
 }
 
 
+elicitor_starship_mixin = {
+    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'required': True,
+    'attrs': {'id': 'elicitor', 'title': 'Elicitor starship'}
+}
+
+
+probe_starship_mixin = {
+    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'required': True,
+    'attrs': {'id': 'probe', 'title': 'Probe starship'}
+}
+
+
 ParadigmDescription(
     'memr_interleaved_click', 'MEMR (interleaved click)', 'ear', [
         {'manifest': CFTS_PATH + 'memr.InterleavedMEMRManifest', 'attrs': {'probe': 'click'}},
@@ -195,10 +227,8 @@ ParadigmDescription(
 
 ParadigmDescription(
     'memr_interleaved_chirp', 'MEMR (interleaved chirp)', 'ear', [
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True,
-         'attrs': {'id': 'elicitor', 'title': 'Elicitor starship'}},
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True,
-         'attrs': {'id': 'probe', 'title': 'Probe starship'}},
+        elicitor_starship_mixin,
+        probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.InterleavedMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpProbeMixin', 'required': True},
@@ -214,6 +244,8 @@ ParadigmDescription(
 
 ParadigmDescription(
     'memr_simultaneous_click', 'MEMR (simultaneous click)', 'ear', [
+        elicitor_starship_mixin,
+        probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'click'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousClickProbeMixin', 'required': True},
         temperature_mixin,
@@ -228,8 +260,8 @@ ParadigmDescription(
 
 ParadigmDescription(
     'memr_simultaneous_chirp', 'MEMR (simultaneous chirp)', 'ear', [
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True, 'attrs': {'id': 'elicitor_starship'}},
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True, 'attrs': {'id': 'probe_starship'}},
+        elicitor_starship_mixin,
+        probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
         temperature_mixin,
@@ -242,12 +274,3 @@ ParadigmDescription(
 )
 
 
-
-ParadigmDescription(
-    'inear_speaker_calibration_chirp', 'In-ear speaker calibration (chirp)', 'ear', [
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True},
-        {'manifest': CAL_PATH + 'speaker_calibration.BaseSpeakerCalibrationManifest'},
-        {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
-        {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
-    ]
-)
