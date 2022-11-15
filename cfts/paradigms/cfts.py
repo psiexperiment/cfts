@@ -86,6 +86,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'dpoae_io', 'DPOAE (input-output)', 'ear', [
+        starship_mixin,
         {'manifest': CFTS_PATH + 'dpoae_io.DPOAEIOSimpleManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.DPOAEInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
