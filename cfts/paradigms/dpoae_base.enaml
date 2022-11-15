@@ -24,8 +24,6 @@ from psi.token.primitives import Cos2Envelope, Tone
 
 from psi.data.sinks.api import EventLog, TableStore, BinaryStore
 
-from .cfts_mixins import PTMicrophoneInput
-
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
@@ -149,7 +147,7 @@ enamldef DPOAEManifest(ControllerManifest): manifest:
 
         BinaryStore:
             name = EXPERIMENT + '.zarr_store'
-            continuous_inputs = ['microphone']
+            continuous_inputs = ['system_microphone']
 
         TableStore:
             name = 'dpoae_store'
@@ -178,46 +176,45 @@ enamldef DPOAEManifest(ControllerManifest): manifest:
             EpochOutput: primary:
                 name = 'primary'
                 label = 'Primary'
-                target_name = C.primary_channel
+                target_name = 'system_primary'
                 configurable = False
                 token = tone
 
             EpochOutput: secondary:
                 name = 'secondary'
                 label = 'Secondary'
-                target_name = C.secondary_channel
+                target_name = 'system_secondary'
                 configurable = False
                 token = tone
 
-        PTMicrophoneInput:
+        Capture:
+            # Begin capturing microphone signal once DPOAE starts. Linked
+            # using an ExperimentAction.
+            source_name = 'system_microphone'
+            name = 'dpoae_capture'
+            start_event = 'dpoae_start'
 
-            Capture:
-                # Begin capturing microphone signal once DPOAE starts. Linked
-                # using an ExperimentAction.
-                name = 'dpoae_capture'
-                start_event = 'dpoae_start'
+            Discard:
+                # Discard the onset portion of the DPOAE
+                name = 'discard'
+                duration << C.secondary_tone_rise_time * 4
 
-                Discard:
-                    # Discard the onset portion of the DPOAE
-                    name = 'discard'
-                    duration << C.secondary_tone_rise_time * 4
+                Blocked:
+                    # Duration (in seconds) of snippets to analyze
+                    name = 'segment'
+                    duration << C.response_window
 
-                    Blocked:
-                        # Duration (in seconds) of snippets to analyze
-                        name = 'segment'
-                        duration << C.response_window
-
-                        AnalyzeDPOAE:
-                            name = 'analyze_dpoae'
-                            wb = workbench
-                            n_fft = C.n_fft
-                            n_time = C.n_time
-                            trial_widget = workbench\
-                                .get_plugin('enaml.workbench.ui')\
-                                .window.find('dpoae_trial_pb')
-                            trials_widget = workbench\
-                                .get_plugin('enaml.workbench.ui')\
-                                .window.find('dpoae_trials_pb')
+                    AnalyzeDPOAE:
+                        name = 'analyze_dpoae'
+                        wb = workbench
+                        n_fft = C.n_fft
+                        n_time = C.n_time
+                        trial_widget = workbench\
+                            .get_plugin('enaml.workbench.ui')\
+                            .window.find('dpoae_trial_pb')
+                        trials_widget = workbench\
+                            .get_plugin('enaml.workbench.ui')\
+                            .window.find('dpoae_trials_pb')
 
     Extension:
         id = EXPERIMENT + '.context'
@@ -287,22 +284,6 @@ enamldef DPOAEManifest(ControllerManifest): manifest:
         Expression:
             parameter = 'primary_tone_rise_time'
             expression = '25e-3'
-
-        EnumParameter:
-            name = 'primary_channel'
-            label = 'Output channel (primary)'
-            choices = manifest.get_hw_ao_choices()
-            selected = next(iter(manifest.get_hw_ao_choices()))
-            scope = 'experiment'
-            group_name = 'hardware_settings'
-
-        EnumParameter:
-            name = 'secondary_channel'
-            label = 'Output channel (secondary)'
-            choices = manifest.get_hw_ao_choices()
-            selected = next(iter(manifest.get_hw_ao_choices()))
-            scope = 'experiment'
-            group_name = 'hardware_settings'
 
         ContextGroup:
             name = 'acquisition'
