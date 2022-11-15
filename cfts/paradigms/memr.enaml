@@ -1,6 +1,8 @@
 import logging
 log = logging.getLogger(__name__)
 
+from functools import partial
+
 from atom.api import Dict, Float, Int
 from enaml.core.api import d_
 from enaml.workbench.api import Extension
@@ -34,23 +36,25 @@ from .cfts_mixins import CFTSSelector, EEGInput
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
-def configure_interleaved_memr(event):
+def configure_memr(event, duration_attr, iti=0):
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
-    data = event.workbench.get_plugin('psi.data')
 
     probe = controller.get_output('probe')
     elicitor = controller.get_output('elicitor')
     probe.queue = BlockedFIFOSignalQueue()
     elicitor.queue = BlockedFIFOSignalQueue()
 
+    if probe.engine == elicitor.engine:
+        controller._master_engine = probe.engine
+
     for polarity in (1, -1):
         for setting in context.iter_settings('default', 1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
-            trial_duration = setting['trial_period']
+            duration = setting[duration_attr] + iti
             setting['elicitor_bandlimited_noise_polarity'] = polarity
-            probe.add_setting(setting, averages=averages, total_duration=trial_duration)
-            elicitor.add_setting(setting, averages=averages, total_duration=trial_duration)
+            probe.add_setting(setting, averages=averages, total_duration=duration)
+            elicitor.add_setting(setting, averages=averages, total_duration=duration)
 
     # Then figure out the maximum scaling factor required for that level.
     # Multiply to convert from RMS to peak to peak and add 1% headroom.
@@ -520,7 +524,8 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
 
     # Implements the classic wideband acoustic reflex as described by Keefe.
-    configure_experiment_cb = configure_interleaved_memr
+    configure_experiment_cb = partial(configure_memr,
+                                      duration_attr='trial_period', iti=0)
     attr probe
 
     Extension:
@@ -650,42 +655,6 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
 ################################################################################
 # Simultaneous MEMR
 ################################################################################
-def configure_simultaneous_memr(event):
-    context = event.workbench.get_plugin('psi.context')
-    controller = event.workbench.get_plugin('psi.controller')
-
-    probe = controller.get_output('probe')
-    elicitor = controller.get_output('elicitor')
-    probe.queue = GroupedFIFOSignalQueue(2)
-    elicitor.queue = GroupedFIFOSignalQueue(2)
-
-    if probe.engine == elicitor.engine:
-        controller._master_engine = probe.engine
-
-    for polarity in (1, -1):
-        for setting in context.iter_settings('default', 1):
-            averages = max(1, int(round(setting['trial_n'] // 2)))
-            trial_duration = setting['trial_duration']
-            trial_iti = 1
-            setting['elicitor_bandlimited_noise_polarity'] = polarity
-            probe.add_setting(setting, averages=averages, total_duration=trial_duration + trial_iti)
-            elicitor.add_setting(setting, averages=averages, total_duration=trial_duration + trial_iti)
-
-        #frequency = setting['target_tone_frequency']
-        #level = setting['target_tone_level']
-        #max_level[frequency] = max(level, max_level.get(frequency, -np.inf))
-
-    # Then figure out the maximum scaling factor required for that level.
-    # Multiply to convert from RMS to peak to peak and add 1% headroom.
-    #max_sf = {}
-    #for frequency, level in max_level.items():
-    #    sf = output.calibration.get_sf(frequency, level)
-    #    max_sf[frequency] = sf
-    #max_sf = max(max_sf.values()) * np.sqrt(2) * 1.01 * 2
-    #log.info(max_sf)
-    #output.channel.expected_range = (-max_sf, max_sf)
-
-
 enamldef SimultaneousClickProbeMixin(ExperimentManifest):
 
     id = 'simultaneous_click_probe_stim'
@@ -782,7 +751,8 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
 enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
 
     # Implements the wideband acoustic reflex as described by Valero and Liberman.
-    configure_experiment_cb = configure_simultaneous_memr
+    configure_experiment_cb = partial(configure_memr,
+                                      duration_attr='trial_duration', iti=1)
     attr probe
 
     Extension:
