@@ -68,12 +68,13 @@ def connect_trigger(event):
         return
 
     if ao_channels:
-        dev = ao_channels[0].channel.split('/', 1)[0]
+        c = ao_channels[0]
         direction = 'ao'
     else:
-        dev = ai_channels[0].channel.split('/', 1)[0]
+        c = ai_channels[0]
         direction = 'ai'
 
+    dev = c.channel.split('/', 1)[0]
     trigger = f'/{dev}/{direction}/StartTrigger'
     for c in channels:
         if dev in c.channel and direction in c.channel:
@@ -83,6 +84,9 @@ def connect_trigger(event):
             log.info(f'Setting {c} start_trigger to "{trigger}"')
             c.start_trigger = trigger
 
+    # Now, make sure the master engine is set to the one that controls the
+    # start trigger.
+    controller._master_engine = c.engine
 
 enamldef IOManifest(PluginManifest): manifest:
 
