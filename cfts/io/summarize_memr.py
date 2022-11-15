@@ -1,18 +1,20 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 from psiaudio.plot import waterfall_plot
 from psiaudio import util
 
 from .memr import InterleavedMEMRFile, SimultaneousMEMRFile
+from .util import DatasetManager
 
 
 def process_interleaved_file(filename):
+    manager = DatasetManager(filename)
+    if manager.is_processed(['MEMR.pdf']):
+        return
     fh = InterleavedMEMRFile(filename)
-    output_dir = filename.parent / filename.stem
-    output_dir.mkdir(exist_ok=True)
-    filename_template = f'{filename.stem} {{}}.pdf'
 
     # Load variables we need from the file
     cal = fh.microphone.get_calibration()
@@ -45,7 +47,7 @@ def process_interleaved_file(filename):
     for i in range(elicitor_n + 2):
         ax.axvline(i * period * 1e3, zorder=-1, alpha=0.5)
     # Save the figure
-    figure.savefig(output_dir / filename_template.format('stimulus train'))
+    figure.savefig(manager.get_proc_filename('stimulus train.pdf'))
 
     # Now, load the repeats. This essentially segments the epochs DataFrame
     # into the individual repeat segments.
@@ -65,14 +67,14 @@ def process_interleaved_file(filename):
     ax.set_xscale('octave')
     ax.axis(xmin=0.5e3, xmax=50e3)
     ax.set_xlabel('Frequency (kHz)')
-    figure.savefig(output_dir / filename_template.format('elicitor PSD'))
+    figure.savefig(manager.get_proc_filename('elicitor PSD.pdf'))
 
     probe = repeats.loc[:, probe_delay:probe_delay+probe_duration*1.5]
     figure, ax = plt.subplots(1, 1, figsize=(8, 4))
     ax.plot(probe.columns.values * 1e3, probe.values.T, alpha=0.1, color='k');
     ax.set_xlabel('Time (msec)')
     ax.set_ylabel('Signal (V)')
-    figure.savefig(output_dir / filename_template.format('probe waveform'))
+    figure.savefig(manager.get_proc_filename('probe waveform.pdf'))
 
     probe_psd = util.psd_df(probe, fh.microphone.fs)
     probe_spl = cal.get_db(probe_psd)
@@ -83,7 +85,7 @@ def process_interleaved_file(filename):
     ax.set_ylabel('Level (dB SPL)')
     ax.axvline(probe_fl)
     ax.axvline(probe_fh)
-    figure.savefig(output_dir / filename_template.format('probe PSD'))
+    figure.savefig(manager.get_proc_filename('probe PSD.pdf'))
 
     memr = probe_spl - probe_spl.xs(0, level='repeat')
     memr_mean = memr.groupby(['repeat', 'elicitor_level']).mean()
@@ -94,14 +96,12 @@ def process_interleaved_file(filename):
         ax.plot(value, label=f'{level} dB SPL')
     ax.legend(bbox_to_anchor=(1, 1), loc='upper left')
     ax.set_xscale('octave')
-    figure.savefig(output_dir / filename_template.format('MEMR'))
+    figure.savefig(manager.get_proc_filename('MEMR.pdf'))
 
 
 def process_simultaneous_file(filename):
+    manager = DatasetManager(filename)
     fh = SimultaneousMEMRFile(filename)
-    output_dir = filename.parent / filename.stem
-    output_dir.mkdir(exist_ok=True)
-    filename_template = f'{filename.stem} {{}}.pdf'
 
     cal = fh.microphone.get_calibration()
     repeats = fh.get_repeats()
@@ -133,7 +133,7 @@ def process_simultaneous_file(filename):
     for ax in axes[:, 0]:
         ax.set_ylabel('Signal (V)')
     axes[0, 1].legend(bbox_to_anchor=(1, 1), loc='upper left')
-    figure.savefig(output_dir / filename_template.format('probe waveform'))
+    figure.savefig(manager.get_proc_filename('probe_waveform.pdf'))
 
     figure, axes = plt.subplots(2, 2, figsize=(8, 8), sharex=True, sharey=True)
     for (group, g_df), ax in zip(probe_spl_mean.iloc[:, 1:].groupby('group'), axes.flat):
@@ -147,7 +147,7 @@ def process_simultaneous_file(filename):
     axes[0, 1].legend(bbox_to_anchor=(1, 1), loc='upper left')
     axes[0, 0].set_xscale('octave')
     axes[0, 0].axis(xmin=4e3, xmax=32e3)
-    figure.savefig(output_dir / filename_template.format('probe PSD'))
+    figure.savefig(manager.get_proc_filename('probe PSD.pdf'))
 
     figure, ax = plt.subplots(1, 1, figsize=(6, 6))
     for level, row in memr.iloc[:, 1:].iterrows():
@@ -157,17 +157,17 @@ def process_simultaneous_file(filename):
     ax.legend(bbox_to_anchor=(1, 1), loc='upper left')
     ax.set_xlabel('Frequency (kHz)')
     ax.set_ylabel('MEMR (dB re baseline)')
-    figure.savefig(output_dir / filename_template.format('MEMR'))
+    figure.savefig(manager.get_proc_filename('MEMR.pdf'))
 
     figure, ax = plt.subplots(1, 1, figsize=(6, 1 * len(elicitor_waveform)))
     waterfall_plot(ax, elicitor_waveform, 'elicitor_level',
                    plotkw={'lw': 0.1, 'color': 'k'})
-    figure.savefig(output_dir / filename_template.format('elicitor waveform'))
+    figure.savefig(manager.get_proc_filename('elicitor waveform.pdf'))
 
     figure, ax = plt.subplots(1, 1, figsize=(6, 1 * len(elicitor_spl_mean)))
     waterfall_plot(ax, elicitor_spl_mean, 'elicitor_level',
                    plotkw={'lw': 0.1, 'color': 'k'}, scale_method='mean')
-    figure.savefig(output_dir / filename_template.format('elicitor PSD'))
+    figure.savefig(manager.get_proc_filename('elicitor PSD.pdf'))
 
 
 def main():
@@ -175,7 +175,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('path', nargs='*')
     args = parser.parse_args()
-    for path in args.path:
+    for path in tqdm(args.path):
         try:
             path = Path(path)
             if 'interleaved' in path.stem:
