@@ -307,7 +307,7 @@ enamldef InEarCalibrationMixinManifest(ExperimentManifest): manifest:
         ToneCalibrate:
             name = f'{experiment}_tone_calibration'
             label = 'Tone calibration'
-            input_name = 'microphone'
+            input_name = 'system_microphone'
             outputs << manifest.outputs
             gain << C.calibration_gain
             max_thd = None
@@ -412,7 +412,8 @@ def list_starships(workbench):
 
 enamldef Starship(ExperimentManifest): manifest:
 
-    title = manifest.id.capitalize()
+    id = 'starship'
+    title = manifest.id.capitalize().replace('_', ' ')
 
     Extension:
         id = manifest.id + '.io'
@@ -438,7 +439,7 @@ enamldef Starship(ExperimentManifest): manifest:
 
         ContextRow:
             name = f'{manifest.name}_starship_settings'
-            fmt = [f'{manifest.title} starship', starship, 'with', gain, 'dB gain']
+            fmt = [f'{manifest.title}', starship, 'with', gain, 'dB gain']
             group_name = 'hardware_settings'
 
             EnumParameter: starship:

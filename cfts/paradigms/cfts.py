@@ -6,6 +6,13 @@ CFTS_PATH = 'cfts.paradigms.'
 CORE_PATH = 'psi.paradigms.core.'
 
 
+starship_mixin = {
+    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'required': True,
+    'attrs': {'id': 'system', 'title': 'Starship'}
+}
+
+
 microphone_mixin = {
     'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
     'attrs': {
@@ -13,7 +20,7 @@ microphone_mixin = {
         'title': 'Microphone (time)',
         'time_span': 4,
         'time_delay': 0.125,
-        'source_name': 'microphone',
+        'source_name': 'system_microphone',
         'y_label': 'Microphone (V)'
     },
 }
@@ -27,7 +34,7 @@ microphone_fft_mixin = {
         'fft_time_span': 0.25,
         'fft_freq_lb': 500,
         'fft_freq_ub': 50000,
-        'source_name': 'microphone',
+        'source_name': 'system_microphone',
         'y_label': 'Microphone (dB)'
     }
 }
@@ -59,7 +66,7 @@ efr_microphone_fft_mixin = {
         'id': 'microphone_fft_view',
         'title': 'Microphone view (PSD)',
         'fft_time_span': 5,
-        'source_name': 'microphone',
+        'source_name': 'system_microphone',
         'y_label': 'Microphone (dB)'
     }
 }
@@ -68,6 +75,7 @@ efr_microphone_fft_mixin = {
 ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
     'abr_io', 'ABR (input-output)', 'ear', [
+        starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOSimpleManifest'},
         temperature_mixin,
         eeg_mixin,
@@ -186,6 +194,10 @@ ParadigmDescription(
 
 ParadigmDescription(
     'memr_interleaved_chirp', 'MEMR (interleaved chirp)', 'ear', [
+        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True,
+         'attrs': {'id': 'elicitor', 'title': 'Elicitor starship'}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True,
+         'attrs': {'id': 'probe', 'title': 'Probe starship'}},
         {'manifest': CFTS_PATH + 'memr.InterleavedMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpProbeMixin', 'required': True},
@@ -197,8 +209,6 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
-
-
 
 
 ParadigmDescription(
@@ -217,8 +227,8 @@ ParadigmDescription(
 
 ParadigmDescription(
     'memr_simultaneous_chirp', 'MEMR (simultaneous chirp)', 'ear', [
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True, 'attrs': {'id': 'elicitor'}},
-        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True, 'attrs': {'id': 'probe'}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True, 'attrs': {'id': 'elicitor_starship'}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True, 'attrs': {'id': 'probe_starship'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
         temperature_mixin,
@@ -234,6 +244,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     'inear_speaker_calibration_chirp', 'In-ear speaker calibration (chirp)', 'ear', [
+        {'manifest': CFTS_PATH + 'cfts_mixins.Starship', 'required': True},
         {'manifest': CAL_PATH + 'speaker_calibration.BaseSpeakerCalibrationManifest'},
         {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},

@@ -14,9 +14,9 @@ from psiaudio.util import db
 from psi.context.api import (ContextGroup, ContextRow, Parameter,
                              BoolParameter, EnumParameter)
 from psi.controller.api import ExperimentAction
-from psi.controller.api import (ControllerManifest,
-                                ExtractEpochs, RejectEpochs,
-                                Detrend)
+from psi.controller.api import (
+    ControllerManifest, Detrend, ExtractEpochs, RejectEpochs, QueuedEpochOutput
+)
 from psi.data.sinks.api import BinaryStore, TextStore
 from psi.token.primitives import Cos2Envelope, Tone
 
@@ -59,10 +59,10 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
-        PTMicrophoneInput:
-            pass
-
-        SpeakerOutput: output:
+        QueuedEpochOutput: output:
+            name = 'target'
+            label = 'target'
+            target_name = 'system_primary'
             token = tone_burst
             configurable = False
             initialized ::
