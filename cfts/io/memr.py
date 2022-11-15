@@ -53,18 +53,21 @@ class BaseMEMRFile(Recording):
 
     @lru_cache(maxsize=MAXSIZE)
     def get_repeats(self, columns='auto', signal_name='microphone'):
-        signal = getattr(self, signal_name)
+        fs = getattr(self, signal_name).fs
         epochs = self.get_epochs(columns, signal_name).copy()
-        t = epochs.columns.values
-        s = np.round(t * signal.fs).astype('i')
-        s_repeat = int(round(self.repeat_period * signal.fs))
-        n_probe, s_probe = np.divmod(s, s_repeat)
-        t_probe = s_probe / signal.fs
+        s_repeat = int(round(self.repeat_period * fs))
+        n_probe = self.get_setting('probe_n')
+        t_probe = np.arange(s_repeat) / fs
 
-        epochs.columns = pd.MultiIndex.from_arrays(
-            [n_probe, t_probe], names=['repeat', 'time']
-        )
-        return epochs.stack('repeat').sort_index()
+        repeats = []
+        for i in range(n_probe):
+            lb = s_repeat * i
+            ub = lb + s_repeat
+            repeat = epochs.iloc[:, lb:ub]
+            repeat.columns.values[:] = t_probe
+            repeats.append(repeat)
+
+        return pd.concat(repeats, keys=range(n_probe), names=['repeat'])
 
     @property
     def trial_duration(self):
@@ -84,6 +87,7 @@ class InterleavedMEMRFile(BaseMEMRFile):
     @property
     def repeat_period(self):
         return self.get_setting('repeat_period')
+
 
 class SimultaneousMEMRFile(BaseMEMRFile):
 
