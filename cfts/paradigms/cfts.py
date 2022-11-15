@@ -212,6 +212,8 @@ probe_starship_mixin = {
 
 ParadigmDescription(
     'memr_interleaved_click', 'MEMR (interleaved click)', 'ear', [
+        elicitor_starship_mixin,
+        probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.InterleavedMEMRManifest', 'attrs': {'probe': 'click'}},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedClickProbeMixin', 'required': True},
