@@ -36,6 +36,15 @@ class BaseMEMRFile(Recording):
         super().__init__(base_path, setting_table)
 
     @property
+    def probe_microphone(self):
+        # A refactor of the cfts suite resulted in microphone being renamed to
+        # system_microphone.
+        try:
+            return self.__getattr__('probe_microphone')
+        except AttributeError:
+            return self.__getattr__('microphone')
+
+    @property
     @lru_cache(maxsize=MAXSIZE)
     def memr_metadata(self):
         data = self.__getattr__('memr_metadata')
@@ -45,14 +54,14 @@ class BaseMEMRFile(Recording):
         return data.rename(columns=rename)
 
     @lru_cache(maxsize=MAXSIZE)
-    def get_epochs(self, columns='auto', signal_name='microphone'):
+    def get_epochs(self, columns='auto', signal_name='probe_microphone'):
         signal = getattr(self, signal_name)
         return signal.get_epochs(
             self.memr_metadata, 0, self.trial_duration,
             columns=columns).sort_index()
 
     @lru_cache(maxsize=MAXSIZE)
-    def get_repeats(self, columns='auto', signal_name='microphone'):
+    def get_repeats(self, columns='auto', signal_name='probe_microphone'):
         fs = getattr(self, signal_name).fs
         epochs = self.get_epochs(columns, signal_name).copy()
         s_repeat = int(round(self.repeat_period * fs))
@@ -100,7 +109,7 @@ class SimultaneousMEMRFile(BaseMEMRFile):
         return 1 / self.get_setting('probe_rate')
 
     @lru_cache(maxsize=MAXSIZE)
-    def get_repeats(self, columns='auto', signal_name='microphone'):
+    def get_repeats(self, columns='auto', signal_name='probe_microphone'):
         repeats = super().get_repeats(columns, signal_name)
 
         probe_n = self.get_setting('probe_n')
@@ -110,9 +119,7 @@ class SimultaneousMEMRFile(BaseMEMRFile):
 
         probe_map =pd.Series('', index=range(probe_n))
 
-        def to_repeat(x, p):
-            return int(round(x / p))
-
+        def to_repeat(x, p): return int(round(x / p))
         rp = self.repeat_period
         e_start = to_repeat(onset, rp)
         e_ss_start = to_repeat(onset + rise, rp)
@@ -129,6 +136,6 @@ class SimultaneousMEMRFile(BaseMEMRFile):
 
         ix = repeats.index.to_frame(index=False)
         ix['group'] = ix['repeat'].map(probe_map)
-        new_names = repeats.index.names[:-2] + ['group', 'repeat', 't0']
+        new_names = repeats.index.names[:-1] + ['group', 'repeat', 't0']
         repeats.index = ix.set_index(new_names).index
         return repeats
