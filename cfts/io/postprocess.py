@@ -5,20 +5,20 @@ from pathlib import Path
 import sys
 import zipfile
 
+from tqdm import tqdm
+
 from psi import get_config
 
 
 def zip_data():
     import argparse
     parser = argparse.ArgumentParser('cfts-zip-data')
-    parser.add_argument('path',
-                        nargs='?',
-                        default=get_config('DATA_ROOT'),
-                        type=Path)
+    parser.add_argument('path', nargs='?', default=get_config('DATA_ROOT'), type=Path)
+    parser.add_argument('-d', '--destination', type=Path)
     args = parser.parse_args()
 
     dirs = [p for p in args.path.iterdir() if p.is_dir()]
-    for path in dirs:
+    for path in tqdm(dirs):
         shutil.make_archive(str(path), 'zip', str(path))
         try:
             zippath = validate(path)
@@ -26,6 +26,10 @@ def zip_data():
             md5path = zippath.with_suffix('.md5')
             md5path.write_text(zipmd5)
             shutil.rmtree(path)
+            if args.destination is not None:
+                for file in (zippath, md5path):
+                    new_file = args.destination / file.name
+                    file.rename(new_file)
         except IOError as e:
             print(e)
 
