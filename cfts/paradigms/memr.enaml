@@ -564,8 +564,8 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                 # Add a bit of padding to capture the tail end of the
                 # probe due to acoustic delays
                 name = 'probe'
-                lb = C.probe_delay
-                ub = C.probe_delay + C.probe_duration + 1e-3
+                lb = C.probe_delay + 0.65e-3
+                ub = C.probe_delay + C.probe_duration + 0.65e-3
 
             ExtractStim:
                 # Add a bit of padding to capture the tail end of the
