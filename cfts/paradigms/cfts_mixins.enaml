@@ -412,6 +412,18 @@ def list_starships(workbench):
 
 
 enamldef Starship(ExperimentManifest): manifest:
+    '''
+    Defines a starship that consists of one probe tube microphone and two
+    speakers. The IO manifest will be scanned for all channels that contain
+    "starship" in the name. The channels must follow the naming convention:
+
+        * starship_<name>_primary
+        * starship_<name>_secondary
+        * starship_<name>_microphone
+
+    If any of these channels are missing, that starship will not be available
+    for selection.
+    '''
 
     id = 'starship'
     title = manifest.id.capitalize().replace('_', ' ')

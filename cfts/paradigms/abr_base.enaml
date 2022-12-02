@@ -20,7 +20,7 @@ from psi.controller.api import (
 from psi.data.sinks.api import BinaryStore, TextStore
 from psi.token.primitives import Cos2Envelope, Tone
 
-from .cfts_mixins import DecimatedEEGInput, PTMicrophoneInput, SpeakerOutput
+from .cfts_mixins import DecimatedEEGInput
 
 
 EXPERIMENT = 'abr_base'

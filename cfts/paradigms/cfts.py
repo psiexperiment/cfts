@@ -51,7 +51,7 @@ microphone_fft_mixin = {
 }
 
 
-eeg_mixin = {
+eeg_view_mixin = {
     'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
     'attrs': {
         'id': 'eeg_view_mixin',
@@ -63,6 +63,8 @@ eeg_mixin = {
         'y_label': 'EEG (V)'
     }
 }
+eeg_view_mixin_required = eeg_view_mixin.copy()
+eeg_view_mixin_required['required'] = True
 
 
 temperature_mixin = {
@@ -84,12 +86,22 @@ efr_microphone_fft_mixin = {
 
 
 ParadigmDescription(
+    'monitor', 'Monitor', 'ear', [
+        selectable_starship_mixin,
+        temperature_mixin,
+        eeg_view_mixin_required,
+        {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
+    ],
+)
+
+
+ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
     'abr_io', 'ABR (input-output)', 'ear', [
         selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOSimpleManifest'},
         temperature_mixin,
-        eeg_mixin,
+        eeg_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
@@ -115,7 +127,7 @@ ParadigmDescription(
         temperature_mixin,
         microphone_mixin,
         efr_microphone_fft_mixin,
-        eeg_mixin,
+        eeg_view_mixin,
     ]
 )
 
@@ -128,7 +140,7 @@ ParadigmDescription(
         temperature_mixin,
         microphone_mixin,
         efr_microphone_fft_mixin,
-        eeg_mixin,
+        eeg_view_mixin,
     ]
 )
 
@@ -282,5 +294,3 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
-
-

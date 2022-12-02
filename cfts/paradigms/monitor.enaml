@@ -1,0 +1,40 @@
+from enaml.workbench.api import Extension
+
+from psi.context.api import ContextGroup
+from psi.controller.api import ControllerManifest, ExperimentAction
+
+from .cfts_mixins import DecimatedEEGInput
+
+
+EXPERIMENT = 'monitor'
+
+
+enamldef MonitorManifest(ControllerManifest):
+
+    Extension:
+        id = EXPERIMENT + '.monitor.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'hardware_settings'
+            label = 'Hardware'
+
+        ContextGroup:
+            name = 'acquisition'
+            label = 'Acquisition'
+
+    Extension:
+        id = EXPERIMENT + '.monitor.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            event = 'experiment_initialize'
+            command = 'psi.context.initialize'
+
+    Extension:
+        id = EXPERIMENT + '.monitor.io'
+        point = 'psi.controller.io'
+
+        DecimatedEEGInput:
+            target_fs = 12.5e3
+            force_active = True
