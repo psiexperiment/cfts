@@ -32,7 +32,7 @@ import pandas as pd
 from scipy import signal
 
 from psi.util import PSIJsonEncoder
-from . import Recording
+from psi.data.io.api import Recording
 
 
 # Max size of LRU cache
@@ -366,14 +366,9 @@ def load(base_path, allow_superset=False):
         Depending on folder, will return either an instance of `ABRFile` or
         `ABRSupersetFile`.
     '''
-    # This supports backwards compatibility
-    check = os.path.join(base_path, 'erp_metadata')
-    check_csv = os.path.join(base_path, 'erp_metadata.csv')
-    if os.path.exists(check) or os.path.exists(check_csv):
-        return ABRFile(base_path)
     if allow_superset:
-        return ABRSupersetFile.from_folder(base_path)
-    raise IOError(f'{base_path} is not an ABR dataset')
+        raise NotImplementedError
+    return ABRFile(base_path)
 
 
 def is_abr_experiment(base_path, allow_superset=False):

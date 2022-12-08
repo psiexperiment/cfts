@@ -27,6 +27,7 @@ dev = ["coloredlogs"]
 
 [project.scripts]
 cfts-zip-data = "cfts.io.postprocess:zip_data"
+summarize-abr = "cfts.io.summarize_abr:main"
 
 [build-system]
 requires = ["setuptools>=61.2", "wheel", "setuptools_scm[toml]>=3.4.3"]
