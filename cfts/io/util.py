@@ -5,6 +5,14 @@ RAW_DIR = os.environ['RAW_DATA_DIR']
 PROC_DIR = os.environ['PROC_DATA_DIR']
 
 
+def add_trial(df, grouping):
+    def _add_trial(df):
+        df['trial'] = range(len(df))
+        return df.set_index('trial', append=True)
+    result = df.groupby(grouping, group_keys=False).apply(_add_trial)
+    return result
+
+
 def cal_from_epl(name, base_path=None):
     if base_path is None:
         base_path = Path('c:/Data/Probe Tube Calibrations')
@@ -27,7 +35,7 @@ class DatasetManager:
         self.proc_dir = Path(proc_dir)
 
     def get_proc_path(self):
-        return self.proc_dir / self.path.parent.relative_to(self.raw_dir)
+        return self.proc_dir / self.path.parent.relative_to(self.raw_dir) / self.path.stem
 
     def get_proc_filename(self, suffix, mkdir=True):
         proc_path = self.get_proc_path()
