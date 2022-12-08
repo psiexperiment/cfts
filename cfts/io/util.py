@@ -29,10 +29,27 @@ def cal_from_epl(name, base_path=None):
 
 class DatasetManager:
 
-    def __init__(self, path, raw_dir=RAW_DIR, proc_dir=PROC_DIR):
+    def __init__(self, path, raw_dir=RAW_DIR, proc_dir=PROC_DIR,
+                 file_template=None):
+        '''
+        Manages paths of processed files given the relative path between the
+        raw and processed directory structure.
+
+        Parameters
+        ----------
+        raw_dir : {str, Path}
+            Base path containing raw data
+        proc_dir : {str, Path}
+            Base path containing processed data
+        file_template : {None, str}
+            If None, defaults to the filename stem
+        '''
         self.path = Path(path)
         self.raw_dir = Path(raw_dir)
         self.proc_dir = Path(proc_dir)
+        if file_template is None:
+            file_template = f'{self.path.stem}'
+        self.file_template = file_template
 
     def get_proc_path(self):
         return self.proc_dir / self.path.parent.relative_to(self.raw_dir) / self.path.stem
@@ -40,7 +57,7 @@ class DatasetManager:
     def get_proc_filename(self, suffix, mkdir=True):
         proc_path = self.get_proc_path()
         proc_path.mkdir(exist_ok=True, parents=True)
-        return proc_path / f'{self.path.stem} {suffix}'
+        return proc_path / f'{self.file_template} {suffix}'
 
     def is_processed(self, suffixes):
         for suffix in suffixes:
