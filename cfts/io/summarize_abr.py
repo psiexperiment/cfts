@@ -26,11 +26,10 @@ def get_file_template(filename, offset, duration, filter_settings, n_epochs,
                       prefix='ABR', simple_filename=True,
                       include_filename=True):
 
-    if prefix:
-        prefix += ' '
-
+    if include_filename:
+        prefix = f'{filename.stem} {prefix}'
     if simple_filename:
-        return f'{prefix}{{}}'
+        return f'{prefix}'
 
     base_string = f'{prefix}{offset*1e3:.1f}ms to {(offset+duration)*1e3:.1f}ms'
 
@@ -60,7 +59,7 @@ def get_file_template(filename, offset, duration, filter_settings, n_epochs,
     if suffix is not None:
         file_string = f'{file_string} {suffix}'
 
-    return f'{file_string} {{}}'
+    return f'{file_string}'
 
 
 def _get_filter(fh):
@@ -275,7 +274,7 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     if file_template is None:
         file_template = get_file_template(
             filename, offset, duration, filter_settings, n_epochs,
-            simple_filename=simple_filename, include_filename=False)
+            simple_filename=simple_filename, include_filename=True)
 
     manager = DatasetManager(filename, file_template=file_template)
     files = [
@@ -286,6 +285,7 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     ]
     if export_single_trial:
         files.append('individual waveforms.csv')
+
     if not reprocess and manager.is_processed(files):
         return
 
