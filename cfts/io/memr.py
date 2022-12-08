@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from psi.data.io.api import Recording
+from . import util
 
 # Max size of LRU cache
 MAXSIZE = 1024
@@ -54,11 +55,15 @@ class BaseMEMRFile(Recording):
         return data.rename(columns=rename)
 
     @lru_cache(maxsize=MAXSIZE)
-    def get_epochs(self, columns='auto', signal_name='probe_microphone'):
+    def get_epochs(self, columns='auto', signal_name='probe_microphone',
+                   add_trial=True):
         signal = getattr(self, signal_name)
-        return signal.get_epochs(
+        epochs = signal.get_epochs(
             self.memr_metadata, 0, self.trial_duration,
             columns=columns).sort_index()
+        if add_trial:
+            epochs = util.add_trial(epochs, epochs.index.names[:-1])
+        return epochs
 
     @lru_cache(maxsize=MAXSIZE)
     def get_repeats(self, columns='auto', signal_name='probe_microphone'):
@@ -69,14 +74,15 @@ class BaseMEMRFile(Recording):
         t_probe = np.arange(s_repeat) / fs
 
         repeats = []
+        keys = []
         for i in range(n_probe):
             lb = s_repeat * i
             ub = lb + s_repeat
             repeat = epochs.iloc[:, lb:ub]
             repeat.columns.values[:] = t_probe
             repeats.append(repeat)
-
-        return pd.concat(repeats, keys=range(n_probe), names=['repeat'])
+            keys.append((i, lb / fs))
+        return pd.concat(repeats, keys=keys, names=['repeat', 'probe_t0'])
 
     @property
     def trial_duration(self):
@@ -117,9 +123,10 @@ class SimultaneousMEMRFile(BaseMEMRFile):
         duration = self.get_setting('elicitor_duration')
         rise = self.get_setting('elicitor_noise_rise_time')
 
-        probe_map =pd.Series('', index=range(probe_n))
 
-        def to_repeat(x, p): return int(round(x / p))
+        def to_repeat(x, p): 
+            return int(round(x / p))
+
         rp = self.repeat_period
         e_start = to_repeat(onset, rp)
         e_ss_start = to_repeat(onset + rise, rp)
@@ -129,13 +136,25 @@ class SimultaneousMEMRFile(BaseMEMRFile):
         nw_start = to_repeat(onset - duration + rise * 2, rp)
         nw_end = to_repeat(onset, rp)
 
+        # Create a mapping of repeat number to the probe type (e.g., baseline,
+        # elicitor, recovery).
+        probe_map = pd.Series('', index=range(probe_n))
         probe_map[e_start:e_end] = 'elicitor'
         probe_map[e_ss_start:e_ss_end] = 'elicitor_ss'
         probe_map[nw_start:nw_end] = 'baseline'
         probe_map[e_end:] = 'recovery'
 
         ix = repeats.index.to_frame(index=False)
+        ix['epoch_t0'] = ix['t0']
+        ix['t0'] = ix.eval('epoch_t0 + probe_t0')
         ix['group'] = ix['repeat'].map(probe_map)
-        new_names = repeats.index.names[:-1] + ['group', 'repeat', 't0']
-        repeats.index = ix.set_index(new_names).index
-        return repeats
+        new_names = repeats.index.names[:-1] + ['group']
+
+        names = list(repeats.index.names)
+        names.remove('repeat')
+        names.remove('t0')
+        names.remove('probe_t0')
+        names = names + ['t0', 'epoch_t0', 'probe_t0', 'repeat', 'group']
+
+        repeats.index = ix.set_index(names).index
+        return repeats.sort_index()
