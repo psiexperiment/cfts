@@ -390,6 +390,16 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             gain << C.calibration_gain
 
 
+NO_STARSHIP_ERROR = '''
+No starship could be found in the IO manifest. To use this plugin, you must
+have an analog input channel named starship_ID_microphone and two analog output
+channels named starship_ID_primary and starship_ID_secondary. ID is the name of
+the starship that will appear in any drop-down selectors where you can select
+which starship to use (assuming your system is configured for more than one
+starship).
+'''
+
+
 def list_starships(workbench):
     ai = get_hw_ai_choices(workbench)
     ao = get_hw_ao_choices(workbench)
@@ -408,6 +418,10 @@ def list_starships(workbench):
             if c not in channels:
                 raise ValueError(f'Must define starship_{name}_{c} channel')
         choices[name] = f'"starship_{name}"'
+
+    if len(choices) == 0:
+        raise ValueError(NO_STARSHIP_ERROR)
+
     return choices
 
 
