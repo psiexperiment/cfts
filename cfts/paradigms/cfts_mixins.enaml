@@ -4,6 +4,7 @@ log = logging.getLogger(__name__)
 import itertools
 
 from enaml.core.api import Conditional
+from enaml.widgets.api import Label
 from enaml.workbench.api import Extension
 import numpy as np
 
@@ -12,12 +13,13 @@ from psiaudio.util import octave_space
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, FriendlyCartesianProduct,
                              Parameter)
-from psi.controller.api import (ContinuousInput, DecimateTo, Downsample,
+from psi.controller.api import (Callback, ContinuousInput, DecimateTo, Downsample,
                                 get_hw_ai_choices, get_hw_ao_choices,
                                 IIRFilter, MUXOutput)
 from psi.controller.calibration.api import ChirpCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
-from psi.data.sinks.api import DisplayValue, BinaryStore
+from psi.data.sinks.api import BinaryStore
+from psi.experiment.api import StatusItem
 
 from psi.paradigms.core.io_mixins import ChannelInput, ChannelInputManifest, \
     QueuedEpochChannelOutput
@@ -147,10 +149,15 @@ enamldef TemperatureMixinManifest(ExperimentManifest): manifest:
             name = 'temperature_store'
             continuous_inputs = ['temperature']
 
-        DisplayValue:
-            name = 'temperature_display'
+    Extension:
+        id = 'temperature_display'
+        point = 'psi.experiment.status'
+
+        StatusItem:
             label = 'Temperature'
-            source_name = 'temperature_decimated'
+
+            Label: temp:
+                text = ''
 
     Extension:
         id = 'temperature_io'
@@ -166,6 +173,9 @@ enamldef TemperatureMixinManifest(ExperimentManifest): manifest:
             Downsample:
                 name = 'temperature_decimated'
                 q = 500
+
+                Callback:
+                    function = lambda x: setattr(temp, 'text', f'{x[0, -1]}°C')
 
 
 ################################################################################
