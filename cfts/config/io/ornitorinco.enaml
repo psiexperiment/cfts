@@ -1,24 +1,18 @@
-import logging
-log = logging.getLogger()
-
-from pathlib import Path
-
 from enaml.workbench.api import PluginManifest, Extension
 import numpy as np
-import pandas as pd
 
-from psiaudio.calibration import InterpCalibration
 from psi.controller.engines.nidaq import (NIDAQEngine,
                                           NIDAQHardwareAIChannel,
                                           NIDAQHardwareAOChannel,
                                           NIDAQHardwareAOChannel4461)
 from psi.controller.input import Transform
+from psiaudio.calibration import FlatCalibration
+
+from .util import load_epl_calibration
 
 
 def mv_to_C(mv):
-    log.info(mv)
     c = (mv-0.050)/0.020 + 35
-    log.info(c)
     m = (c < 35) | (c > 40)
     c[m] = np.nan
     return c
@@ -26,16 +20,8 @@ def mv_to_C(mv):
 
 START_TRIGGER = '/PXI1Slot6/ao/StartTrigger'
 
-EPL_CAL_FILENAME = Path(r'c:\Data\Probe Tube Calibrations\#BackupSS_ep_ProbeTube.22May06_141916.calib')
 
-
-def load_epl_calibration(filename):
-    with Path(filename).open('r') as fh:
-        for line in fh:
-            if line.startswith('Freq(Hz)'):
-                break
-        cal = pd.read_csv(fh, sep='\t', header=None)
-        return InterpCalibration.from_spl(cal[0], cal[1])
+EPL_CAL_FILENAME = r'c:\Data\Probe Tube Calibrations\#BackupSS_ep_ProbeTube.22May06_141916.calib'
 
 
 enamldef IOManifest(PluginManifest): manifest:
@@ -58,7 +44,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 expected_range = (-10, 10)
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
-                terminal_coupling = 'AC'
+                terminal_coupling = 'DC'
                 unit = 'V'
 
             NIDAQHardwareAIChannel:
@@ -89,8 +75,8 @@ enamldef IOManifest(PluginManifest): manifest:
             hw_ao_buffer_size = 5
 
             NIDAQHardwareAOChannel4461:
-                label = 'Speaker 1'
-                name = 'speaker_1'
+                label = 'Starship A (primary)'
+                name = 'starship_A_primary'
                 channel = 'PXI1Slot6/ao0'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
@@ -100,8 +86,8 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
 
             NIDAQHardwareAOChannel4461:
-                label = 'Speaker 2'
-                name = 'speaker_2'
+                label = 'Starship A (secondary)'
+                name = 'starship_A_secondary'
                 channel = 'PXI1Slot6/ao1'
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
@@ -120,14 +106,14 @@ enamldef IOManifest(PluginManifest): manifest:
                 expected_range = (-10, 10)
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
-                terminal_coupling = 'DC'
+                terminal_coupling = 'AC'
                 gain = 40
                 calibration_user_editable = True
                 calibration = FlatCalibration.from_mv_pa(1)
 
             NIDAQHardwareAIChannel:
-                label = 'Starship microphone'
-                name = 'microphone_channel'
+                label = 'Starship A (microphone)'
+                name = 'starship_A_microphone'
                 channel = 'PXI1Slot6/ai1'
                 start_trigger = START_TRIGGER
                 fs = 100e3
@@ -135,32 +121,6 @@ enamldef IOManifest(PluginManifest): manifest:
                 expected_range = (-10, 10)
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
-                terminal_coupling = 'DC'
+                terminal_coupling = 'AC'
                 gain = 40
                 calibration = load_epl_calibration(EPL_CAL_FILENAME)
-
-            #NIDAQHardwareAIChannel:
-            #    label = 'Speaker 1 monitor'
-            #    name = 'speaker_1_monitor'
-            #    channel = 'PXI1Slot8/ai0'
-            #    start_trigger = START_TRIGGER
-            #    fs = 100e3
-            #    reference_clock = 'PXI_Clk10'
-            #    expected_range = (-10, 10)
-            #    dtype = 'float64'
-            #    terminal_mode = 'pseudodifferential'
-            #    terminal_coupling = 'DC'
-            #    calibration_user_editable = True
-
-            #NIDAQHardwareAIChannel:
-            #    label = 'Speaker 2 monitor'
-            #    name = 'speaker_2_monitor'
-            #    channel = 'PXI1Slot8/ai1'
-            #    start_trigger = START_TRIGGER
-            #    fs = 100e3
-            #    reference_clock = 'PXI_Clk10'
-            #    expected_range = (-10, 10)
-            #    dtype = 'float64'
-            #    terminal_mode = 'pseudodifferential'
-            #    terminal_coupling = 'DC'
-            #    calibration_user_editable = True
