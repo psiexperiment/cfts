@@ -7,7 +7,6 @@ import datetime as dt
 from math import ceil
 import json
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -123,18 +122,17 @@ def add_trial(epochs):
     return epochs.groupby(levels, group_keys=False).apply(number_trials)
 
 
-def process_folder(folder, filter_settings=None):
-    if abr.is_abr_experiment(folder):
-        files = [folder]
-    else:
-        files = list(Path(folder).glob('*abr_io*'))
-    process_files(files, filter_settings=filter_settings, cb='tqdm')
+def process_folder(folder, filter_settings=None, reprocess=False):
+    folder = Path(folder)
+    files = list(folder.glob('**/*abr_io')) + list(folder.glob('**/*abr_io.zip'))
+    process_files(files, filter_settings=filter_settings, cb='tqdm',
+                  reprocess=reprocess)
 
 
 def process_files(filenames, offset=-0.001, duration=0.01,
                   filter_settings=None, cb='tqdm', reprocess=False):
     success = []
-    error = []
+    errors = []
     for filename in filenames:
         try:
             processed = process_file(filename, offset=offset,
@@ -143,9 +141,11 @@ def process_files(filenames, offset=-0.001, duration=0.01,
                                      reprocess=reprocess)
             success.append(filename)
         except Exception as e:
-            raise e
-            error.append((filename, e))
-    print(f'Successfully processed {len(success)} files with {len(error)} errors')
+            raise
+            errors.append((filename, e))
+    print(f'Successfully processed {len(success)} files with {len(errors)} errors')
+    for f, e in errors:
+        print(f'Error processing {f} =>\n\t{e}')
 
 
 def plot_waveforms_cb(epochs_mean, filename, name):
@@ -242,8 +242,8 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     '''
     settings = locals()
 
-    cb = get_cb(cb)
     filename = Path(filename)
+    print(f'Checking {filename}')
 
     # Cleanup settings so that it is JSON-serializable
     settings.pop('cb')
@@ -270,7 +270,6 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
         if n_epochs == 'auto':
             n_epochs = fh.get_setting('averages')
 
-    cb(0)
     if file_template is None:
         file_template = get_file_template(
             filename, offset, duration, filter_settings, n_epochs,
@@ -280,18 +279,22 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     files = [
         'average waveforms.csv',
         'processing settings.json',
-        'experiment settings.json'
+        'experiment settings.json',
         'waveforms.pdf'
     ]
     if export_single_trial:
         files.append('individual waveforms.csv')
 
     if not reprocess and manager.is_processed(files):
+        print('\tAlready processed. Skipping.')
         return
 
     # Load the epochs. The callbacks for loading the epochs return a value in
     # the range 0 ... 1. Since this only represents "half" the total work we
     # need to do, rescale to the range 0 ... 0.5.
+    cb = get_cb(cb)
+    cb(0)
+
     def cb_rescale(frac):
         nonlocal cb
         cb(frac * 0.5)
@@ -341,9 +344,9 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     epoch_mean.index = epoch_info.index
     epoch_mean.columns.name = 'time'
 
-    manager.get_proc_filename('experiment settings.json') \
-        .write_text(json.dumps(settings, indent=2))
     manager.get_proc_filename('processing settings.json') \
+        .write_text(json.dumps(settings, indent=2))
+    manager.get_proc_filename('experiment settings.json') \
         .write_text(json.dumps(md, indent=2))
 
     epoch_mean.T.to_csv(manager.get_proc_filename('average waveforms.csv'))
@@ -359,14 +362,14 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
         plot_waveforms_cb(
             epoch_mean,
             manager.get_proc_filename('waveforms.pdf'),
-            filename.name
+            filename.stem
         )
 
     cb(1.0)
     return True
 
 
-def main():
+def main_file():
     parser = argparse.ArgumentParser('Filter and summarize ABR data')
 
     parser.add_argument('filenames', type=str,
@@ -409,11 +412,13 @@ def main():
     )
 
 
-def main_auto():
+def main_folder():
     parser = argparse.ArgumentParser('Filter and summarize ABR files in folder')
     parser.add_argument('folder', type=str, help='Folder containing ABR data')
+    parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
     args = parser.parse_args()
-    process_folder(args.folder, filter_settings='saved')
+    process_folder(args.folder, filter_settings='saved',
+                   reprocess=args.reprocess)
 
 
 def main_gui():
