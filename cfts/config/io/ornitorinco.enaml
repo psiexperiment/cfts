@@ -21,7 +21,7 @@ def mv_to_C(mv):
 START_TRIGGER = '/PXI1Slot6/ao/StartTrigger'
 
 
-EPL_CAL_FILENAME = r'c:\Data\Probe Tube Calibrations\#BackupSS_ep_ProbeTube.22May06_141916.calib'
+EPL_CAL_FILENAME = r'c:\Data\Probe Tube Calibrations\MMM0_ProbeTube.calib'
 
 
 enamldef IOManifest(PluginManifest): manifest:
