@@ -769,7 +769,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                 # Add a bit of padding to capture the tail end of the
                 # probe due to acoustic delays
                 name = 'probe'
-                lb = 0
+                lb = 0.5e-3
                 ub = C.probe_duration + 1e-3
 
                 ExtractRepeats:
