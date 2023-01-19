@@ -650,6 +650,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                     source_name = 'probe'
                     plot_grouping << C.get_names()
                     pen_width = 2
+                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_{N}'
 
 
 ################################################################################
@@ -955,3 +956,4 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                     source_name = 'probe_norm'
                     plot_grouping << C.get_names()
                     pen_width = 2
+                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_{N}'
