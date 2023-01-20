@@ -1,26 +1,21 @@
 import logging
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 import argparse
 import datetime as dt
-from glob import glob
 from math import ceil
 import json
-import os.path
 from pathlib import Path
-
-import enaml
-with enaml.imports():
-    from enaml.stdlib.message_box import information
-from enaml.qt.qt_application import QtApplication
 import matplotlib.pyplot as plt
 
 import numpy as np
 import pandas as pd
 
 from psiaudio.plot import waterfall_plot
-from psi.data.io import abr
-from psi import get_config
+from cfts.io import abr
+
+from .util import DatasetManager
 
 
 COLUMNS = ['frequency', 'level', 'polarity']
@@ -30,11 +25,10 @@ def get_file_template(filename, offset, duration, filter_settings, n_epochs,
                       prefix='ABR', simple_filename=True,
                       include_filename=True):
 
-    if prefix:
-        prefix += ' '
-
+    if include_filename:
+        prefix = f'{filename.stem} {prefix}'
     if simple_filename:
-        return f'{prefix}{{}}'
+        return f'{prefix}'
 
     base_string = f'{prefix}{offset*1e3:.1f}ms to {(offset+duration)*1e3:.1f}ms'
 
@@ -64,7 +58,7 @@ def get_file_template(filename, offset, duration, filter_settings, n_epochs,
     if suffix is not None:
         file_string = f'{file_string} {suffix}'
 
-    return f'{file_string} {{}}'
+    return f'{file_string}'
 
 
 def _get_filter(fh):
@@ -87,7 +81,7 @@ def _get_epochs(fh, offset, duration, filter_settings, reject_ratio=None,
     # to ensure that nothing gets rejected.
     kwargs = {'offset': offset, 'duration': duration, 'columns': COLUMNS,
               'reject_threshold': np.inf, 'downsample': downsample, 'cb': cb,
-              'bypass_cache': False}
+              'bypass_cache': True}
 
     if filter_settings is None:
         return fh.get_epochs(**kwargs)
@@ -109,29 +103,6 @@ def _get_epochs(fh, offset, duration, filter_settings, reject_ratio=None,
     return fh.get_epochs_filtered(**kwargs)
 
 
-def is_processed(filename, offset, duration, filter_settings, n_epochs=None,
-                 simple_filename=True, export_single_trial=False,
-                 processed_directory=None, directory_depth=None):
-
-    file_template = get_file_template(filename, offset, duration,
-                                      filter_settings, n_epochs,
-                                      simple_filename=simple_filename,
-                                      include_filename=False)
-    file_template = str(filename / file_template)
-
-    suffixes = ['waveforms.pdf', 'average waveforms.csv',
-                'processing settings.json', 'experiment settings.json']
-    if export_single_trial:
-        suffixes.append('individual waveforms.csv')
-
-    for suffix in suffixes:
-        filename = Path(file_template.format(suffix))
-        if not filename.exists():
-            print(filename)
-            return False
-    return True
-
-
 def add_trial(epochs):
     '''
     This adds trial number on a per-stim-level/frequency basis
@@ -151,28 +122,30 @@ def add_trial(epochs):
     return epochs.groupby(levels, group_keys=False).apply(number_trials)
 
 
-def process_folder(folder, filter_settings=None):
-    if abr.is_abr_experiment(folder):
-        files = [folder]
-    else:
-        files = list(Path(folder).glob('*abr_io*'))
-    process_files(files, filter_settings=filter_settings, cb='tqdm')
+def process_folder(folder, filter_settings=None, reprocess=False):
+    folder = Path(folder)
+    files = list(folder.glob('**/*abr_io')) + list(folder.glob('**/*abr_io.zip'))
+    process_files(files, filter_settings=filter_settings, cb='tqdm',
+                  reprocess=reprocess)
 
 
 def process_files(filenames, offset=-0.001, duration=0.01,
-                  filter_settings=None, cb='tqdm'):
+                  filter_settings=None, cb='tqdm', reprocess=False):
     success = []
-    error = []
+    errors = []
     for filename in filenames:
         try:
             processed = process_file(filename, offset=offset,
                                      duration=duration,
-                                     filter_settings=filter_settings, cb=cb)
+                                     filter_settings=filter_settings, cb=cb,
+                                     reprocess=reprocess)
             success.append(filename)
         except Exception as e:
-            raise e
-            error.append((filename, e))
-    print(f'Successfully processed {len(success)} files with {len(error)} errors')
+            raise
+            errors.append((filename, e))
+    print(f'Successfully processed {len(success)} files with {len(errors)} errors')
+    for f, e in errors:
+        print(f'Error processing {f} =>\n\t{e}')
 
 
 def plot_waveforms_cb(epochs_mean, filename, name):
@@ -188,12 +161,30 @@ def plot_waveforms_cb(epochs_mean, filename, name):
     figure.savefig(filename)
 
 
+def get_cb(cb):
+    # Define the callback as a no-op if not provided or sets up tqdm if requested.
+    if cb is None:
+        cb = lambda x: x
+    elif cb == 'tqdm':
+        from tqdm import tqdm
+        pbar = tqdm(total=100, bar_format='{l_bar}{bar}[{elapsed}<{remaining}]')
+        def cb(frac):
+            nonlocal pbar
+            frac *= 100
+            pbar.update(frac - pbar.n)
+            if frac == 100:
+                pbar.close()
+    else:
+        raise ValueError(f'Unsupported callback: {cb}')
+    return cb
+
+
 def process_file(filename, offset=-1e-3, duration=10e-3,
                  filter_settings='saved', n_epochs='auto',
                  simple_filename=True, export_single_trial=False, cb=None,
                  file_template=None, target_fs=12.5e3, analysis_window=None,
                  latency_correction=0, gain_correction=1, debug_mode=False,
-                 plot_waveforms_cb=plot_waveforms_cb):
+                 plot_waveforms_cb=plot_waveforms_cb, reprocess=False):
     '''
     Extract ABR epochs, filter and save result to CSV files
 
@@ -251,20 +242,8 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     '''
     settings = locals()
 
-    # Define the callback as a no-op if not provided or sets up tqdm if requested.
-    if cb is None:
-        cb = lambda x: x
-    elif cb == 'tqdm':
-        from tqdm import tqdm
-        pbar = tqdm(total=100, bar_format='{l_bar}{bar}[{elapsed}<{remaining}]')
-        def cb(frac):
-            nonlocal pbar
-            frac *= 100
-            pbar.update(frac - pbar.n)
-            if frac == 100:
-                pbar.close()
-
     filename = Path(filename)
+    print(f'Checking {filename}')
 
     # Cleanup settings so that it is JSON-serializable
     settings.pop('cb')
@@ -291,22 +270,31 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
         if n_epochs == 'auto':
             n_epochs = fh.get_setting('averages')
 
-    cb(0)
     if file_template is None:
         file_template = get_file_template(
             filename, offset, duration, filter_settings, n_epochs,
-            simple_filename=simple_filename, include_filename=False)
-        file_template = str(filename / file_template)
+            simple_filename=simple_filename, include_filename=True)
 
-    raw_epoch_file = Path(file_template.format('individual waveforms.csv'))
-    mean_epoch_file = Path(file_template.format('average waveforms.csv'))
-    settings_file = Path(file_template.format('processing settings.json'))
-    experiment_file = Path(file_template.format('experiment settings.json'))
-    figure_file = Path(file_template.format('waveforms.pdf'))
+    manager = DatasetManager(filename, file_template=file_template)
+    files = [
+        'average waveforms.csv',
+        'processing settings.json',
+        'experiment settings.json',
+        'waveforms.pdf'
+    ]
+    if export_single_trial:
+        files.append('individual waveforms.csv')
+
+    if not reprocess and manager.is_processed(files):
+        print('\tAlready processed. Skipping.')
+        return
 
     # Load the epochs. The callbacks for loading the epochs return a value in
     # the range 0 ... 1. Since this only represents "half" the total work we
     # need to do, rescale to the range 0 ... 0.5.
+    cb = get_cb(cb)
+    cb(0)
+
     def cb_rescale(frac):
         nonlocal cb
         cb(frac * 0.5)
@@ -356,28 +344,32 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
     epoch_mean.index = epoch_info.index
     epoch_mean.columns.name = 'time'
 
-    # Write the data to CSV and JSON files
-    settings_file.parent.mkdir(exist_ok=True, parents=True)
-    settings_file.write_text(json.dumps(settings, indent=2))
-    experiment_file.parent.mkdir(exist_ok=True, parents=True)
-    experiment_file.write_text(json.dumps(md, indent=2))
+    manager.get_proc_filename('processing settings.json') \
+        .write_text(json.dumps(settings, indent=2))
+    manager.get_proc_filename('experiment settings.json') \
+        .write_text(json.dumps(md, indent=2))
 
-    epoch_mean.T.to_csv(mean_epoch_file)
+    epoch_mean.T.to_csv(manager.get_proc_filename('average waveforms.csv'))
     cb(0.8)
+
     if export_single_trial:
         epochs = add_trial(epochs)
         epochs.columns.name = 'time'
-        epochs.T.to_csv(raw_epoch_file)
+        epochs.T.to_csv(manager.get_proc_filename('individual waveforms.csv'))
 
     cb(0.9)
     if plot_waveforms_cb is not None:
-        plot_waveforms_cb(epoch_mean, figure_file, filename.name)
+        plot_waveforms_cb(
+            epoch_mean,
+            manager.get_proc_filename('waveforms.pdf'),
+            filename.stem
+        )
 
     cb(1.0)
     return True
 
 
-def main():
+def main_file():
     parser = argparse.ArgumentParser('Filter and summarize ABR data')
 
     parser.add_argument('filenames', type=str,
@@ -410,24 +402,30 @@ def main():
         }
     else:
         filter_settings = None
-    process_files(args.filenames, args.offset, args.duration, filter_settings,
-                  args.reprocess)
+    process_files(
+        filenames=args.filenames,
+        offset=args.offset,
+        duration=args.duration,
+        filter_settings=filter_settings,
+        reprocess=args.reprocess,
+        cb='tqdm',
+    )
 
 
-def main_auto():
+def main_folder():
     parser = argparse.ArgumentParser('Filter and summarize ABR files in folder')
     parser.add_argument('folder', type=str, help='Folder containing ABR data')
+    parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
     args = parser.parse_args()
-    process_folder(args.folder, filter_settings='saved')
+    process_folder(args.folder, filter_settings='saved',
+                   reprocess=args.reprocess)
 
 
 def main_gui():
-    logging.basicConfig(level=logging.INFO)
     import enaml
     from enaml.qt.qt_application import QtApplication
     with enaml.imports():
         from .summarize_abr_gui import SummarizeABRGui
-
     app = QtApplication()
     view = SummarizeABRGui()
     view.show()
