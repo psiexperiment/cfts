@@ -1,0 +1,37 @@
+from enaml.layout.api import hbox, spacer, vbox
+from enaml.widgets.api import (
+    Container, Label, Form, MainWindow, ObjectCombo, PushButton
+)
+
+
+class Settings(Atom):
+
+    starship = Enum('MMM0', 'MMM1', 'MMM2', 'MMM3')
+
+
+
+enamldef Main(MainWindow):
+
+    attr settings = Settings()
+
+    Container:
+
+        constraints = [
+            vbox(
+                hbox(starship_label, starship_select),
+                hbox(spacer(0), golay_start, chirp_start),
+            ),
+        ]
+
+        Label: starship_label:
+            text = 'Starship'
+
+        ObjectCombo: starship_select:
+            items = ['MMM0', 'MMM1', 'MMM2', 'MMM3']
+            selectd := settings.starship
+
+        PushButton: golay_start:S
+            text = 'Run Golay'
+
+        PushButton: chirp_start:
+            text = 'Run Chirp'

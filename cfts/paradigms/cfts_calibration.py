@@ -5,11 +5,13 @@ PATH = 'psi.paradigms.calibration.'
 CORE_PATH = 'psi.paradigms.core.'
 
 
-#ParadigmDescription(
-#    'pt_calibration_chirp', 'Probe tube calibration (chirp)', 'calibration', [
-#        {'manifest': PATH + 'pt_calibration.ChirpControllerManifest',},
-#    ],
-#)
+ParadigmDescription(
+    'pt_calibration_chirp', 'Probe tube calibration (chirp)', 'calibration', [
+        {'manifest': PATH + 'pt_calibration.BasePTCalibrationManifest',},
+        {'manifest': PATH + 'pt_calibration.PTChirpMixin',},
+        {'manifest': PATH + 'calibration_mixins.ToneValidateMixin',},
+    ],
+)
 
 
 ParadigmDescription(
@@ -36,14 +38,14 @@ ParadigmDescription(
 )
 
 
-ParadigmDescription(
-    'amplifier_calibration', 'Amplifier calibration', 'calibration', [
-        {'manifest': PATH + 'amplifier_calibration.AmplifierCalibrationManifest'},
-        {'manifest': CORE_PATH + 'signal_mixins.SignalFFTViewManifest',
-         'required': True
-         },
-        {'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
-         'required': True
-         },
-    ]
-)
+#ParadigmDescription(
+#    'amplifier_calibration', 'Amplifier calibration', 'calibration', [
+#        {'manifest': PATH + 'amplifier_calibration.AmplifierCalibrationManifest'},
+#        {'manifest': CORE_PATH + 'signal_mixins.SignalFFTViewManifest',
+#         'required': True
+#         },
+#        {'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
+#         'required': True
+#         },
+#    ]
+#)

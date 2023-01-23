@@ -48,7 +48,7 @@ def connect_trigger(event):
 
     # If only one channel is active, we don't have any sync issues.
     if len(channels) == 1:
-        channels[0].start_trigger = None
+        channels[0].start_trigger = ''
         return
 
     if ao_channels:
