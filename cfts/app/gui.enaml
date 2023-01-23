@@ -1,0 +1,345 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+
+from atom.api import Atom, Bool, Dict, Enum, List, Str
+from enaml.core.api import Looper
+from enaml.layout.api import align, hbox, spacer, vbox
+from enaml.widgets.api import (
+    Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, GroupBox,
+    Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView, PushButton,
+    VGroup,
+)
+
+from psi import get_config, get_config_folder
+from psi.application import list_preferences
+from psi.experiment.api import paradigm_manager
+
+from cfts.paradigms import cfts
+
+
+DATA_ROOT = get_config('DATA_ROOT')
+
+
+class Experiment(Atom):
+
+    label = Str()
+    paradigm = Str()
+    preference = Str()
+    plugins = List(Str())
+
+
+class Settings(Atom):
+
+    logging_level = Enum('trace', 'debug', 'info', 'warning', 'error')('info')
+    animal = Str()
+    ear = Enum('left', 'right')
+    experimenter = Enum('Sean', 'Brad')
+    note = Str()
+
+    monitor_sequence = List(Experiment)
+    experiment_sequence = List(Experiment)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.load_defaults()
+
+    def run_experiment(self, experiment, save=True):
+        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
+        filename = ' '.join(filename.split())
+        args = ['psi', experiment.paradigm]
+        if save:
+            args.append(str(DATA_ROOT / filename))
+        args.extend([
+            '--preferences', experiment.preference,
+            '--debug-level-console', self.logging_level.upper(),
+        ])
+        for plugin in experiment.plugins:
+            args.extend(['--plugin', plugin])
+        print(' '.join(args))
+        subprocess.check_output(args)
+
+    def save_defaults(self):
+        info = {
+            'experimenter': self.experimenter,
+            'ear': self.ear,
+            'logging_level': self.logging_level,
+        }
+        info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
+        info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
+        path = get_config_folder() / 'cfts' / 'launcher.json'
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(info, indent=2))
+
+    def load_defaults(self):
+        path = get_config_folder() / 'cfts' / 'launcher.json'
+        if not path.exists():
+            return
+        info = json.loads(path.read_text())
+        info['experiment_sequence'] = [Experiment(**s) for s in info['experiment_sequence']]
+        info['monitor_sequence'] = [Experiment(**s) for s in info['monitor_sequence']]
+        for k, v in info.items():
+            setattr(self, k, v)
+
+
+enamldef MEMRBox(GroupBox):
+
+    title = 'MEMR assays'
+
+    ButtonGroup: memr_mode:
+        pass
+
+    ButtonGroup: memr_stim:
+        pass
+
+    constraints = [
+        vbox(
+            hbox(memr_mode_label, contra_mode, ipsi_mode),
+            hbox(memr_stim_label, chirp_stim, click_stim),
+            hbox(sim_memr_start, sim_memr_chirp_settings, sim_memr_click_settings),
+            hbox(int_memr_start, int_memr_chirp_settings, int_memr_click_settings),
+        ),
+        align('width', memr_mode_label, memr_stim_label, sim_memr_start, int_memr_start),
+        align('width', contra_mode, ipsi_mode, chirp_stim, click_stim,
+                sim_memr_chirp_settings, sim_memr_click_settings,
+                int_memr_chirp_settings, int_memr_click_settings),
+    ]
+
+    Label: memr_mode_label:
+        text = 'Configuration'
+
+    Label: memr_stim_label:
+        text = 'Probe stimulus'
+
+    PushButton: int_memr_start:
+        text = 'Run Interleaved'
+
+    ObjectCombo: int_memr_chirp_settings:
+        items << list_preferences('memr_interleaved_chirp')
+        to_string = lambda x: x.stem
+
+    ObjectCombo: int_memr_click_settings:
+        items << list_preferences('memr_interleaved_click')
+        to_string = lambda x: x.stem
+
+    PushButton: sim_memr_start:
+        text = 'Run Simultaneous'
+
+    ObjectCombo: sim_memr_chirp_settings:
+        items << list_preferences('memr_simultaneous_chirp')
+        to_string = lambda x: x.stem
+
+    ObjectCombo: sim_memr_click_settings:
+        items << list_preferences('memr_simultaneous_click')
+        to_string = lambda x: x.stem
+
+    PushButton: ipsi_mode:
+        text = 'Ipsilateral'
+        checkable = True
+        group = memr_mode
+        checked << settings.memr_mode == 'ipsi'
+        checked ::
+            settings.memr_mode = 'ipsi'
+
+    PushButton: contra_mode:
+        text = 'Contralateral'
+        checkable = True
+        group = memr_mode
+        checked << settings.memr_mode == 'contra'
+        checked ::
+            settings.memr_mode = 'contra'
+
+    PushButton: chirp_stim:
+        text = 'Chirp'
+        checkable = True
+        group = memr_stim
+        checked << settings.memr_probe == 'chirp'
+        checked ::
+            settings.memr_probe = 'chirp'
+
+    PushButton: click_stim:
+        text = 'Click'
+        checkable = True
+        group = memr_stim
+        checked << settings.memr_probe == 'click'
+        checked ::
+            settings.memr_probe = 'click'
+
+
+enamldef PluginPopup(PopupView): popup:
+    attr experiment
+    arrow_size = 20
+    VGroup:
+        Looper:
+            iterable << paradigm_manager.get_paradigm(experiment.paradigm).plugins
+            CheckBox:
+                checked << loop_item.name in experiment.plugins
+                checked ::
+                    if checked:
+                        if loop_item.name not in experiment.plugins:
+                            experiment.plugins.append(loop_item.name)
+                        else:
+                            experiment.plugins.pop(loop_item.name)
+                text << loop_item.title
+                visible << not loop_item.required
+
+
+enamldef ExperimentSequence(GroupBox): experiment_box:
+
+    title = 'Experiments'
+    attr start_enabled = True
+    attr save = True
+    attr sequence
+
+    layout_constraints => ():
+        start_buttons = children[:-1:3]
+        preferences = children[1:-1:3]
+        plugin_buttons = children[2:-1:3]
+        constraints = [
+            hbox(vbox(*start_buttons), vbox(*preferences), vbox(*plugin_buttons)),
+        ]
+        for sb, p, pb in zip(start_buttons, preferences, plugin_buttons):
+            constraints.append(align('v_center', sb, p, pb))
+        return constraints
+
+    Looper:
+        iterable << experiment_box.sequence
+
+        PushButton:
+            text = loop_item.label
+            enabled << experiment_box.start_enabled
+            clicked ::
+                settings.run_experiment(loop_item, save=experiment_box.save)
+
+        ObjectCombo:
+            items = [str(p) for p in list_preferences(loop_item.paradigm)]
+            selected := loop_item.preference
+            to_string = lambda x: Path(x).stem
+
+        PushButton:
+            constraints = [width == 30]
+            text = '⚙'
+            visible << len([p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins if not p.required]) > 0
+            clicked ::
+                paradigm = paradigm_manager.get_paradigm(loop_item.paradigm)
+                available_plugins = paradigm.plugins[:]
+                popup = PluginPopup(parent=self, experiment=loop_item)
+                popup.show()
+
+
+enamldef Main(MainWindow):
+
+    title = 'Cochlear Function Test Suite'
+
+    attr settings = Settings()
+
+    MenuBar:
+        Menu:
+            title = '&File'
+            Action:
+                text = 'Set defaults\tCtrl+D'
+                triggered ::
+                    settings.save_defaults()
+        Menu:
+            title = '&Debug'
+            ActionGroup:
+                Looper:
+                    iterable = settings.get_member('logging_level').items
+                    Action:
+                        checkable = True
+                        text = loop_item
+                        checked ::
+                            settings.logging_level = loop_item
+                        checked << settings.logging_level == loop_item
+
+    Container:
+
+        constraints = [
+            vbox(
+                monitor_box,
+                experiment_info,
+                experiment_box,
+            ),
+            # Align the widths of the first three elements in the
+            # experiment/monitor box. The first three elements represent the
+            # first "row" of widgets in each box. Once we align those, the rest
+            # fall into line.
+            align('width', monitor_box.children[0], experiment_box.children[0]),
+            align('width', monitor_box.children[1], experiment_box.children[1]),
+            align('width', monitor_box.children[2], experiment_box.children[2]),
+        ]
+
+        GroupBox: experiment_info:
+
+            title = 'Experiment Info'
+
+            constraints = [
+                vbox(
+                    hbox(experimenter_label, experimenter_field),
+                    hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
+                    hbox(note_label, note_field, pb),
+                ),
+                align('right', experimenter_label, animal_label, note_label),
+                align('left', experimenter_label, animal_label, note_label),
+                align('v_center', experimenter_label, experimenter_field),
+                align('v_center', animal_label, animal_field, l_button, r_button),
+                align('v_center', note_label, note_field, pb),
+                l_button.width == 30,
+                r_button.width == 30,
+                pb.width == 30
+            ]
+
+            ButtonGroup: ear_group:
+                pass
+
+            Label: animal_label:
+                text = 'Animal'
+
+            Field: animal_field:
+                text := settings.animal
+
+            PushButton: l_button:
+                text = 'L'
+                checkable = True
+                group = ear_group
+                checked << settings.ear == 'left'
+                checked ::
+                    settings.ear = 'left'
+
+            PushButton: r_button:
+                text = 'R'
+                checkable = True
+                group = ear_group
+                checked << settings.ear == 'right'
+                checked ::
+                    settings.ear = 'right'
+
+            Label: experimenter_label:
+                text = 'Experimenter'
+
+            ObjectCombo: experimenter_field:
+                items = ['Sean', 'Brad']
+                selected := settings.experimenter
+
+            Label: note_label:
+                text = 'Note'
+
+            Field: note_field:
+                text := settings.note
+
+            PushButton: pb:
+                text = '📂'
+                clicked ::
+                    os.startfile(DATA_ROOT)
+
+        ExperimentSequence: monitor_box:
+            share_layout = True
+            title = 'Experiment checks (not saved)'
+            sequence << settings.monitor_sequence
+            save = False
+
+        ExperimentSequence: experiment_box:
+            share_layout = True
+            start_enabled << bool(settings.animal)
+            sequence << settings.experiment_sequence
