@@ -87,7 +87,6 @@ efr_microphone_fft_mixin = {
 
 ParadigmDescription(
     'monitor', 'Monitor', 'ear', [
-        selectable_starship_mixin,
         temperature_mixin,
         eeg_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
