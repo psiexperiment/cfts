@@ -1,14 +1,16 @@
 from enaml.workbench.api import PluginManifest, Extension
+from enaml.workbench.core.api import Command
+
 import numpy as np
 
 from psi.controller.engines.nidaq import (NIDAQEngine,
                                           NIDAQHardwareAIChannel,
                                           NIDAQHardwareAOChannel,
                                           NIDAQHardwareAOChannel4461)
-from psi.controller.input import Transform
+from psi.controller.api import ExperimentAction, Transform
 from psiaudio.calibration import FlatCalibration
 
-from .util import load_epl_calibration
+from .util import connect_trigger, load_epl_calibration
 
 
 def mv_to_C(mv):
@@ -25,6 +27,23 @@ EPL_CAL_FILENAME = r'c:\Data\Probe Tube Calibrations\MMM0_ProbeTube.calib'
 
 
 enamldef IOManifest(PluginManifest): manifest:
+
+    Extension:
+        id = 'ornitorinco_commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = 'ornitorinco.connect_trigger'
+            handler = connect_trigger
+
+    Extension:
+        id = 'ornitorinco_actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            event = 'experiment_prepare'
+            command = 'ornitorinco.connect_trigger'
+            weight = 90
 
     Extension:
         id = 'backend'
