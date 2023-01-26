@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
 
-RAW_DIR = os.environ['RAW_DATA_DIR']
-PROC_DIR = os.environ['PROC_DATA_DIR']
+from psi import get_config
+DATA_ROOT = get_config('DATA_ROOT')
+PROCESSED_ROOT = get_config('PROCESSED_ROOT')
 
 
 def add_trial(df, grouping):
@@ -29,7 +30,7 @@ def cal_from_epl(name, base_path=None):
 
 class DatasetManager:
 
-    def __init__(self, path, raw_dir=RAW_DIR, proc_dir=PROC_DIR,
+    def __init__(self, path, raw_dir=DATA_ROOT, proc_dir=PROCESSED_ROOT,
                  file_template=None):
         '''
         Manages paths of processed files given the relative path between the

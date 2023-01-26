@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from psi import get_config
 from psiaudio.plot import waterfall_plot
 from cfts.io import abr
 
@@ -19,6 +20,7 @@ from .util import DatasetManager
 
 
 COLUMNS = ['frequency', 'level', 'polarity']
+DATA_ROOT = get_config('DATA_ROOT')
 
 
 def get_file_template(filename, offset, duration, filter_settings, n_epochs,
@@ -414,7 +416,7 @@ def main_file():
 
 def main_folder():
     parser = argparse.ArgumentParser('Filter and summarize ABR files in folder')
-    parser.add_argument('folder', type=str, help='Folder containing ABR data')
+    parser.add_argument('-f', '--folder', type=str, help='Folder containing ABR data', default=DATA_ROOT)
     parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
     args = parser.parse_args()
     process_folder(args.folder, filter_settings='saved',
