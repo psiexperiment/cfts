@@ -101,6 +101,17 @@ class DatasetManager:
                 return False
         return True
 
+    def save_fig(self, figure, suffix):
+        filename = self.get_proc_filename(suffix)
+        figure.savefig(filename, bbox_inches='tight')
+
+    def save_dataframe(self, df, suffix):
+        filename = self.get_proc_filename(suffix)
+        df.to_csv(filename)
+
+    def clear(self):
+        for filename in self.get_proc_path().iterdir():
+            filename.unlink()
 
 if __name__ == '__main__':
     filename = '/mnt/nutshell/work/OHSU/R01/data_raw/mouse/pilot/20221101-135109 Brad B009-2 right  memr_interleaved_chirp.md5'
