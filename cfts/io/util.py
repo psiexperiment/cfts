@@ -24,6 +24,23 @@ def get_cb(cb):
     return cb
 
 
+def process_files(folder, glob_pattern, fn, cb='tqdm', reprocess=False,
+                  halt_on_error=True):
+    success = []
+    errors = []
+    for filename in Path(folder).glob(glob_pattern):
+        if filename.suffix == '.md5':
+            continue
+        try:
+            fn(filename, cb=get_cb(cb), reprocess=reprocess)
+            success.append(filename)
+        except Exception as e:
+            if halt_on_error:
+                raise
+            errors.append((filename, e))
+    print(f'Successfully processed {len(success)} files with {len(errors)} errors')
+
+
 def add_trial(df, grouping):
     def _add_trial(df):
         df['trial'] = range(len(df))
