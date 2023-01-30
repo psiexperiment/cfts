@@ -16,7 +16,7 @@ from psi import get_config
 from psiaudio.plot import waterfall_plot
 from cfts.io import abr
 
-from .util import DatasetManager
+from .util import DatasetManager, get_cb
 
 
 COLUMNS = ['frequency', 'level', 'polarity']
@@ -162,23 +162,6 @@ def plot_waveforms_cb(epochs_mean, filename, name):
     figure.suptitle(name)
     figure.savefig(filename)
 
-
-def get_cb(cb):
-    # Define the callback as a no-op if not provided or sets up tqdm if requested.
-    if cb is None:
-        cb = lambda x: x
-    elif cb == 'tqdm':
-        from tqdm import tqdm
-        pbar = tqdm(total=100, bar_format='{l_bar}{bar}[{elapsed}<{remaining}]')
-        def cb(frac):
-            nonlocal pbar
-            frac *= 100
-            pbar.update(frac - pbar.n)
-            if frac == 100:
-                pbar.close()
-    else:
-        raise ValueError(f'Unsupported callback: {cb}')
-    return cb
 
 
 def process_file(filename, offset=-1e-3, duration=10e-3,

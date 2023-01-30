@@ -6,6 +6,24 @@ DATA_ROOT = get_config('DATA_ROOT')
 PROCESSED_ROOT = get_config('PROCESSED_ROOT')
 
 
+def get_cb(cb):
+    # Define the callback as a no-op if not provided or sets up tqdm if requested.
+    if cb is None:
+        cb = lambda x: x
+    elif cb == 'tqdm':
+        from tqdm import tqdm
+        pbar = tqdm(total=100, bar_format='{l_bar}{bar}[{elapsed}<{remaining}]')
+        def cb(frac):
+            nonlocal pbar
+            frac *= 100
+            pbar.update(frac - pbar.n)
+            if frac == 100:
+                pbar.close()
+    else:
+        raise ValueError(f'Unsupported callback: {cb}')
+    return cb
+
+
 def add_trial(df, grouping):
     def _add_trial(df):
         df['trial'] = range(len(df))
