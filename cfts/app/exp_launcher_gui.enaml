@@ -20,6 +20,7 @@ from cfts.paradigms import cfts
 
 
 DATA_ROOT = get_config('DATA_ROOT')
+PROC_ROOT = get_config('PROCESSED_ROOT')
 
 
 class Experiment(Atom):
@@ -278,16 +279,19 @@ enamldef Main(MainWindow):
                 vbox(
                     hbox(experimenter_label, experimenter_field),
                     hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
-                    hbox(note_label, note_field, pb),
+                    hbox(note_label, note_field),
+                    hbox(spacer(0), pb_raw, pb_proc),
                 ),
                 align('right', experimenter_label, animal_label, note_label),
                 align('left', experimenter_label, animal_label, note_label),
                 align('v_center', experimenter_label, experimenter_field),
                 align('v_center', animal_label, animal_field, l_button, r_button),
-                align('v_center', note_label, note_field, pb),
+                align('v_center', note_label, note_field),
+                align('v_center', pb_raw, pb_proc),
                 l_button.width == 30,
                 r_button.width == 30,
-                pb.width == 30
+                pb_raw.width == 90,
+                pb_proc.width == 90,
             ]
 
             ButtonGroup: ear_group:
@@ -328,10 +332,15 @@ enamldef Main(MainWindow):
             Field: note_field:
                 text := settings.note
 
-            PushButton: pb:
-                text = '📂'
+            PushButton: pb_raw:
+                text = '📂 (Raw)'
                 clicked ::
                     os.startfile(DATA_ROOT)
+
+            PushButton: pb_proc:
+                text = '📂 (Processed)'
+                clicked ::
+                    os.startfile(PROC_ROOT)
 
         ExperimentSequence: monitor_box:
             share_layout = True
