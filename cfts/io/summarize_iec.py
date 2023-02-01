@@ -23,9 +23,9 @@ class IEC(Recording):
                                  duration+extra_duration, cb=cb)
 
 
-def summarize_iec(filename, cb, reprocess=False):
+def process_file(filename, cb, reprocess=False):
     manager = DatasetManager(filename)
-    if not reprocess and manager.is_processed('chirp normalized SPL.pdf'):
+    if not reprocess and manager.is_processed('psd.csv'):
         return
     manager.clear()
 
@@ -149,10 +149,6 @@ def summarize_iec(filename, cb, reprocess=False):
     manager.save_dataframe(psd, 'psd.csv')
 
 
-def process_folder(folder, reprocess=False):
-    process_files(files, cb='tqdm', reprocess=reprocess)
-
-
 def main_folder():
     import argparse
     parser = argparse.ArgumentParser('Summarize IEC files in folder')
@@ -160,10 +156,4 @@ def main_folder():
     parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
     args = parser.parse_args()
     process_files(args.folder, '**/*inear_speaker_calibration_chirp*',
-                  summarize_iec, reprocess=args.reprocess)
-
-
-if __name__ == '__main__':
-    filename = r'C:\Users\mmm\projects\psi1\data\data\20230123-112200 Sean B008-1 left test inear_speaker_calibration_chirp'
-    summarize_iec(filename)
-
+                  process_file, reprocess=args.reprocess)

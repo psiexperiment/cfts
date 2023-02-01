@@ -16,7 +16,7 @@ from psi import get_config
 from psiaudio.plot import waterfall_plot
 from cfts.io import abr
 
-from .util import DatasetManager, get_cb
+from .util import DatasetManager, get_cb, process_files
 
 
 COLUMNS = ['frequency', 'level', 'polarity']
@@ -124,32 +124,6 @@ def add_trial(epochs):
     return epochs.groupby(levels, group_keys=False).apply(number_trials)
 
 
-def process_folder(folder, filter_settings=None, reprocess=False):
-    folder = Path(folder)
-    files = list(folder.glob('**/*abr_io')) + list(folder.glob('**/*abr_io.zip'))
-    process_files(files, filter_settings=filter_settings, cb='tqdm',
-                  reprocess=reprocess)
-
-
-def process_files(filenames, offset=-0.001, duration=0.01,
-                  filter_settings=None, cb='tqdm', reprocess=False):
-    success = []
-    errors = []
-    for filename in filenames:
-        try:
-            processed = process_file(filename, offset=offset,
-                                     duration=duration,
-                                     filter_settings=filter_settings, cb=cb,
-                                     reprocess=reprocess)
-            success.append(filename)
-        except Exception as e:
-            raise
-            errors.append((filename, e))
-    print(f'Successfully processed {len(success)} files with {len(errors)} errors')
-    for f, e in errors:
-        print(f'Error processing {f} =>\n\t{e}')
-
-
 def plot_waveforms_cb(epochs_mean, filename, name):
     epochs_mean = epochs_mean.reset_index(['epoch_n', 'epoch_reject_ratio'], drop=True)
     grouped = epochs_mean.groupby('frequency')
@@ -161,7 +135,6 @@ def plot_waveforms_cb(epochs_mean, filename, name):
         ax.set_title(f'{frequency * 1e-3:0.2f} Hz')
     figure.suptitle(name)
     figure.savefig(filename)
-
 
 
 def process_file(filename, offset=-1e-3, duration=10e-3,
@@ -402,8 +375,9 @@ def main_folder():
     parser.add_argument('-f', '--folder', type=str, help='Folder containing ABR data', default=DATA_ROOT)
     parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
     args = parser.parse_args()
-    process_folder(args.folder, filter_settings='saved',
-                   reprocess=args.reprocess)
+    process_files(args.folder, '**/*abr_io*', process_file,
+                  inearfilter_settings='saved', offset=-0.001, duration=0.01,
+                  reprocess=args.reprocess)
 
 
 def main_gui():

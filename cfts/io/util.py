@@ -112,8 +112,3 @@ class DatasetManager:
     def clear(self):
         for filename in self.get_proc_path().iterdir():
             filename.unlink()
-
-if __name__ == '__main__':
-    filename = '/mnt/nutshell/work/OHSU/R01/data_raw/mouse/pilot/20221101-135109 Brad B009-2 right  memr_interleaved_chirp.md5'
-    manager = DatasetManager(filename)
-    print(manager.get_proc_filename('foo.pdf'))
