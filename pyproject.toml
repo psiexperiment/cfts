@@ -31,6 +31,7 @@ cfts-zip-data = "cfts.io.postprocess:zip_data"
 summarize-abr-file = "cfts.io.summarize_abr:main_file"
 summarize-abr-folder = "cfts.io.summarize_abr:main_folder"
 summarize-iec-folder = "cfts.io.summarize_iec:main_folder"
+summarize-dpoae-folder = "cfts.io.summarize_dpoae:main_folder"
 
 [build-system]
 requires = ["setuptools>=61.2", "wheel", "setuptools_scm[toml]>=3.4.3"]

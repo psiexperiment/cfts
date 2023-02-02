@@ -24,6 +24,11 @@ def get_cb(cb):
     return cb
 
 
+def add_default_options(parser):
+    parser.add_argument('-f', '--folder', type=str, help='Folder containing data', default=DATA_ROOT)
+    parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
+
+
 def process_files(folder, glob_pattern, fn, cb='tqdm', reprocess=False,
                   halt_on_error=True):
     success = []

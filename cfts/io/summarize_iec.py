@@ -8,7 +8,7 @@ from psiaudio.stim import chirp
 
 from psi.data.io.api import Recording
 
-from .util import DATA_ROOT, DatasetManager, process_files
+from .util import add_default_options, DatasetManager, process_files
 
 
 class IEC(Recording):
@@ -151,9 +151,8 @@ def process_file(filename, cb, reprocess=False):
 
 def main_folder():
     import argparse
-    parser = argparse.ArgumentParser('Summarize IEC files in folder')
-    parser.add_argument('-f', '--folder', type=str, help='Folder containing IEC data', default=DATA_ROOT)
-    parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
+    parser = argparse.ArgumentParser('Summarize IEC data in folder')
+    add_default_options(parser)
     args = parser.parse_args()
     process_files(args.folder, '**/*inear_speaker_calibration_chirp*',
                   process_file, reprocess=args.reprocess)
