@@ -1,4 +1,8 @@
-from enaml.layout.api import hbox, spacer, vbox
+import subprocess
+
+from atom.api import Atom, Enum
+
+from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.widgets.api import (
     Container, Label, Form, MainWindow, ObjectCombo, PushButton
 )
@@ -7,6 +11,21 @@ from enaml.widgets.api import (
 class Settings(Atom):
 
     starship = Enum('MMM0', 'MMM1', 'MMM2', 'MMM3')
+    cal_mic = Enum('GRAS 40DP')
+
+    def run_mic_cal(self, save=True):
+        filename = f'{{date_time}} {self.cal_mic}'
+        filename = ' '.join(filename.split())
+        args = ['psi', 'pistonphone_calibration', filename]
+        print(' '.join(args))
+        subprocess.check_output(args)
+
+    def run_pt_cal(self, save=True):
+        filename = f'{{date_time}} {self.starship} {self.cal_mic}'
+        filename = ' '.join(filename.split())
+        args = ['psi', 'pt_calibration_golay', filename]
+        print(' '.join(args))
+        subprocess.check_output(args)
 
 
 
@@ -18,20 +37,38 @@ enamldef Main(MainWindow):
 
         constraints = [
             vbox(
+                hbox(mic_label, mic_select, mic_cal_start),
                 hbox(starship_label, starship_select),
                 hbox(spacer(0), golay_start, chirp_start),
             ),
+            align('v_center', mic_label, mic_select, mic_cal_start),
+            align('v_center', starship_label, starship_select),
+            align('v_center', golay_start, chirp_start),
         ]
+
+        Label: mic_label:
+            text = 'Microphone'
+
+        ObjectCombo: mic_select:
+            items = ['GRAS 40DP']
+            selected := settings.cal_mic
+
+        PushButton: mic_cal_start:
+            text = 'Calibrate mic'
+            clicked ::
+                settings.run_mic_cal()
 
         Label: starship_label:
             text = 'Starship'
 
         ObjectCombo: starship_select:
             items = ['MMM0', 'MMM1', 'MMM2', 'MMM3']
-            selectd := settings.starship
+            selected := settings.starship
 
-        PushButton: golay_start:S
+        PushButton: golay_start:
             text = 'Run Golay'
+            clicked ::
+                settings.run_pt_cal()
 
         PushButton: chirp_start:
             text = 'Run Chirp'

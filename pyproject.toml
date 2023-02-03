@@ -27,6 +27,7 @@ dev = ["coloredlogs"]
 
 [project.scripts]
 cfts = "cfts.app.main:cfts"
+cfts-cal = "cfts.app.main:cfts_calibration"
 cfts-zip-data = "cfts.io.postprocess:zip_data"
 summarize-abr-file = "cfts.io.summarize_abr:main_file"
 summarize-abr-folder = "cfts.io.summarize_abr:main_folder"

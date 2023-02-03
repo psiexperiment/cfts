@@ -18,7 +18,6 @@ ParadigmDescription(
     'pt_calibration_golay', 'Probe tube calibration (golay)', 'calibration', [
         {'manifest': PATH + 'pt_calibration.BasePTCalibrationManifest',},
         {'manifest': PATH + 'pt_calibration.PTGolayMixin',},
-        {'manifest': PATH + 'calibration_mixins.ToneValidateMixin',},
     ],
 )
 
