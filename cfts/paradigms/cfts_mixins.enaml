@@ -1,11 +1,14 @@
 import logging
 log = logging.getLogger(__name__)
 
+import functools
 import itertools
+import os
 
 from enaml.core.api import Conditional
 from enaml.widgets.api import Label
 from enaml.workbench.api import Extension
+from enaml.workbench.core.api import Command
 import numpy as np
 
 from psiaudio.util import octave_space
@@ -14,7 +17,7 @@ from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, FriendlyCartesianProduct,
                              Parameter)
 from psi.controller.api import (Callback, ContinuousInput, DecimateTo, Downsample,
-                                get_hw_ai_choices, get_hw_ao_choices,
+                                ExperimentAction, get_hw_ai_choices, get_hw_ao_choices,
                                 IIRFilter, MUXOutput)
 from psi.controller.calibration.api import ChirpCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
@@ -403,6 +406,20 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             gain << C.calibration_gain
 
 
+def initialize_starship(name, event):
+    context = event.workbench.get_plugin('psi.context')
+
+    starship = os.environ[f'CFTS_{name.upper()}_STARSHIP']
+    item_starship = context.get_item(f'{name}')
+    item_starship.set_value(starship)
+    item_starship.editable = False
+
+    gain = os.environ[f'CFTS_STARSHIP_{starship.upper()}_GAIN']
+    item_gain = context.get_item(f'{name}_input_gain')
+    item_gain.set_value(gain)
+    item_gain.editable = False
+
+
 enamldef Starship(ExperimentManifest): manifest:
     '''
     Defines a starship that consists of one probe tube microphone and two
@@ -420,6 +437,22 @@ enamldef Starship(ExperimentManifest): manifest:
     id = 'starship'
     title = manifest.id.capitalize().replace('_', ' ')
     attr output_mode = 'dual'
+
+    Extension:
+        id = manifest.id + '.commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = manifest.id + '.initialize_starship_settings'
+            handler = functools.partial(initialize_starship, manifest.name)
+
+    Extension:
+        id = manifest.id + '.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            event = 'plugins_started'
+            command = manifest.id + '.initialize_starship_settings'
 
     Extension:
         id = manifest.id + '.io'

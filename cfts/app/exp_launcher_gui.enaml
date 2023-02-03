@@ -6,6 +6,7 @@ import subprocess
 from atom.api import Atom, Bool, Dict, Enum, List, Str
 from enaml.core.api import Looper
 from enaml.layout.api import align, hbox, spacer, vbox
+from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
     Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, GroupBox,
     Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView, PushButton,
@@ -50,6 +51,17 @@ class Settings(Atom):
         self.load_defaults()
 
     def run_experiment(self, experiment, save=True):
+        starship_to_use = set()
+        env = {}
+        for k, v in self.starship_config.items():
+            env[f'CFTS_STARSHIP_{k.upper()}'] = v['calibration']
+            env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
+            if v['ear'] in (self.ear, 'either'):
+                starship_to_use.add(k)
+        if len(starship_to_use) != 1:
+            raise ValueError('Starships incorrectly configured')
+        env['CFTS_SYSTEM_STARSHIP'] = next(iter(starship_to_use))
+
         filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
         filename = ' '.join(filename.split())
         args = ['psi', experiment.paradigm]
@@ -62,8 +74,6 @@ class Settings(Atom):
         for plugin in experiment.plugins:
             args.extend(['--plugin', plugin])
         print(' '.join(args))
-
-        env = {f'CFTS_STARSHIP_{k}': v for k, v in self.starship_config.items()}
         subprocess.check_output(args, env=dict(os.environ, **env))
 
     def save_defaults(self):
@@ -93,94 +103,19 @@ class Settings(Atom):
         starships = list_starship_connections()
         for starship in starships:
             if starship not in self.starship_config:
-                self.starship_config[starship] = None
+                self.starship_config[starship] = {
+                    'ear': 'not used',
+                    'calibration': None,
+                    'gain': 40,
+                }
         for starship in list(self.starship_config.keys()):
             if starship not in starships:
                 self.starship_config.pop(starship)
-
-
-enamldef MEMRBox(GroupBox):
-
-    title = 'MEMR assays'
-
-    ButtonGroup: memr_mode:
-        pass
-
-    ButtonGroup: memr_stim:
-        pass
-
-    constraints = [
-        vbox(
-            hbox(memr_mode_label, contra_mode, ipsi_mode),
-            hbox(memr_stim_label, chirp_stim, click_stim),
-            hbox(sim_memr_start, sim_memr_chirp_settings, sim_memr_click_settings),
-            hbox(int_memr_start, int_memr_chirp_settings, int_memr_click_settings),
-        ),
-        align('width', memr_mode_label, memr_stim_label, sim_memr_start, int_memr_start),
-        align('width', contra_mode, ipsi_mode, chirp_stim, click_stim,
-                sim_memr_chirp_settings, sim_memr_click_settings,
-                int_memr_chirp_settings, int_memr_click_settings),
-    ]
-
-    Label: memr_mode_label:
-        text = 'Configuration'
-
-    Label: memr_stim_label:
-        text = 'Probe stimulus'
-
-    PushButton: int_memr_start:
-        text = 'Run Interleaved'
-
-    ObjectCombo: int_memr_chirp_settings:
-        items << list_preferences('memr_interleaved_chirp')
-        to_string = lambda x: x.stem
-
-    ObjectCombo: int_memr_click_settings:
-        items << list_preferences('memr_interleaved_click')
-        to_string = lambda x: x.stem
-
-    PushButton: sim_memr_start:
-        text = 'Run Simultaneous'
-
-    ObjectCombo: sim_memr_chirp_settings:
-        items << list_preferences('memr_simultaneous_chirp')
-        to_string = lambda x: x.stem
-
-    ObjectCombo: sim_memr_click_settings:
-        items << list_preferences('memr_simultaneous_click')
-        to_string = lambda x: x.stem
-
-    PushButton: ipsi_mode:
-        text = 'Ipsilateral'
-        checkable = True
-        group = memr_mode
-        checked << settings.memr_mode == 'ipsi'
-        checked ::
-            settings.memr_mode = 'ipsi'
-
-    PushButton: contra_mode:
-        text = 'Contralateral'
-        checkable = True
-        group = memr_mode
-        checked << settings.memr_mode == 'contra'
-        checked ::
-            settings.memr_mode = 'contra'
-
-    PushButton: chirp_stim:
-        text = 'Chirp'
-        checkable = True
-        group = memr_stim
-        checked << settings.memr_probe == 'chirp'
-        checked ::
-            settings.memr_probe = 'chirp'
-
-    PushButton: click_stim:
-        text = 'Click'
-        checkable = True
-        group = memr_stim
-        checked << settings.memr_probe == 'click'
-        checked ::
-            settings.memr_probe = 'click'
+            else:
+                s = self.starship_config[starship]
+                s.setdefault('gain', 40)
+                s.setdefault('calibration', None)
+                s.setdefault('ear', 'not used')
 
 
 enamldef PluginPopup(PopupView): popup:
@@ -203,7 +138,7 @@ enamldef PluginPopup(PopupView): popup:
 
 enamldef ExperimentSequence(GroupBox): experiment_box:
 
-    title = 'Experiments'
+    title = 'Experiments (monaural)'
     attr start_enabled = True
     attr save = True
     attr sequence
@@ -226,7 +161,10 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
             text = loop_item.label
             enabled << experiment_box.start_enabled
             clicked ::
-                settings.run_experiment(loop_item, save=experiment_box.save)
+                try:
+                    settings.run_experiment(loop_item, save=experiment_box.save)
+                except Exception as e:
+                    critical(experiment_box, 'Error starting experiment', str(e))
 
         ObjectCombo:
             items = [str(p) for p in list_preferences(loop_item.paradigm)]
@@ -242,6 +180,77 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
                 available_plugins = paradigm.plugins[:]
                 popup = PluginPopup(parent=self, experiment=loop_item)
                 popup.show()
+
+
+enamldef ExperimentInfo(GroupBox):
+    title = 'Experiment Info'
+
+    constraints = [
+        vbox(
+            hbox(experimenter_label, experimenter_field),
+            hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
+            hbox(note_label, note_field),
+            hbox(spacer(0), pb_raw, pb_proc),
+        ),
+        align('right', experimenter_label, animal_label, note_label),
+        align('left', experimenter_label, animal_label, note_label),
+        align('v_center', experimenter_label, experimenter_field),
+        align('v_center', animal_label, animal_field, l_button, r_button),
+        align('v_center', note_label, note_field),
+        align('v_center', pb_raw, pb_proc),
+        l_button.width == 30,
+        r_button.width == 30,
+        pb_raw.width == 90,
+        pb_proc.width == 90,
+    ]
+
+    ButtonGroup: ear_group:
+        pass
+
+    Label: animal_label:
+        text = 'Animal'
+
+    Field: animal_field:
+        text := settings.animal
+
+    PushButton: l_button:
+        text = 'L'
+        checkable = True
+        group = ear_group
+        checked << settings.ear == 'left'
+        checked ::
+            settings.ear = 'left'
+
+    PushButton: r_button:
+        text = 'R'
+        checkable = True
+        group = ear_group
+        checked << settings.ear == 'right'
+        checked ::
+            settings.ear = 'right'
+
+    Label: experimenter_label:
+        text = 'Experimenter'
+
+    ObjectCombo: experimenter_field:
+        items = ['Sean', 'Brad']
+        selected := settings.experimenter
+
+    Label: note_label:
+        text = 'Note'
+
+    Field: note_field:
+        text := settings.note
+
+    PushButton: pb_raw:
+        text = '📂 (Raw)'
+        clicked ::
+            os.startfile(DATA_ROOT)
+
+    PushButton: pb_proc:
+        text = '📂 (Processed)'
+        clicked ::
+            os.startfile(PROC_ROOT)
 
 
 enamldef Main(MainWindow):
@@ -288,96 +297,59 @@ enamldef Main(MainWindow):
         ]
 
         GroupBox: equipment_info:
-
             title = 'Equipment Configuration'
 
             layout_constraints => ():
-                labels = children[:-1:2]
-                combos = children[1:-1:2]
+                header = children[:3]
+                widgets = children[3:-1]
+                zipped = list(zip(
+                    widgets[0::4],   # labels
+                    widgets[1::4],   # ear select
+                    widgets[2::4],   # starship select
+                    widgets[3::4],   # gain select
+                ))
                 constraints = [
-                    vbox(*[hbox(l, c) for l, c in zip(labels, combos)])
+                    vbox(
+                        hbox(*header),
+                        *[hbox(*r) for r in zipped])
                 ]
+                constraints.extend([align('v_center', *r) for r in zipped])
+                constraints.extend([
+                    align('left', header[0], *widgets[1::4]),
+                    align('left', header[1], *widgets[2::4]),
+                    align('left', header[2], *widgets[3::4]),
+                ])
                 return constraints
+
+            Label:
+                text = 'Ear'
+            Label:
+                text = 'Calibration'
+            Label:
+                text = 'Gain'
 
             Looper:
                 iterable << settings.starship_config.keys()
                 Label:
                     text = f'Starship {loop_item}'
                 ObjectCombo:
-                    items << list(list_starship_calibrations().keys())
-                    selected << settings.starship_config.get(loop_item, items[0])
+                    items = ['either', 'left', 'right', 'not used']
+                    selected << settings.starship_config[loop_item]['ear']
                     selected ::
-                        settings.starship_config[loop_item] = selected
+                        settings.starship_config[loop_item]['ear'] = selected
+                ObjectCombo:
+                    items << list(list_starship_calibrations().keys())
+                    selected << settings.starship_config[loop_item]['calibration']
+                    selected ::
+                        settings.starship_config[loop_item]['calibration'] = selected
+                ObjectCombo:
+                    items = [20, 40]
+                    selected << settings.starship_config[loop_item]['gain']
+                    selected ::
+                        settings.starship_config[loop_item]['gain'] = selected
 
-        GroupBox: experiment_info:
-            title = 'Experiment Info'
-
-            constraints = [
-                vbox(
-                    hbox(experimenter_label, experimenter_field),
-                    hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
-                    hbox(note_label, note_field),
-                    hbox(spacer(0), pb_raw, pb_proc),
-                ),
-                align('right', experimenter_label, animal_label, note_label),
-                align('left', experimenter_label, animal_label, note_label),
-                align('v_center', experimenter_label, experimenter_field),
-                align('v_center', animal_label, animal_field, l_button, r_button),
-                align('v_center', note_label, note_field),
-                align('v_center', pb_raw, pb_proc),
-                l_button.width == 30,
-                r_button.width == 30,
-                pb_raw.width == 90,
-                pb_proc.width == 90,
-            ]
-
-            ButtonGroup: ear_group:
-                pass
-
-            Label: animal_label:
-                text = 'Animal'
-
-            Field: animal_field:
-                text := settings.animal
-
-            PushButton: l_button:
-                text = 'L'
-                checkable = True
-                group = ear_group
-                checked << settings.ear == 'left'
-                checked ::
-                    settings.ear = 'left'
-
-            PushButton: r_button:
-                text = 'R'
-                checkable = True
-                group = ear_group
-                checked << settings.ear == 'right'
-                checked ::
-                    settings.ear = 'right'
-
-            Label: experimenter_label:
-                text = 'Experimenter'
-
-            ObjectCombo: experimenter_field:
-                items = ['Sean', 'Brad']
-                selected := settings.experimenter
-
-            Label: note_label:
-                text = 'Note'
-
-            Field: note_field:
-                text := settings.note
-
-            PushButton: pb_raw:
-                text = '📂 (Raw)'
-                clicked ::
-                    os.startfile(DATA_ROOT)
-
-            PushButton: pb_proc:
-                text = '📂 (Processed)'
-                clicked ::
-                    os.startfile(PROC_ROOT)
+        ExperimentInfo: experiment_info:
+            pass
 
         ExperimentSequence: monitor_box:
             share_layout = True
