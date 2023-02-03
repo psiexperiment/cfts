@@ -16,6 +16,7 @@ from psi import get_config, get_config_folder
 from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
 
+from cfts.util import list_starship_calibrations, list_starship_connections
 from cfts.paradigms import cfts
 
 
@@ -42,6 +43,8 @@ class Settings(Atom):
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
 
+    starship_config = Dict()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.load_defaults()
@@ -59,13 +62,16 @@ class Settings(Atom):
         for plugin in experiment.plugins:
             args.extend(['--plugin', plugin])
         print(' '.join(args))
-        subprocess.check_output(args)
+
+        env = {f'CFTS_STARSHIP_{k}': v for k, v in self.starship_config.items()}
+        subprocess.check_output(args, env=dict(os.environ, **env))
 
     def save_defaults(self):
         info = {
             'experimenter': self.experimenter,
             'ear': self.ear,
             'logging_level': self.logging_level,
+            'starship_config': self.starship_config,
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
@@ -82,6 +88,15 @@ class Settings(Atom):
         info['monitor_sequence'] = [Experiment(**s) for s in info['monitor_sequence']]
         for k, v in info.items():
             setattr(self, k, v)
+
+        # Update the starship config list to reflect current starship connections
+        starships = list_starship_connections()
+        for starship in starships:
+            if starship not in self.starship_config:
+                self.starship_config[starship] = None
+        for starship in list(self.starship_config.keys()):
+            if starship not in starships:
+                self.starship_config.pop(starship)
 
 
 enamldef MEMRBox(GroupBox):
@@ -258,6 +273,7 @@ enamldef Main(MainWindow):
 
         constraints = [
             vbox(
+                equipment_info,
                 monitor_box,
                 experiment_info,
                 experiment_box,
@@ -271,8 +287,29 @@ enamldef Main(MainWindow):
             align('width', monitor_box.children[2], experiment_box.children[2]),
         ]
 
-        GroupBox: experiment_info:
+        GroupBox: equipment_info:
 
+            title = 'Equipment Configuration'
+
+            layout_constraints => ():
+                labels = children[:-1:2]
+                combos = children[1:-1:2]
+                constraints = [
+                    vbox(*[hbox(l, c) for l, c in zip(labels, combos)])
+                ]
+                return constraints
+
+            Looper:
+                iterable << settings.starship_config.keys()
+                Label:
+                    text = f'Starship {loop_item}'
+                ObjectCombo:
+                    items << list(list_starship_calibrations().keys())
+                    selected << settings.starship_config.get(loop_item, items[0])
+                    selected ::
+                        settings.starship_config[loop_item] = selected
+
+        GroupBox: experiment_info:
             title = 'Experiment Info'
 
             constraints = [

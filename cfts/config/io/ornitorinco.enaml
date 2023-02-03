@@ -10,7 +10,7 @@ from psi.controller.engines.nidaq import (NIDAQEngine,
 from psi.controller.api import ExperimentAction, Transform
 from psiaudio.calibration import FlatCalibration
 
-from .util import connect_trigger, load_epl_calibration
+from .util import connect_trigger, load_cal
 
 
 def mv_to_C(mv):
@@ -21,9 +21,6 @@ def mv_to_C(mv):
 
 
 START_TRIGGER = '/PXI1Slot6/ao/StartTrigger'
-
-
-EPL_CAL_FILENAME = r'c:\Data\Probe Tube Calibrations\MMM0_ProbeTube.calib'
 
 
 enamldef IOManifest(PluginManifest): manifest:
@@ -116,6 +113,56 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
 
             NIDAQHardwareAIChannel:
+                label = 'Starship A (microphone)'
+                name = 'starship_A_microphone'
+                channel = 'PXI1Slot6/ai1'
+                start_trigger = START_TRIGGER
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'AC'
+                gain = 40
+                calibration = load_cal('CFTS_STARSHIP_A')
+
+            NIDAQHardwareAOChannel4461:
+                label = 'Starship B (primary)'
+                name = 'starship_B_primary'
+                channel = 'PXI1Slot8/ao0'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-1, 1)
+                max_range = (-1, 1)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+
+            NIDAQHardwareAOChannel4461:
+                label = 'Starship B (secondary)'
+                name = 'starship_B_secondary'
+                channel = 'PXI1Slot8/ao1'
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-1, 1)
+                max_range = (-1, 1)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+
+            NIDAQHardwareAIChannel:
+                label = 'Starship B (microphone)'
+                name = 'starship_B_microphone'
+                channel = 'PXI1Slot8/ai1'
+                start_trigger = START_TRIGGER
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'AC'
+                gain = 40
+                calibration = load_cal('CFTS_STARSHIP_B')
+
+            NIDAQHardwareAIChannel:
                 label = 'Calibration microphone'
                 name = 'reference_microphone_channel'
                 channel = 'PXI1Slot6/ai0'
@@ -129,17 +176,3 @@ enamldef IOManifest(PluginManifest): manifest:
                 gain = 40
                 calibration_user_editable = True
                 calibration = FlatCalibration.from_mv_pa(1)
-
-            NIDAQHardwareAIChannel:
-                label = 'Starship A (microphone)'
-                name = 'starship_A_microphone'
-                channel = 'PXI1Slot6/ai1'
-                start_trigger = START_TRIGGER
-                fs = 100e3
-                reference_clock = 'PXI_Clk10'
-                expected_range = (-10, 10)
-                dtype = 'float64'
-                terminal_mode = 'pseudodifferential'
-                terminal_coupling = 'AC'
-                gain = 40
-                calibration = load_epl_calibration(EPL_CAL_FILENAME)

@@ -25,6 +25,9 @@ from psi.paradigms.core.io_mixins import ChannelInput, ChannelInputManifest, \
     QueuedEpochChannelOutput
 
 
+from cfts.util import list_starship_connections
+
+
 ################################################################################
 # Utility function
 ################################################################################
@@ -400,41 +403,6 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             gain << C.calibration_gain
 
 
-NO_STARSHIP_ERROR = '''
-No starship could be found in the IO manifest. To use this plugin, you must
-have an analog input channel named starship_ID_microphone and two analog output
-channels named starship_ID_primary and starship_ID_secondary. ID is the name of
-the starship that will appear in any drop-down selectors where you can select
-which starship to use (assuming your system is configured for more than one
-starship).
-'''
-
-
-def list_starships(workbench):
-    ai = get_hw_ai_choices(workbench)
-    ao = get_hw_ao_choices(workbench)
-
-    starships = {}
-    for channel in itertools.chain(ai.values(), ao.values()):
-        # Strip quotation marks off 
-        _, channel = channel[1:-1].split('::')
-        if channel.startswith('starship'):
-            _, starship_id, starship_output = channel.split('_')
-            starships.setdefault(starship_id, []).append(starship_output)
-
-    choices = {}
-    for name, channels in starships.items():
-        for c in ('microphone', 'primary', 'secondary'):
-            if c not in channels:
-                raise ValueError(f'Must define starship_{name}_{c} channel')
-        choices[name] = f'"starship_{name}"'
-
-    if len(choices) == 0:
-        raise ValueError(NO_STARSHIP_ERROR)
-
-    return choices
-
-
 enamldef Starship(ExperimentManifest): manifest:
     '''
     Defines a starship that consists of one probe tube microphone and two
@@ -497,7 +465,7 @@ enamldef Starship(ExperimentManifest): manifest:
             EnumParameter: starship:
                 name = f'{manifest.name}'
                 label = f'{manifest.title}'
-                choices = list_starships(workbench)
+                choices = {k: f'"{v}"' for k, v in list_starship_connections().items()}
                 scope = 'experiment'
 
             Parameter: gain:

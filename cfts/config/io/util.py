@@ -1,6 +1,7 @@
 import logging
 log = logging.getLogger(__name__)
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -8,13 +9,26 @@ import pandas as pd
 from psiaudio.calibration import InterpCalibration
 
 
-def load_epl_calibration(filename):
+def load_epl_cal(name):
+    path = Path(r'c:\Data\Probe Tube Calibrations')
+    filename = path / f'{name}_ProbeTube.calib'
+    return load_epl_calfile(filename)
+
+
+def load_epl_calfile(filename):
     with Path(filename).open('r') as fh:
         for line in fh:
             if line.startswith('Freq(Hz)'):
                 break
         cal = pd.read_csv(fh, sep='\t', header=None)
         return InterpCalibration.from_spl(cal[0], cal[1])
+
+
+def load_cal(env_variable):
+    starship_name = os.environ[env_variable]
+    starship, platform = starship_name.rsplit(' ', 1)
+    if platform == '(EPL)':
+        return load_epl_cal(starship)
 
 
 def connect_trigger(event):
