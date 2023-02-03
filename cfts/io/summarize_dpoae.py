@@ -84,6 +84,7 @@ def process_file(filename, cb, reprocess=False):
     if not reprocess and manager.is_processed('io.csv'):
         return
     manager.clear()
+    cb = manager.create_cb(cb)
 
     cb(0)
     fh = DPOAEFile(filename)

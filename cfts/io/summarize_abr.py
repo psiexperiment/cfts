@@ -4,6 +4,7 @@ logging.basicConfig(level=logging.INFO)
 
 import argparse
 import datetime as dt
+from functools import partial
 from math import ceil
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ from psi import get_config
 from psiaudio.plot import waterfall_plot
 from cfts.io import abr
 
-from .util import DatasetManager, get_cb, process_files
+from .util import add_default_options, DatasetManager, process_files
 
 
 COLUMNS = ['frequency', 'level', 'polarity']
@@ -199,9 +200,7 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
         to save figures in, and name of file.
     '''
     settings = locals()
-
     filename = Path(filename)
-    print(f'Checking {filename}')
 
     # Cleanup settings so that it is JSON-serializable
     settings.pop('cb')
@@ -244,13 +243,12 @@ def process_file(filename, offset=-1e-3, duration=10e-3,
         files.append('individual waveforms.csv')
 
     if not reprocess and manager.is_processed(files):
-        print('\tAlready processed. Skipping.')
         return
 
     # Load the epochs. The callbacks for loading the epochs return a value in
     # the range 0 ... 1. Since this only represents "half" the total work we
     # need to do, rescale to the range 0 ... 0.5.
-    cb = get_cb(cb)
+    cb = manager.create_cb(cb)
     cb(0)
 
     def cb_rescale(frac):
@@ -372,12 +370,11 @@ def main_file():
 
 def main_folder():
     parser = argparse.ArgumentParser('Filter and summarize ABR files in folder')
-    parser.add_argument('-f', '--folder', type=str, help='Folder containing ABR data', default=DATA_ROOT)
-    parser.add_argument('--reprocess', action='store_true', help='Reprocess all data in folder')
+    add_default_options(parser)
     args = parser.parse_args()
-    process_files(args.folder, '**/*abr_io*', process_file,
-                  inearfilter_settings='saved', offset=-0.001, duration=0.01,
-                  reprocess=args.reprocess)
+    fn = partial(process_file, filter_settings='saved', offset=-0.001,
+                 duration=0.01)
+    process_files(args.folder, '**/*abr_io*', fn, reprocess=args.reprocess)
 
 
 def main_gui():

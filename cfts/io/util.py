@@ -37,7 +37,7 @@ def process_files(folder, glob_pattern, fn, cb='tqdm', reprocess=False,
         if filename.suffix == '.md5':
             continue
         try:
-            fn(filename, cb=get_cb(cb), reprocess=reprocess)
+            fn(filename, cb=cb, reprocess=reprocess)
             success.append(filename)
         except Exception as e:
             if halt_on_error:
@@ -92,6 +92,9 @@ class DatasetManager:
             file_template = f'{self.path.stem}'
         self.file_template = file_template
 
+    def create_cb(self, cb):
+        return get_cb(cb)
+
     def get_proc_path(self):
         return self.proc_dir / self.path.parent.relative_to(self.raw_dir) / self.path.stem
 
@@ -101,6 +104,8 @@ class DatasetManager:
         return proc_path / f'{self.file_template} {suffix}'
 
     def is_processed(self, suffixes):
+        if isinstance(suffixes, str):
+            suffixes = [suffixes]
         for suffix in suffixes:
             if not self.get_proc_filename(suffix).exists():
                 return False

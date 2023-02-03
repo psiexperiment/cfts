@@ -6,21 +6,9 @@ from psiaudio import util
 from psiaudio.calibration import FlatCalibration
 from psiaudio.stim import chirp
 
-from psi.data.io.api import Recording
-
 from .util import add_default_options, DatasetManager, process_files
 
-
-class IEC(Recording):
-
-    def __init__(self, base_path, setting_table='epoch_metadata'):
-        super().__init__(base_path, setting_table)
-
-    def get_epochs(self, columns='auto', offset=0, extra_duration=5e-3, cb=None):
-        signal = getattr(self, 'hw_ai')
-        duration = self.get_setting('hw_ao_chirp_duration')
-        return signal.get_epochs(self.epoch_metadata, offset,
-                                 duration+extra_duration, cb=cb)
+from .iec import IEC
 
 
 def process_file(filename, cb, reprocess=False):
@@ -28,6 +16,7 @@ def process_file(filename, cb, reprocess=False):
     if not reprocess and manager.is_processed('psd.csv'):
         return
     manager.clear()
+    cb = manager.create_cb(cb)
 
     cb(0)
     fh = IEC(filename)
@@ -94,6 +83,7 @@ def process_file(filename, cb, reprocess=False):
     ax.set_xlabel('Frequency (kHz)')
     ax.set_ylabel('PSD (V)')
     ax.legend()
+    ax.grid()
 
     ax = axes[1, 0]
     for index, psd in waveforms_psd_db.iterrows():
@@ -105,6 +95,7 @@ def process_file(filename, cb, reprocess=False):
     ax.set_xlabel('Frequency (kHz)')
     ax.set_ylabel('PSD (V)')
     ax.legend()
+    ax.grid()
 
     ax = axes[0, 2]
     for index, spl in epochs_spl_mean.iterrows():
@@ -117,6 +108,7 @@ def process_file(filename, cb, reprocess=False):
     ax.set_xlabel('Frequency (kHz)')
     ax.set_ylabel('Stim. level (dB SPL)')
     ax.legend()
+    ax.grid()
 
     norm_spl = epochs_spl_mean - waveforms_psd_db
     ax = axes[1, 2]
