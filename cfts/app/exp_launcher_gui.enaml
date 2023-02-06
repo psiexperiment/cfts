@@ -8,7 +8,7 @@ from enaml.core.api import Looper
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
-    Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, GroupBox,
+    Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx, GroupBox,
     Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView, PushButton,
     VGroup,
 )
@@ -48,7 +48,6 @@ class Settings(Atom):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.load_defaults()
 
     def run_experiment(self, experiment, save=True):
         starship_to_use = set()
@@ -76,7 +75,7 @@ class Settings(Atom):
         print(' '.join(args))
         subprocess.check_output(args, env=dict(os.environ, **env))
 
-    def save_defaults(self):
+    def save_config(self, filename):
         info = {
             'experimenter': self.experimenter,
             'ear': self.ear,
@@ -85,15 +84,12 @@ class Settings(Atom):
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
-        path = get_config_folder() / 'cfts' / 'launcher.json'
-        path.parent.mkdir(exist_ok=True)
-        path.write_text(json.dumps(info, indent=2))
+        filename = Path(filename)
+        filename.write_text(json.dumps(info, indent=2))
 
-    def load_defaults(self):
-        path = get_config_folder() / 'cfts' / 'launcher.json'
-        if not path.exists():
-            return
-        info = json.loads(path.read_text())
+    def load_config(self, filename):
+        filename = Path(filename)
+        info = json.loads(filename.read_text())
         info['experiment_sequence'] = [Experiment(**s) for s in info['experiment_sequence']]
         info['monitor_sequence'] = [Experiment(**s) for s in info['monitor_sequence']]
         for k, v in info.items():
@@ -263,9 +259,25 @@ enamldef Main(MainWindow):
         Menu:
             title = '&File'
             Action:
-                text = 'Set defaults\tCtrl+D'
+                text = 'Load config\tCtrl+O'
                 triggered ::
-                    settings.save_defaults()
+                    path = get_config_folder() / 'cfts'
+                    path.mkdir(exist_ok=True)
+                    filename = FileDialogEx.get_open_file_name(
+                        current_path=str(path),
+                        name_filters=['Experiment Settings (*.json)'],
+                    )
+                    settings.load_config(filename)
+            Action:
+                text = 'Save config\tCtrl+O'
+                triggered ::
+                    path = get_config_folder() / 'cfts'
+                    path.mkdir(exist_ok=True)
+                    filename = FileDialogEx.get_save_file_name(
+                        current_path=str(path),
+                        name_filters=['Experiment Settings (*.json)'],
+                    )
+                    settings.save_config(filename)
         Menu:
             title = '&Debug'
             ActionGroup:
