@@ -21,6 +21,7 @@ def mv_to_C(mv):
 
 
 START_TRIGGER = '/PXI1Slot6/ao/StartTrigger'
+MAX_RANGE = (-2, 2)
 
 
 enamldef IOManifest(PluginManifest): manifest:
@@ -43,12 +44,13 @@ enamldef IOManifest(PluginManifest): manifest:
             weight = 90
 
     Extension:
-        id = 'backend'
+        id = 'ornitorinco_backend'
         point = 'psi.controller.io'
 
         NIDAQEngine:
             name = 'NI_misc'
             hw_ai_monitor_period = 0.125
+            weight = 1
 
             NIDAQHardwareAIChannel:
                 label = 'EEG'
@@ -82,9 +84,12 @@ enamldef IOManifest(PluginManifest): manifest:
                     name = 'temperature'
                     function = mv_to_C
 
+        ########################################################
+        # Starship A
+        ########################################################
         NIDAQEngine:
-            name = 'NI_audio'
-            master_clock = True
+            name = 'NI_audio_A'
+            weight = 3
 
             hw_ai_monitor_period = 0.125
             hw_ao_monitor_period = 0.125
@@ -97,7 +102,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-1, 1)
-                max_range = (-1, 1)
+                max_range = MAX_RANGE
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
 
@@ -108,7 +113,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-1, 1)
-                max_range = (-1, 1)
+                max_range = MAX_RANGE
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
 
@@ -125,6 +130,13 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_coupling = 'AC'
                 calibration = load_cal('CFTS_STARSHIP_A')
 
+        ########################################################
+        # Starship B
+        ########################################################
+        NIDAQEngine:
+            name = 'NI_audio_B'
+            weight = 2
+
             NIDAQHardwareAOChannel4461:
                 label = 'Starship B (primary)'
                 name = 'starship_B_primary'
@@ -132,7 +144,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-1, 1)
-                max_range = (-1, 1)
+                max_range = MAX_RANGE
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
 
@@ -143,7 +155,7 @@ enamldef IOManifest(PluginManifest): manifest:
                 fs = 100e3
                 reference_clock = 'PXI_Clk10'
                 expected_range = (-1, 1)
-                max_range = (-1, 1)
+                max_range = MAX_RANGE
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
 
@@ -159,16 +171,3 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'AC'
                 calibration = load_cal('CFTS_STARSHIP_B')
-
-            NIDAQHardwareAIChannel:
-                label = 'Calibration microphone'
-                name = 'reference_microphone_channel'
-                channel = 'PXI1Slot6/ai0'
-                start_trigger = START_TRIGGER
-                fs = 100e3
-                reference_clock = 'PXI_Clk10'
-                expected_range = (-10, 10)
-                dtype = 'float64'
-                terminal_mode = 'pseudodifferential'
-                terminal_coupling = 'AC'
-                calibration = FlatCalibration.from_mv_pa(1)

@@ -218,14 +218,14 @@ probe_mic_fft_mixin = {
 elicitor_starship_mixin = {
     'manifest': CFTS_PATH + 'cfts_mixins.Starship',
     'required': True,
-    'attrs': {'id': 'elicitor', 'title': 'Elicitor starship'}
+    'attrs': {'id': 'elicitor', 'title': 'Elicitor starship', 'side': 'test'}
 }
 
 
 probe_starship_mixin = {
     'manifest': CFTS_PATH + 'cfts_mixins.Starship',
     'required': True,
-    'attrs': {'id': 'probe', 'title': 'Probe starship'}
+    'attrs': {'id': 'probe', 'title': 'Probe starship', 'side': 'nontest'}
 }
 
 

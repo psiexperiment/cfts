@@ -309,7 +309,7 @@ enamldef InEarCalibrationMixinManifest(ExperimentManifest): manifest:
 
         ContextGroup:
             name = 'inear_calibration'
-            label = 'In-ear calibration settings'
+            label = 'In-ear calibration'
 
             Parameter:
                 name = 'calibration_gain'
@@ -379,7 +379,7 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
 
         ContextGroup:
             name = 'inear_calibration'
-            label = 'In-ear calibration settings'
+            label = 'In-ear calibration'
 
             Parameter:
                 name = 'calibration_gain'
@@ -406,10 +406,10 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             gain << C.calibration_gain
 
 
-def initialize_starship(name, event):
+def initialize_starship(name, side, event):
     context = event.workbench.get_plugin('psi.context')
 
-    starship = os.environ[f'CFTS_{name.upper()}_STARSHIP']
+    starship = os.environ[f'CFTS_{side.upper()}_STARSHIP']
     item_starship = context.get_item(f'{name}')
     item_starship.set_value(starship)
     item_starship.editable = False
@@ -437,6 +437,7 @@ enamldef Starship(ExperimentManifest): manifest:
     id = 'starship'
     title = manifest.id.capitalize().replace('_', ' ')
     attr output_mode = 'dual'
+    attr side = 'test'
 
     Extension:
         id = manifest.id + '.commands'
@@ -444,7 +445,7 @@ enamldef Starship(ExperimentManifest): manifest:
 
         Command:
             id = manifest.id + '.initialize_starship_settings'
-            handler = functools.partial(initialize_starship, manifest.name)
+            handler = functools.partial(initialize_starship, manifest.name, manifest.side)
 
     Extension:
         id = manifest.id + '.actions'

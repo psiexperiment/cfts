@@ -48,23 +48,26 @@ def configure_memr(event, duration_attr, iti=0):
     if probe.engine == elicitor.engine:
         controller._master_engine = probe.engine
 
+    elicitor_sf = 0
+    probe_sf = 0
     for polarity in (1, -1):
         for setting in context.iter_settings('default', 1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
             duration = setting[duration_attr] + iti
             setting['elicitor_bandlimited_noise_polarity'] = polarity
-            probe.add_setting(setting, averages=averages, total_duration=duration)
-            elicitor.add_setting(setting, averages=averages, total_duration=duration)
+            _, probe_factory = probe.add_setting(
+                setting, averages=averages, total_duration=duration)
+            _, elicitor_factory = elicitor.add_setting(
+                setting, averages=averages, total_duration=duration)
+            elicitor_sf = max(elicitor_sf, elicitor_factory.max_amplitude() * 1.01)
+            probe_sf = max(probe_sf, probe_factory.max_amplitude() * 1.01)
 
-    # Then figure out the maximum scaling factor required for that level.
-    # Multiply to convert from RMS to peak to peak and add 1% headroom.
-    #max_sf = {}
-    #for frequency, level in max_level.items():
-    #    sf = output.calibration.get_sf(frequency, level)
-    #    max_sf[frequency] = sf
-    #max_sf = max(max_sf.values()) * np.sqrt(2) * 1.01 * 2
-    #log.info(max_sf)
-    #output.channel.expected_range = (-max_sf, max_sf)
+    if probe.channel == elicitor.channel:
+        sf = max(elicitor_sf, probe_sf)
+        probe.channel.expected_range = (-sf, sf)
+    else:
+        probe.channel.expected_range = (-probe_sf, probe_sf)
+        elicitor.channel.expected_range = (-elicitor_sf, elicitor_sf)
 
 
 @coroutine
@@ -182,9 +185,13 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
-        ExtractEpochs: extract:
+        ExtractEpochs: extract_probe:
             source_name = 'probe_microphone'
-            name = 'memr'
+            name = 'memr_probe'
+
+        ExtractEpochs: extract_elicitor:
+            source_name = 'elicitor_microphone'
+            name = 'memr_elicitor'
 
         Synchronized:
             name = 'memr_stim'
@@ -195,14 +202,17 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 auto_decrement = True
                 token = workbench.get_plugin('psi.token').get_token(probe)
                 queue ::
-                    self.connect(extract.added_queue.append, 'added')
-                    self.connect(extract.removed_queue.append, 'removed')
+                    self.connect(extract_probe.added_queue.append, 'added')
+                    self.connect(extract_probe.removed_queue.append, 'removed')
             QueuedEpochOutput:
                 name = 'elicitor'
                 label = 'Elicitor'
                 target_name = 'elicitor_secondary'
-                token = workbench.get_plugin('psi.token').get_token('noise')
                 auto_decrement = True
+                token = workbench.get_plugin('psi.token').get_token('noise')
+                queue ::
+                    self.connect(extract_elicitor.added_queue.append, 'added')
+                    self.connect(extract_elicitor.removed_queue.append, 'removed')
 
     Extension:
         id = EXPERIMENT + '.selectors'
@@ -292,7 +302,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
             kwargs = {'delay': 0.5}
 
         ExperimentAction:
-            event = 'memr_queue_end'
+            event = 'memr_probe_queue_end'
             command = 'psi.controller.stop'
 
     Extension:
@@ -302,7 +312,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         EpochCounter: counter:
             name = 'memr_counter'
             label = 'MEMRs acquired'
-            source_name = 'memr'
+            source_name = 'memr_probe'
             output_name = 'probe'
 
         BinaryStore:
@@ -311,7 +321,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
 
         TextStore:
             name = 'memr_store'
-            epoch_inputs = ['memr']
+            epoch_inputs = ['memr_probe']
 
 
 ################################################################################
@@ -556,7 +566,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
         point = 'psi.controller.io'
 
         StackRepeats:
-            source_name = 'memr'
+            source_name = 'memr_probe'
             name = 'memr_repeat'
             duration = C.repeat_period
 
@@ -650,7 +660,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                     source_name = 'probe'
                     plot_grouping << C.get_names()
                     pen_width = 2
-                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_{N}'
+                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'
 
 
 ################################################################################
@@ -761,7 +771,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         point = 'psi.controller.io'
 
         StackRepeats:
-            source_name = 'memr'
+            source_name = 'memr_probe'
             name = 'memr_repeat'
             duration = 1 / C.probe_rate
 
@@ -769,7 +779,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                 # Add a bit of padding to capture the tail end of the
                 # probe due to acoustic delays
                 name = 'probe'
-                lb = 0.5e-3
+                lb = 0
                 ub = C.probe_duration + 1e-3
 
                 ExtractRepeats:
@@ -786,7 +796,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                     }
 
         ExtractStim:
-            source_name = 'memr'
+            source_name = 'memr_elicitor'
             name = 'elicitor'
             lb = C.elicitor_onset + C.elicitor_noise_rise_time
             ub = C.elicitor_onset + C.elicitor_noise_rise_time + C.elicitor_duration - C.elicitor_noise_rise_time
@@ -882,7 +892,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
 
         Expression:
             parameter = 'elicitor_noise_rise_time'
-            expression = '100e-3'
+            expression = '20e-3'
 
     Extension:
         id = EXPERIMENT + '.plots'
@@ -956,4 +966,4 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                     source_name = 'probe_norm'
                     plot_grouping << C.get_names()
                     pen_width = 2
-                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_{N}'
+                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'

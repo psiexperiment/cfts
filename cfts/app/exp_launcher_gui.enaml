@@ -49,17 +49,30 @@ class Settings(Atom):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def run_experiment(self, experiment, save=True):
+    def find_starship(self, ear, test=True):
         starship_to_use = set()
+        for k, v in self.starship_config.items():
+            if v['ear'] == ear:
+                starship_to_use.add(k)
+            elif v['ear'] == 'either' and test:
+                starship_to_use.add(k)
+        if len(starship_to_use) != 1:
+            raise ValueError('Starships incorrectly configured')
+        return next(iter(starship_to_use))
+
+    def run_experiment(self, experiment, save=True):
         env = {}
         for k, v in self.starship_config.items():
             env[f'CFTS_STARSHIP_{k.upper()}'] = v['calibration']
             env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
-            if v['ear'] in (self.ear, 'either'):
-                starship_to_use.add(k)
-        if len(starship_to_use) != 1:
-            raise ValueError('Starships incorrectly configured')
-        env['CFTS_SYSTEM_STARSHIP'] = next(iter(starship_to_use))
+
+        env['CFTS_TEST_STARSHIP'] = self.find_starship(self.ear, True)
+        try:
+            nontest_ear = 'right' if self.ear == 'left' else 'left'
+            env['CFTS_NONTEST_STARSHIP'] = self.find_starship(nontest_ear, False)
+        except ValueError:
+            pass
+        print(env)
 
         filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
         filename = ' '.join(filename.split())
