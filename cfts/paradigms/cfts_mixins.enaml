@@ -181,7 +181,7 @@ enamldef TemperatureMixinManifest(ExperimentManifest): manifest:
                 q = 500
 
                 Callback:
-                    function = lambda x: setattr(temp, 'text', f'{x[0, -1]}°C')
+                    function = lambda x: setattr(temp, 'text', f'{x[0, -1]:.1f}°C')
 
 
 ################################################################################
