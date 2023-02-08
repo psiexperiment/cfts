@@ -31,7 +31,7 @@ EXPERIMENT_SIMPLE = __name__.rsplit('.', 1)[-1] + '_simple'
 
 
 def add_setting(target, setting, averages, iti, key_map):
-    key = target.add_setting(setting, averages, iti)
+    key, _ = target.add_setting(setting, averages, iti)
     freq = setting['target_tone_frequency']
     key_map.setdefault(freq, []).append(key)
 
