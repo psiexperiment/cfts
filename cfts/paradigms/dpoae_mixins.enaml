@@ -17,7 +17,7 @@ from psi.core.enaml.api import DataFrameTable, PSIManifest
 from psi.data.plots import DataFramePlot, FFTContainer, ViewBox
 from psi.data.sinks.base_store import BaseStore
 
-from cfts.io.summarize_dpoae import isodp_th_criterions
+from cftsdata.summarize_dpoae import isodp_th_criterions
 
 KEEP_COLS = ['secondary_tone_frequency', 'secondary_tone_level',
              'dpoae_level', 'dpoae_noise_floor', 'f2_level']
