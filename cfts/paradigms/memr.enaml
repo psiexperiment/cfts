@@ -36,7 +36,7 @@ from .cfts_mixins import CFTSSelector, EEGInput
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
-def configure_memr(event, duration_attr, iti=0):
+def configure_memr(event, duration_attr, iti_attr):
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
 
@@ -53,7 +53,7 @@ def configure_memr(event, duration_attr, iti=0):
     for polarity in (1, -1):
         for setting in context.iter_settings('default', 1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
-            duration = setting[duration_attr] + iti
+            duration = setting[duration_attr] + setting[iti_attr]
             setting['elicitor_bandlimited_noise_polarity'] = polarity
             _, probe_factory = probe.add_setting(
                 setting, averages=averages, total_duration=duration)
@@ -763,7 +763,8 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
 
     # Implements the wideband acoustic reflex as described by Valero and Liberman.
     configure_experiment_cb = partial(configure_memr,
-                                      duration_attr='trial_duration', iti=1)
+                                      duration_attr='trial_duration',
+                                      iti_attr='trial_iti')
     attr probe
 
     Extension:
@@ -826,11 +827,18 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         id = EXPERIMENT + '.simultaneous_memr.context'
         point = 'psi.context.items'
 
-        Parameter:
-            name = 'trial_duration'
-            label = 'Trial duration'
-            default = 11
+        ContextRow:
+            name = 'trial_info'
             group_name = 'memr'
+            fmt = ['Trial', trial_dur, 'sec every', trial_iti, 'sec']
+
+            Parameter: trial_dur:
+                name = 'trial_duration'
+                default = 11
+
+            Parameter: trial_iti:
+                name = 'trial_iti'
+                default = 1
 
         Parameter:
             name = 'trial_n'
