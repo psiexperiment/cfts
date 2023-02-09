@@ -17,7 +17,7 @@ from psi import get_config, get_config_folder
 from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
 
-from cfts.util import list_starship_calibrations, list_starship_connections
+from cfts.util import microphone_manager, starship_manager, list_starship_connections
 from cfts.paradigms import cfts
 
 
@@ -45,9 +45,12 @@ class Settings(Atom):
     experiment_sequence = List(Experiment)
 
     starship_config = Dict()
+    cal_mic_config = Dict()
+    record_cal_mic = Bool(False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.load_config(r'C:\Users\mmm\psi\cfts\monaural.json')
 
     def find_starship(self, ear, test=True):
         starship_to_use = set()
@@ -62,8 +65,9 @@ class Settings(Atom):
 
     def run_experiment(self, experiment, save=True):
         env = {}
+        calibrations = starship_manager.list_choices()
         for k, v in self.starship_config.items():
-            env[f'CFTS_STARSHIP_{k.upper()}'] = v['calibration']
+            env[f'CFTS_STARSHIP_{k.upper()}'] = calibrations[v['calibration']]
             env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
 
         env['CFTS_TEST_STARSHIP'] = self.find_starship(self.ear, True)
@@ -72,7 +76,6 @@ class Settings(Atom):
             env['CFTS_NONTEST_STARSHIP'] = self.find_starship(nontest_ear, False)
         except ValueError:
             pass
-        print(env)
 
         filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
         filename = ' '.join(filename.split())
@@ -85,6 +88,15 @@ class Settings(Atom):
         ])
         for plugin in experiment.plugins:
             args.extend(['--plugin', plugin])
+
+        if self.record_cal_mic:
+            microphones = microphone_manager.list_choices()
+            env['CFTS_CAL_MIC'] = microphones[self.cal_mic_config['microphone']]
+            env['CFTS_CAL_MIC_GAIN'] = str(self.cal_mic_config['gain'])
+            env['CFTS_CAL_MIC_STARSHIP'] = self.cal_mic_config['starship']
+            args.extend(['--plugin', 'calibration_microphone'])
+
+        print(env)
         print(' '.join(args))
         subprocess.check_output(args, env=dict(os.environ, **env))
 
@@ -94,6 +106,8 @@ class Settings(Atom):
             'ear': self.ear,
             'logging_level': self.logging_level,
             'starship_config': self.starship_config,
+            'record_cal_mic': self.record_cal_mic,
+            'cal_mic_config': self.cal_mic_config,
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
@@ -126,6 +140,13 @@ class Settings(Atom):
                 s.setdefault('calibration', None)
                 s.setdefault('ear', 'not used')
 
+        if 'microphone' not in self.cal_mic_config:
+            self.cal_mic_config['microphone'] = 'GRAS 40DP'
+        if 'gain' not in self.cal_mic_config:
+            self.cal_mic_config['gain'] = 20
+        if 'starship' not in self.cal_mic_config:
+            self.cal_mic_config['starship'] = next(iter(starships))
+
 
 enamldef PluginPopup(PopupView): popup:
     attr experiment
@@ -153,6 +174,9 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
     attr sequence
 
     layout_constraints => ():
+        if len(children) == 1:
+            return []
+
         start_buttons = children[:-1:3]
         preferences = children[1:-1:3]
         plugin_buttons = children[2:-1:3]
@@ -293,21 +317,28 @@ enamldef Main(MainWindow):
                     settings.save_config(filename)
         Menu:
             title = '&Debug'
-            ActionGroup:
-                Looper:
-                    iterable = settings.get_member('logging_level').items
-                    Action:
-                        checkable = True
-                        text = loop_item
-                        checked ::
-                            settings.logging_level = loop_item
-                        checked << settings.logging_level == loop_item
+            Menu:
+                title = 'Logging Level'
+                ActionGroup:
+                    Looper:
+                        iterable = settings.get_member('logging_level').items
+                        Action:
+                            checkable = True
+                            text = loop_item
+                            checked ::
+                                settings.logging_level = loop_item
+                            checked << settings.logging_level == loop_item
+            Action:
+                text = '&Record calibration microphone'
+                checkable = True
+                checked := settings.record_cal_mic
 
     Container:
 
         constraints = [
             vbox(
-                equipment_info,
+                starship_info,
+                #cal_mic_info,
                 monitor_box,
                 experiment_info,
                 experiment_box,
@@ -319,14 +350,17 @@ enamldef Main(MainWindow):
             align('width', monitor_box.children[0], experiment_box.children[0]),
             align('width', monitor_box.children[1], experiment_box.children[1]),
             align('width', monitor_box.children[2], experiment_box.children[2]),
+            #align('width', starship_info.children[3], cal_mic_info.children[0]),
         ]
 
-        GroupBox: equipment_info:
+        GroupBox: starship_info:
             title = 'Equipment Configuration'
+            flat = True
+            share_layout = True
 
             layout_constraints => ():
                 header = children[:3]
-                widgets = children[3:-1]
+                widgets = [c for c in children[3:] if not isinstance(c, Looper)]
                 zipped = list(zip(
                     widgets[0::4],   # labels
                     widgets[1::4],   # ear select
@@ -363,7 +397,7 @@ enamldef Main(MainWindow):
                     selected ::
                         settings.starship_config[loop_item]['ear'] = selected
                 ObjectCombo:
-                    items << list(list_starship_calibrations().keys())
+                    items << list(starship_manager.list_choices().keys())
                     selected << settings.starship_config[loop_item]['calibration']
                     selected ::
                         settings.starship_config[loop_item]['calibration'] = selected
@@ -372,6 +406,28 @@ enamldef Main(MainWindow):
                     selected << settings.starship_config[loop_item]['gain']
                     selected ::
                         settings.starship_config[loop_item]['gain'] = selected
+
+            Label:
+                text = 'Cal. mic.'
+                visible << settings.record_cal_mic
+
+            Label:
+                text = ''
+                visible << settings.record_cal_mic
+
+            ObjectCombo: selected_mic:
+                items = list(microphone_manager.list_choices().keys())
+                selected << settings.cal_mic_config['microphone']
+                selected ::
+                    settings.cal_mic_config['microphone'] = selected
+                visible << settings.record_cal_mic
+
+            ObjectCombo:
+                items = [-20, -10, 0, 10, 20, 30, 40, 50]
+                selected << settings.cal_mic_config['gain']
+                selected ::
+                    settings.cal_mic_config['gain'] = selected
+                visible << settings.record_cal_mic
 
         ExperimentInfo: experiment_info:
             pass

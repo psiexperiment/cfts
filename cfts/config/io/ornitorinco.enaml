@@ -8,9 +8,8 @@ from psi.controller.engines.nidaq import (NIDAQEngine,
                                           NIDAQHardwareAOChannel,
                                           NIDAQHardwareAOChannel4461)
 from psi.controller.api import ExperimentAction, Transform
-from psiaudio.calibration import FlatCalibration
 
-from .util import connect_trigger, load_cal
+from .util import connect_trigger
 
 
 def mv_to_C(mv):
@@ -85,7 +84,7 @@ enamldef IOManifest(PluginManifest): manifest:
                     function = mv_to_C
 
         ########################################################
-        # Starship A
+        # Starship A plus calibration mic.
         ########################################################
         NIDAQEngine:
             name = 'NI_audio_A'
@@ -128,7 +127,19 @@ enamldef IOManifest(PluginManifest): manifest:
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'AC'
-                calibration = load_cal('CFTS_STARSHIP_A')
+
+            NIDAQHardwareAIChannel:
+                label = 'Calibration microphone'
+                name = 'calibration_microphone'
+                channel = 'PXI1Slot6/ai0'
+                start_trigger = START_TRIGGER
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'AC'
+
 
         ########################################################
         # Starship B
@@ -170,4 +181,3 @@ enamldef IOManifest(PluginManifest): manifest:
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'AC'
-                calibration = load_cal('CFTS_STARSHIP_B')

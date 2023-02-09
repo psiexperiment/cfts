@@ -9,6 +9,12 @@ CORE_PATH = 'psi.paradigms.core.'
 ################################################################################
 # Single-starship paradigms (ABR, EFR, DPOAE, IEC)
 ################################################################################
+cal_mic_mixin = {
+    'manifest': CFTS_PATH + 'cfts_mixins.CalibrationMicrophone',
+    'required': False,
+}
+
+
 selectable_starship_mixin = {
     'manifest': CFTS_PATH + 'cfts_mixins.Starship',
     'required': True,
@@ -90,6 +96,7 @@ ParadigmDescription(
         temperature_mixin,
         eeg_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
+        cal_mic_mixin,
     ],
 )
 
@@ -102,6 +109,7 @@ ParadigmDescription(
         temperature_mixin,
         eeg_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest', 'selected': True},
+        cal_mic_mixin,
     ]
 )
 
@@ -114,6 +122,7 @@ ParadigmDescription(
         temperature_mixin,
         microphone_mixin,
         microphone_fft_mixin,
+        cal_mic_mixin,
     ],
 )
 
@@ -127,6 +136,7 @@ ParadigmDescription(
         microphone_mixin,
         efr_microphone_fft_mixin,
         eeg_view_mixin,
+        cal_mic_mixin,
     ]
 )
 
@@ -140,6 +150,7 @@ ParadigmDescription(
         microphone_mixin,
         efr_microphone_fft_mixin,
         eeg_view_mixin,
+        cal_mic_mixin,
     ]
 )
 
@@ -150,6 +161,7 @@ ParadigmDescription(
         {'manifest': CAL_PATH + 'speaker_calibration.BaseSpeakerCalibrationManifest'},
         {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
+        cal_mic_mixin,
     ]
 )
 
@@ -241,6 +253,7 @@ ParadigmDescription(
         elicitor_mic_fft_mixin,
         probe_mic_mixin,
         probe_mic_fft_mixin,
+        cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
@@ -258,6 +271,7 @@ ParadigmDescription(
         elicitor_mic_fft_mixin,
         probe_mic_mixin,
         probe_mic_fft_mixin,
+        cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
@@ -274,6 +288,7 @@ ParadigmDescription(
         elicitor_mic_fft_mixin,
         probe_mic_mixin,
         probe_mic_fft_mixin,
+        cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
@@ -290,6 +305,7 @@ ParadigmDescription(
         elicitor_mic_fft_mixin,
         probe_mic_mixin,
         probe_mic_fft_mixin,
+        cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
     ]
 )
