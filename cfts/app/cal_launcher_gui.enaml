@@ -1,6 +1,11 @@
 import subprocess
 
 from atom.api import Atom, Str
+import pyqtgraph as pg
+
+import enaml
+with enaml.imports():
+    from psi.data.plots_manifest import PGCanvas
 
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.widgets.api import (
@@ -95,12 +100,15 @@ enamldef Main(MainWindow):
     Container:
 
         constraints = [
-            vbox(
-                hbox(mic_label, hbox(mic_select, mic_add, spacing=0), mic_cal_start),
-                hbox(starship_label, 
-                     hbox(starship_select, starship_add, spacing=0), 
-                     hbox(golay_start, chirp_start, spacing=0)
-                     ),
+            hbox(
+                vbox(
+                    hbox(mic_label, hbox(mic_select, mic_add, spacing=0), mic_cal_start),
+                    hbox(starship_label, 
+                        hbox(starship_select, starship_add, spacing=0), 
+                        hbox(golay_start, chirp_start, spacing=0)
+                        ),
+                ),
+                center_plot,
             ),
             mic_add.width == 30,
             starship_add.width == 30,
@@ -153,3 +161,21 @@ enamldef Main(MainWindow):
             text = 'Chirp'
             clicked ::
                 settings.run_pt_cal_chirp()
+
+        PGCanvas: center_plot:
+            initialized ::
+                component = pg.GraphicsLayout()
+                component.setSpacing(10)
+                y_axis = pg.AxisItem('left')
+                y_axis.setLabel('Sensitivity (dB re 1Vrms)')
+                y_axis.setGrid(64)
+                component.addItem(y_axis, 0, 0)
+
+                x_axis = pg.AxisItem('bottom')
+                x_axis.setGrid(64)
+                x_axis.setLabel('Frequency', units='Hz')
+                #x_axis.logTickStrings = format_log_ticks
+                x_axis.setLogMode(True)
+                component.addItem(y_axis, 1, 1)
+
+                self.component = component
