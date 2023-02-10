@@ -24,14 +24,10 @@ def cfts():
     return True
 
 
-def cfts_cal():
+def cfts_calibration():
     load_paradigm_descriptions()
     app = QtApplication()
     view = CalLauncherMain()
     view.show()
     app.start()
     return True
-
-
-if __name__ == '__main__':
-    cfts_cal()

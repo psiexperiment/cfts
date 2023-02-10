@@ -1,48 +1,115 @@
 import subprocess
 
-from atom.api import Atom, Enum
+from atom.api import Atom, Str
 
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.widgets.api import (
-    Container, Label, Form, MainWindow, ObjectCombo, PushButton
+    Container, Label, Field, Form, MainWindow, ObjectCombo, PopupView, PushButton
 )
+
+from psi import get_config
+
+from cfts.util import CFTSMicrophoneLoader, CFTSStarshipLoader
+
+
+CAL_ROOT = get_config('CAL_ROOT')
 
 
 class Settings(Atom):
 
-    starship = Enum('MMM0', 'MMM1', 'MMM2', 'MMM3')
-    cal_mic = Enum('GRAS 40DP')
+    starship = Str()
+    microphone = Str()
+
+    def _default_starship(self):
+        return next(CFTSStarshipLoader.list_choices())
+
+    def _default_microphone(self):
+        return next(CFTSMicrophoneLoader.list_choices())
 
     def run_mic_cal(self, save=True):
-        filename = f'{{date_time}} {self.cal_mic}'
+        filename = f'{{date_time}} {self.microphone}'
         filename = ' '.join(filename.split())
-        args = ['psi', 'pistonphone_calibration', filename]
+        pathname = CAL_ROOT / 'microphone' / self.microphone / filename
+        args = ['psi', 'pistonphone_calibration', str(pathname)]
         print(' '.join(args))
         subprocess.check_output(args)
 
-    def run_pt_cal(self, save=True):
-        filename = f'{{date_time}} {self.starship} {self.cal_mic}'
+    def _run_cal(self, experiment):
+        filename = f'{{date_time}} {self.starship} {self.microphone} {experiment}'
         filename = ' '.join(filename.split())
-        args = ['psi', 'pt_calibration_golay', filename]
+        pathname = CAL_ROOT / 'starship' / self.starship / filename
+        args = ['psi', experiment, str(pathname)]
         print(' '.join(args))
         subprocess.check_output(args)
 
+    def run_pt_cal_golay(self, save=True):
+        self._run_cal('pt_calibration_golay')
+
+    def run_pt_cal_chirp(self, save=True):
+        self._run_cal('pt_calibration_chirp')
+
+
+enamldef AddItem(PopupView): popup:
+
+    attr combo
+    window_type = 'popup'
+    arrow_size = 20
+    arrow_edge = 'top'
+    alias label: label.text
+
+    Container:
+        constraints = [
+            vbox(
+                hbox(label, field),
+                hbox(spacer(0), pb_ok, pb_cancel, spacing=0)
+            ),
+            align('v_center', label, field),
+            align('v_center', pb_ok, pb_cancel),
+            align('width', pb_ok, pb_cancel),
+        ]
+
+        Label: label:
+            pass
+        Field: field:
+            pass
+        PushButton: pb_ok:
+            text = 'OK'
+            clicked ::
+                items = combo.items[:]
+                items.append(field.text)
+                combo.items = items
+                combo.selected = field.text
+                popup.close()
+
+        PushButton: pb_cancel:
+            text = 'Cancel'
+            clicked ::
+                popup.close()
 
 
 enamldef Main(MainWindow):
 
+    title = 'Calibration'
     attr settings = Settings()
 
     Container:
 
         constraints = [
             vbox(
-                hbox(mic_label, mic_select, mic_cal_start),
-                hbox(starship_label, starship_select),
-                hbox(spacer(0), golay_start, chirp_start),
+                hbox(mic_label, hbox(mic_select, mic_add, spacing=0), mic_cal_start),
+                hbox(starship_label, 
+                     hbox(starship_select, starship_add, spacing=0), 
+                     hbox(golay_start, chirp_start, spacing=0)
+                     ),
             ),
-            align('v_center', mic_label, mic_select, mic_cal_start),
-            align('v_center', starship_label, starship_select),
+            mic_add.width == 30,
+            starship_add.width == 30,
+            align('width', mic_label, starship_label),
+            align('width', mic_select, starship_select),
+            align('left', mic_label, starship_label),
+            align('left', mic_select, starship_select),
+            align('v_center', mic_label, mic_select, mic_add, mic_cal_start),
+            align('v_center', starship_label, starship_select, starship_add),
             align('v_center', golay_start, chirp_start),
         ]
 
@@ -50,11 +117,17 @@ enamldef Main(MainWindow):
             text = 'Microphone'
 
         ObjectCombo: mic_select:
-            items = ['GRAS 40DP']
-            selected := settings.cal_mic
+            items = list(CFTSMicrophoneLoader.list_choices())
+            selected := settings.microphone
+
+        PushButton: mic_add:
+            text = '+'
+            clicked ::
+                popup = AddItem(self, combo=mic_select, label='Microphone')
+                popup.show()
 
         PushButton: mic_cal_start:
-            text = 'Calibrate mic'
+            text = 'Calibrate'
             clicked ::
                 settings.run_mic_cal()
 
@@ -62,13 +135,21 @@ enamldef Main(MainWindow):
             text = 'Starship'
 
         ObjectCombo: starship_select:
-            items = ['MMM0', 'MMM1', 'MMM2', 'MMM3']
+            items = list(CFTSStarshipLoader.list_choices())
             selected := settings.starship
 
-        PushButton: golay_start:
-            text = 'Run Golay'
+        PushButton: starship_add:
+            text = '+'
             clicked ::
-                settings.run_pt_cal()
+                popup = AddItem(self, combo=starship_select, label='Starship')
+                popup.show()
+
+        PushButton: golay_start:
+            text = 'Golay'
+            clicked ::
+                settings.run_pt_cal_golay()
 
         PushButton: chirp_start:
-            text = 'Run Chirp'
+            text = 'Chirp'
+            clicked ::
+                settings.run_pt_cal_chirp()

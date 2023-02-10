@@ -103,9 +103,10 @@ class CFTSStarshipLoader(StarshipLoader):
     label = 'CFTS'
     base_path = get_config('CAL_ROOT') / 'starship'
 
-    def list_choices(self):
+    @classmethod
+    def list_choices(cls):
         names = {}
-        for path in self.base_path.iterdir():
+        for path in cls.base_path.iterdir():
             yield path.stem
 
 
@@ -118,9 +119,10 @@ class CFTSMicrophoneLoader(MicrophoneLoader):
     label = 'CFTS'
     base_path = get_config('CAL_ROOT') / 'microphone'
 
-    def list_choices(self):
+    @classmethod
+    def list_choices(cls):
         names = {}
-        for path in self.base_path.iterdir():
+        for path in cls.base_path.iterdir():
             yield path.stem
 
     def current_calibration(self, name):
