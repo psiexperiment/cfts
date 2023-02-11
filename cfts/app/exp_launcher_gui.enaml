@@ -17,7 +17,8 @@ from psi import get_config, get_config_folder
 from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
 
-from cfts.util import microphone_manager, starship_manager, list_starship_connections
+from cfts.calibration import microphone_manager, starship_manager
+from cfts.util import list_starship_connections
 from cfts.paradigms import cfts
 
 
@@ -65,9 +66,9 @@ class Settings(Atom):
 
     def run_experiment(self, experiment, save=True):
         env = {}
-        calibrations = starship_manager.list_choices()
         for k, v in self.starship_config.items():
-            env[f'CFTS_STARSHIP_{k.upper()}'] = calibrations[v['calibration']]
+            cal_string = v['calibration'].get_current_calibration().to_string()
+            env[f'CFTS_STARSHIP_{k.upper()}'] = cal_string
             env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
 
         env['CFTS_TEST_STARSHIP'] = self.find_starship(self.ear, True)
@@ -90,8 +91,7 @@ class Settings(Atom):
             args.extend(['--plugin', plugin])
 
         if self.record_cal_mic:
-            microphones = microphone_manager.list_choices()
-            env['CFTS_CAL_MIC'] = microphones[self.cal_mic_config['microphone']]
+            env['CFTS_CAL_MIC'] = self.cal_mic_config['microphone'].get_current_calibration().to_string()
             env['CFTS_CAL_MIC_GAIN'] = str(self.cal_mic_config['gain'])
             env['CFTS_CAL_MIC_STARSHIP'] = self.cal_mic_config['starship']
             args.extend(['--plugin', 'calibration_microphone'])
@@ -107,10 +107,22 @@ class Settings(Atom):
             'logging_level': self.logging_level,
             'starship_config': self.starship_config,
             'record_cal_mic': self.record_cal_mic,
-            'cal_mic_config': self.cal_mic_config,
+            'cal_mic_config': {
+                'microphone': self.cal_mic_config['microphone'].name,
+                'gain': self.cal_mic_config['gain'],
+                'starship': self.cal_mic_config['starship'],
+            }
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
+        info['starship_config'] = {}
+        for k, v in self.starship_config.items():
+            info['starship_config'][k] = {
+                'ear': v['ear'],
+                'calibration': v['calibration'].name,
+                'gain': v['gain'],
+            }
+
         filename = Path(filename)
         filename.write_text(json.dumps(info, indent=2))
 
@@ -139,13 +151,19 @@ class Settings(Atom):
                 s.setdefault('gain', 40)
                 s.setdefault('calibration', None)
                 s.setdefault('ear', 'not used')
+                if s['calibration'] is not None:
+                    s['calibration'] = starship_manager.get_object(s['calibration'])
 
         if 'microphone' not in self.cal_mic_config:
-            self.cal_mic_config['microphone'] = 'GRAS 40DP'
+            self.cal_mic_config['microphone'] = None
         if 'gain' not in self.cal_mic_config:
             self.cal_mic_config['gain'] = 20
         if 'starship' not in self.cal_mic_config:
             self.cal_mic_config['starship'] = next(iter(starships))
+
+        if self.cal_mic_config['microphone'] is not None:
+            self.cal_mic_config['microphone'] = \
+                microphone_manager.get_object(self.cal_mic_config['microphone'])
 
 
 enamldef PluginPopup(PopupView): popup:
@@ -397,7 +415,7 @@ enamldef Main(MainWindow):
                     selected ::
                         settings.starship_config[loop_item]['ear'] = selected
                 ObjectCombo:
-                    items << list(starship_manager.list_choices().keys())
+                    items << sorted(starship_manager.list_objects())
                     selected << settings.starship_config[loop_item]['calibration']
                     selected ::
                         settings.starship_config[loop_item]['calibration'] = selected
@@ -416,7 +434,7 @@ enamldef Main(MainWindow):
                 visible << settings.record_cal_mic
 
             ObjectCombo: selected_mic:
-                items = list(microphone_manager.list_choices().keys())
+                items = sorted(microphone_manager.list_objects())
                 selected << settings.cal_mic_config['microphone']
                 selected ::
                     settings.cal_mic_config['microphone'] = selected

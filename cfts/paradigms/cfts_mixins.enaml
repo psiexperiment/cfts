@@ -28,8 +28,8 @@ from psi.paradigms.core.io_mixins import ChannelInput, ChannelInputManifest, \
     QueuedEpochChannelOutput
 
 
-from cfts.util import (
-    list_starship_connections, microphone_manager, starship_manager)
+from cfts.util import list_starship_connections
+from cfts.calibration import microphone_manager, starship_manager
 
 
 ################################################################################
@@ -408,7 +408,7 @@ def initialize_starship(name, side, event):
 
     cal_name = os.environ[f'CFTS_STARSHIP_{starship.upper()}']
     channel = controller.get_channel(f'hw_ai::starship_{starship.upper()}_microphone')
-    channel.calibration = starship_manager.load(cal_name)
+    channel.calibration = starship_manager.from_string(cal_name).load()
 
 
 enamldef Starship(ExperimentManifest): manifest:
@@ -511,7 +511,7 @@ def initialize_cal_mic(event):
     channel = controller.get_channel('hw_ai::calibration_microphone')
     cal_mic = os.environ[f'CFTS_CAL_MIC']
     cal_mic_gain = os.environ[f'CFTS_CAL_MIC_GAIN']
-    channel.calibration = microphone_manager.load(cal_mic)
+    channel.calibration = microphone_manager.from_string(cal_mic).load()
     channel.gain = int(cal_mic_gain)
 
 

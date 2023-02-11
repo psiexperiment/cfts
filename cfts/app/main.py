@@ -25,6 +25,9 @@ def cfts():
 
 
 def cfts_calibration():
+    import enamlx
+    enamlx.install()
+
     load_paradigm_descriptions()
     app = QtApplication()
     view = CalLauncherMain()

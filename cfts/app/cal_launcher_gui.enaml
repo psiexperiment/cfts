@@ -1,21 +1,31 @@
 import subprocess
 
-from atom.api import Atom, Str
+from atom.api import Atom, Bool, List, Str, Value
+import numpy as np
 import pyqtgraph as pg
 
 import enaml
 with enaml.imports():
     from psi.data.plots_manifest import PGCanvas
 
-from enaml.layout.api import align, hbox, spacer, vbox
-from enaml.widgets.api import (
-    Container, Label, Field, Form, MainWindow, ObjectCombo, PopupView, PushButton
+from enaml.core.api import Looper
+from enaml.layout.api import (
+    align, hbox, spacer, vbox, AreaLayout, HSplitLayout, VSplitLayout, TabLayout
 )
+from enaml.widgets.api import (
+    Container, Label, Field, Form, MainWindow, ObjectCombo, PopupView,
+    PushButton, DockArea, DockItem,
+)
+from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
 
 from psi import get_config
+from psi.data.plots import make_color
 
-from cfts.util import CFTSMicrophoneLoader, CFTSStarshipLoader
+from cfts.calibration import CFTSMicrophoneLoader, CFTSStarshipLoader, \
+    microphone_manager, starship_manager
 
+cfts_mic_loader = CFTSMicrophoneLoader()
+cfts_starship_loader = CFTSStarshipLoader()
 
 CAL_ROOT = get_config('CAL_ROOT')
 
@@ -26,10 +36,10 @@ class Settings(Atom):
     microphone = Str()
 
     def _default_starship(self):
-        return next(CFTSStarshipLoader.list_choices())
+        return next(cfts_starship_loader.list_names())
 
     def _default_microphone(self):
-        return next(CFTSMicrophoneLoader.list_choices())
+        return next(cfts_mic_loader.list_names())
 
     def run_mic_cal(self, save=True):
         filename = f'{{date_time}} {self.microphone}'
@@ -92,90 +102,271 @@ enamldef AddItem(PopupView): popup:
                 popup.close()
 
 
+class PlotManager:
+
+    def __init__(self):
+        component = pg.GraphicsLayout()
+        component.setSpacing(10)
+        y_axis = pg.AxisItem('left')
+        y_axis.setLabel('Sensitivity (dB re 1Vrms)')
+        y_axis.setGrid(64)
+        component.addItem(y_axis, 0, 0)
+
+        x_axis = pg.AxisItem('bottom')
+        x_axis.setGrid(64)
+        x_axis.setLabel('Frequency', units='Hz')
+        x_axis.setLogMode(True)
+        component.addItem(x_axis, 1, 1)
+
+        vb = pg.ViewBox()
+        vb.setBackgroundColor('w')
+        y_axis.linkToView(vb)
+        x_axis.linkToView(vb)
+        component.addItem(vb, 0, 1)
+
+        legend = pg.LegendItem()
+        legend.setParentItem(vb)
+
+        self.legend = legend
+        self.component = component
+        self.vb = vb
+
+        from palettable.tableau import Tableau_20
+        self.color_cycle = iter(Tableau_20.colors)
+
+        self.plots = {}
+
+    def plot(self, calibration):
+        if calibration not in self.plots:
+            color = make_color(next(self.color_cycle))
+            pen = pg.mkPen(color, width=2)
+            plot = pg.PlotCurveItem(pen=pen)
+            cal = calibration.load()
+            x = np.log10(cal.frequency)
+            y = cal.sensitivity
+            plot.setData(x, y)
+            self.plots[calibration] = plot
+
+        self.legend.addItem(self.plots[calibration], str(calibration))
+        self.vb.addItem(self.plots[calibration])
+
+    def remove(self, calibration):
+        if calibration not in self.plots:
+            return
+        self.legend.removeItem(self.plots[calibration])
+        self.vb.removeItem(self.plots[calibration])
+
+
+class Group(Atom):
+    selected = Bool(False)
+    skip_autoselect = Bool(False)
+    subitems = List()
+    item = Value()
+    manager = Value()
+
+    def _observe_subitems(self, event):
+        for i in self.subitems:
+            i.observe('selected', self._check_selected)
+
+    def _check_selected(self, event):
+        for i in self.subitems:
+            if i.selected:
+                self.skip_autoselect = True
+                self.selected = True
+                self.skip_autoselect = False
+                return
+        self.selected = False
+
+    def _observe_selected(self, event):
+        if self.selected:
+            if not self.skip_autoselect:
+                self.subitems[0].selected = True
+        else:
+            for i in self.subitems:
+                i.selected = False
+
+
+class Node(Atom):
+    selected = Bool(False)
+    item = Value()
+    manager = Value()
+
+    def _observe_selected(self, event):
+        if self.selected:
+            self.manager.plot(self.item)
+        else:
+            self.manager.remove(self.item)
+
+
+class Groups(Atom):
+    groups = List()
+
+    def __init__(self, items, manager):
+        groups = []
+        for i in sorted(items):
+            nodes = [Node(item=c, manager=manager) for c in sorted(i.list_calibrations(), reverse=True)]
+            groups.append(Group(item=i, subitems=nodes))
+        self.groups = groups
+
+
 enamldef Main(MainWindow):
 
     title = 'Calibration'
+    initial_size = (1248, 768)
+
     attr settings = Settings()
 
     Container:
-
-        constraints = [
-            hbox(
-                vbox(
-                    hbox(mic_label, hbox(mic_select, mic_add, spacing=0), mic_cal_start),
-                    hbox(starship_label, 
-                        hbox(starship_select, starship_add, spacing=0), 
-                        hbox(golay_start, chirp_start, spacing=0)
-                        ),
+        DockArea: area:
+            layout = AreaLayout(
+                HSplitLayout(
+                    VSplitLayout('settings',
+                                 TabLayout('starship_list', 'mic_list'),
+                                 sizes=[50, 600],
+                                 ),
+                    TabLayout(
+                        'starship_sens_plot',
+                        'mic_sens_plot',
+                    ),
+                    sizes=[150, 900],
                 ),
-                center_plot,
-            ),
-            mic_add.width == 30,
-            starship_add.width == 30,
-            align('width', mic_label, starship_label),
-            align('width', mic_select, starship_select),
-            align('left', mic_label, starship_label),
-            align('left', mic_select, starship_select),
-            align('v_center', mic_label, mic_select, mic_add, mic_cal_start),
-            align('v_center', starship_label, starship_select, starship_add),
-            align('v_center', golay_start, chirp_start),
-        ]
+            )
 
-        Label: mic_label:
-            text = 'Microphone'
+            DockItem:
+                name = 'settings'
+                title = 'Settings'
+                closable = False
+                stretch = 1
 
-        ObjectCombo: mic_select:
-            items = list(CFTSMicrophoneLoader.list_choices())
-            selected := settings.microphone
+                Container:
+                    constraints = [
+                        vbox(
+                            hbox(mic_label, hbox(mic_select, mic_add, spacing=0), mic_cal_start),
+                            hbox(starship_label,
+                                hbox(starship_select, starship_add, spacing=0),
+                                hbox(golay_start, chirp_start, spacing=0)
+                                ),
+                        ),
+                        mic_add.width == 30,
+                        starship_add.width == 30,
+                        align('width', mic_label, starship_label),
+                        align('width', mic_select, starship_select),
+                        align('left', mic_label, starship_label),
+                        align('left', mic_select, starship_select),
+                        align('v_center', mic_label, mic_select, mic_add, mic_cal_start),
+                        align('v_center', starship_label, starship_select, starship_add),
+                        align('v_center', golay_start, chirp_start),
+                    ]
 
-        PushButton: mic_add:
-            text = '+'
-            clicked ::
-                popup = AddItem(self, combo=mic_select, label='Microphone')
-                popup.show()
+                    Label: mic_label:
+                        text = 'Microphone'
 
-        PushButton: mic_cal_start:
-            text = 'Calibrate'
-            clicked ::
-                settings.run_mic_cal()
+                    ObjectCombo: mic_select:
+                        items = sorted(cfts_mic_loader.list_names())
+                        selected := settings.microphone
 
-        Label: starship_label:
-            text = 'Starship'
+                    PushButton: mic_add:
+                        text = '+'
+                        clicked ::
+                            popup = AddItem(self, combo=mic_select, label='Microphone')
+                            popup.show()
 
-        ObjectCombo: starship_select:
-            items = list(CFTSStarshipLoader.list_choices())
-            selected := settings.starship
+                    PushButton: mic_cal_start:
+                        text = 'Calibrate'
+                        clicked ::
+                            settings.run_mic_cal()
 
-        PushButton: starship_add:
-            text = '+'
-            clicked ::
-                popup = AddItem(self, combo=starship_select, label='Starship')
-                popup.show()
+                    Label: starship_label:
+                        text = 'Starship'
 
-        PushButton: golay_start:
-            text = 'Golay'
-            clicked ::
-                settings.run_pt_cal_golay()
+                    ObjectCombo: starship_select:
+                        items = sorted(cfts_starship_loader.list_names())
+                        selected := settings.starship
 
-        PushButton: chirp_start:
-            text = 'Chirp'
-            clicked ::
-                settings.run_pt_cal_chirp()
+                    PushButton: starship_add:
+                        text = '+'
+                        clicked ::
+                            popup = AddItem(self, combo=starship_select, label='Starship')
+                            popup.show()
 
-        PGCanvas: center_plot:
-            initialized ::
-                component = pg.GraphicsLayout()
-                component.setSpacing(10)
-                y_axis = pg.AxisItem('left')
-                y_axis.setLabel('Sensitivity (dB re 1Vrms)')
-                y_axis.setGrid(64)
-                component.addItem(y_axis, 0, 0)
+                    PushButton: golay_start:
+                        text = 'Golay'
+                        clicked ::
+                            settings.run_pt_cal_golay()
 
-                x_axis = pg.AxisItem('bottom')
-                x_axis.setGrid(64)
-                x_axis.setLabel('Frequency', units='Hz')
-                #x_axis.logTickStrings = format_log_ticks
-                x_axis.setLogMode(True)
-                component.addItem(y_axis, 1, 1)
+                    PushButton: chirp_start:
+                        text = 'Chirp'
+                        clicked ::
+                            settings.run_pt_cal_chirp()
 
-                self.component = component
+            DockItem:
+                name = 'mic_sens_plot'
+                title = 'Microphone Sensitivity'
+                closable = False
+                stretch = 10
+
+                Container:
+                    PGCanvas: microphone_plot:
+                        attr manager = PlotManager()
+                        component << manager.component
+
+            DockItem:
+                name = 'starship_sens_plot'
+                title = 'Starship Sensitivity'
+                closable = False
+                stretch = 10
+
+                Container:
+                    PGCanvas: starship_plot:
+                        attr manager = PlotManager()
+                        component << manager.component
+
+            DockItem: dock_item:
+                name = 'starship_list'
+                title = 'Starship Calibrations'
+                closable = False
+
+                Container:
+                    TreeView:
+                        attr objects = Groups(starship_manager.list_objects(),
+                                              starship_plot.manager)
+                        horizontal_headers = ['Calibration']
+                        resize_mode = 'resize_to_contents'
+                        horizontal_stretch = True
+                        items << objects.groups
+                        Looper:
+                            iterable << parent.items
+                            TreeViewItem:
+                                text << loop_item.item.name
+                                items << loop_item.subitems
+                                checkable = True
+                                checked := loop_item.selected
+                                Looper:
+                                    iterable << parent.items
+                                    TreeViewItem:
+                                        checkable = True
+                                        checked := loop_item.selected
+                                        text << str(loop_item.item.datetime)
+
+            DockItem:
+                name = 'mic_list'
+                title = 'Microphone Calibrations'
+                closable = False
+
+                Container:
+                    TreeView:
+                        horizontal_headers = ['Calibration']
+                        resize_mode = 'resize_to_contents'
+                        horizontal_stretch = True
+                        items << sorted(microphone_manager.list_objects())
+                        Looper:
+                            iterable << parent.items
+                            TreeViewItem:
+                                text << loop_item.name
+                                items << sorted(loop_item.list_calibrations(), reverse=True)
+                                checkable = True
+                                Looper:
+                                    iterable << parent.items
+                                    TreeViewItem:
+                                        checkable = True
+                                        text << str(loop_item.datetime)
