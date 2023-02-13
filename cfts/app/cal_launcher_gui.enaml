@@ -2,6 +2,7 @@ import subprocess
 
 from atom.api import Atom, Bool, List, Str, Value
 import numpy as np
+from palettable.tableau import Tableau_20
 import pyqtgraph as pg
 
 import enaml
@@ -21,11 +22,14 @@ from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
 from psi import get_config
 from psi.data.plots import make_color
 
-from cfts.calibration import CFTSMicrophoneLoader, CFTSStarshipLoader, \
+from cfts.calibration import (
+    CFTSInEarLoader, CFTSMicrophoneLoader, CFTSStarshipLoader, inear_manager,
     microphone_manager, starship_manager
+)
 
 cfts_mic_loader = CFTSMicrophoneLoader()
 cfts_starship_loader = CFTSStarshipLoader()
+cfts_inear_loader = CFTSInEarLoader()
 
 CAL_ROOT = get_config('CAL_ROOT')
 
@@ -34,6 +38,7 @@ class Settings(Atom):
 
     starship = Str()
     microphone = Str()
+    ear = Str()
 
     def _default_starship(self):
         return next(cfts_starship_loader.list_names())
@@ -41,7 +46,7 @@ class Settings(Atom):
     def _default_microphone(self):
         return next(cfts_mic_loader.list_names())
 
-    def run_mic_cal(self, save=True):
+    def run_mic_cal(self):
         filename = f'{{date_time}} {self.microphone}'
         filename = ' '.join(filename.split())
         pathname = CAL_ROOT / 'microphone' / self.microphone / filename
@@ -57,11 +62,19 @@ class Settings(Atom):
         print(' '.join(args))
         subprocess.check_output(args)
 
-    def run_pt_cal_golay(self, save=True):
+    def run_pt_cal_golay(self):
         self._run_cal('pt_calibration_golay')
 
-    def run_pt_cal_chirp(self, save=True):
+    def run_pt_cal_chirp(self):
         self._run_cal('pt_calibration_chirp')
+
+    def run_inear_cal_chirp(self, save=True):
+        filename = f'{{date_time}} {self.ear} {self.starship}'
+        filename = ' '.join(filename.split())
+        pathname = CAL_ROOT / 'inear' / self.ear / filename
+        args = ['psi', 'inear_speaker_calibration_chirp', str(pathname)]
+        print(' '.join(args))
+        subprocess.check_output(args)
 
 
 enamldef AddItem(PopupView): popup:
@@ -102,7 +115,7 @@ enamldef AddItem(PopupView): popup:
                 popup.close()
 
 
-class PlotManager:
+class BasePlotManager:
 
     def __init__(self):
         component = pg.GraphicsLayout()
@@ -131,21 +144,13 @@ class PlotManager:
         self.component = component
         self.vb = vb
 
-        from palettable.tableau import Tableau_20
         self.color_cycle = iter(Tableau_20.colors)
 
         self.plots = {}
 
     def plot(self, calibration):
         if calibration not in self.plots:
-            color = make_color(next(self.color_cycle))
-            pen = pg.mkPen(color, width=2)
-            plot = pg.PlotCurveItem(pen=pen)
-            cal = calibration.load()
-            x = np.log10(cal.frequency)
-            y = cal.sensitivity
-            plot.setData(x, y)
-            self.plots[calibration] = plot
+            self.plots[calibration] = self.make_plot(calibration)
 
         self.legend.addItem(self.plots[calibration], str(calibration))
         self.vb.addItem(self.plots[calibration])
@@ -157,12 +162,63 @@ class PlotManager:
         self.vb.removeItem(self.plots[calibration])
 
 
-class Group(Atom):
+class StarshipPlotManager(BasePlotManager):
+
+    def make_plot(self, calibration):
+        color = make_color(next(self.color_cycle))
+        pen = pg.mkPen(color, width=2)
+        plot = pg.PlotCurveItem(pen=pen)
+        cal = calibration.load()
+        x = np.log10(cal.frequency)
+        y = cal.sensitivity
+        plot.setData(x, y)
+        return plot
+
+
+class InEarPlotManager(BasePlotManager):
+
+    def make_plot(self, calibration):
+        color = make_color(next(self.color_cycle))
+        pen = pg.mkPen(color, width=2)
+        plot = pg.PlotCurveItem(pen=pen)
+        cal = calibration.load()
+        x = np.log10(cal.frequency)
+        y = cal.sensitivity
+        plot.setData(x, y)
+        return plot
+
+
+class MicrophonePlotManager(BasePlotManager):
+
+    def make_plot(self, calibration):
+        color = make_color(next(self.color_cycle))
+        pen = pg.mkPen(color, width=2)
+        plot = pg.PlotCurveItem(pen=pen)
+        fh = calibration.load_recording()
+        psd = fh.get_psd(average_seconds=1)
+        x = np.log10(psd.index.values)
+        y = psd.values
+        print(x)
+        print(y)
+        plot.setData(x, y)
+        return plot
+
+
+################################################################################
+# Organize list of calibrated objects and calibrations for each object
+################################################################################
+class ObjectGroup(Atom):
     selected = Bool(False)
     skip_autoselect = Bool(False)
     subitems = List()
     item = Value()
     manager = Value()
+
+    def __init__(self, item, manager):
+        self.item = item
+        self.manager = manager
+        calibrations = sorted(item.list_calibrations(), reverse=True)
+        self.subitems = [ObjectNode(item=c, manager=manager) for c in calibrations]
 
     def _observe_subitems(self, event):
         for i in self.subitems:
@@ -186,7 +242,7 @@ class Group(Atom):
                 i.selected = False
 
 
-class Node(Atom):
+class ObjectNode(Atom):
     selected = Bool(False)
     item = Value()
     manager = Value()
@@ -198,17 +254,32 @@ class Node(Atom):
             self.manager.remove(self.item)
 
 
-class Groups(Atom):
-    groups = List()
+enamldef CalibratedObjects(Container):
+    alias items: tree.items
+    alias headers: tree.horizontal_headers
 
-    def __init__(self, items, manager):
-        groups = []
-        for i in sorted(items):
-            nodes = [Node(item=c, manager=manager) for c in sorted(i.list_calibrations(), reverse=True)]
-            groups.append(Group(item=i, subitems=nodes))
-        self.groups = groups
+    TreeView: tree:
+        horizontal_headers = ['Name']
+        resize_mode = 'resize_to_contents'
+        horizontal_stretch = True
+        Looper:
+            iterable << parent.items
+            TreeViewItem:
+                text << loop_item.item.name
+                items << loop_item.subitems
+                checkable = True
+                checked := loop_item.selected
+                Looper:
+                    iterable << parent.items
+                    TreeViewItem:
+                        checkable = True
+                        checked := loop_item.selected
+                        text << str(loop_item.item.datetime)
 
 
+################################################################################
+# Main window
+################################################################################
 enamldef Main(MainWindow):
 
     title = 'Calibration'
@@ -221,10 +292,11 @@ enamldef Main(MainWindow):
             layout = AreaLayout(
                 HSplitLayout(
                     VSplitLayout('settings',
-                                 TabLayout('starship_list', 'mic_list'),
+                                 VSplitLayout('inear_list', 'starship_list', 'mic_list'),
                                  sizes=[50, 600],
                                  ),
                     TabLayout(
+                        'inear_sens_plot',
                         'starship_sens_plot',
                         'mic_sens_plot',
                     ),
@@ -236,26 +308,29 @@ enamldef Main(MainWindow):
                 name = 'settings'
                 title = 'Settings'
                 closable = False
-                stretch = 1
+                stretch = 0
 
                 Container:
                     constraints = [
                         vbox(
                             hbox(mic_label, hbox(mic_select, mic_add, spacing=0), mic_cal_start),
                             hbox(starship_label,
-                                hbox(starship_select, starship_add, spacing=0),
-                                hbox(golay_start, chirp_start, spacing=0)
+                                 hbox(starship_select, starship_add, spacing=0),
+                                 hbox(golay_start, chirp_start, spacing=0)
                                 ),
+                            hbox(inear_label, hbox(inear_select, inear_add, spacing=0), inear_start),
                         ),
                         mic_add.width == 30,
                         starship_add.width == 30,
-                        align('width', mic_label, starship_label),
-                        align('width', mic_select, starship_select),
-                        align('left', mic_label, starship_label),
-                        align('left', mic_select, starship_select),
+                        inear_add.width == 30,
+                        align('width', mic_label, starship_label, inear_label),
+                        align('width', mic_select, starship_select, inear_select),
+                        align('left', mic_label, starship_label, inear_label),
+                        align('left', mic_select, starship_select, inear_select),
                         align('v_center', mic_label, mic_select, mic_add, mic_cal_start),
                         align('v_center', starship_label, starship_select, starship_add),
                         align('v_center', golay_start, chirp_start),
+                        align('v_center', inear_label, inear_select, inear_add, inear_start),
                     ]
 
                     Label: mic_label:
@@ -299,6 +374,24 @@ enamldef Main(MainWindow):
                         clicked ::
                             settings.run_pt_cal_chirp()
 
+                    Label: inear_label:
+                        text = 'Ear'
+
+                    ObjectCombo: inear_select:
+                        items = sorted(cfts_inear_loader.list_names())
+                        selected := settings.ear
+
+                    PushButton: inear_add:
+                        text = '+'
+                        clicked ::
+                            popup = AddItem(self, combo=inear_select, label='Ear')
+                            popup.show()
+
+                    PushButton: inear_start:
+                        text = 'Run'
+                        clicked ::
+                            settings.run_inear_cal_chirp()
+
             DockItem:
                 name = 'mic_sens_plot'
                 title = 'Microphone Sensitivity'
@@ -307,7 +400,7 @@ enamldef Main(MainWindow):
 
                 Container:
                     PGCanvas: microphone_plot:
-                        attr manager = PlotManager()
+                        attr manager = MicrophonePlotManager()
                         component << manager.component
 
             DockItem:
@@ -318,55 +411,46 @@ enamldef Main(MainWindow):
 
                 Container:
                     PGCanvas: starship_plot:
-                        attr manager = PlotManager()
+                        attr manager = StarshipPlotManager()
                         component << manager.component
 
-            DockItem: dock_item:
+            DockItem:
+                name = 'inear_sens_plot'
+                title = 'In-Ear Sensitivity'
+                closable = False
+                stretch = 10
+
+                Container:
+                    PGCanvas: inear_plot:
+                        attr manager = InEarPlotManager()
+                        component << manager.component
+
+            DockItem:
+                name = 'inear_list'
+                title = 'In-Ear Calibrations'
+                closable = False
+                stretch = 0
+
+                CalibratedObjects:
+                    items << [ObjectGroup(o, inear_plot.manager) \
+                            for o in sorted(inear_manager.list_objects())]
+
+            DockItem:
                 name = 'starship_list'
                 title = 'Starship Calibrations'
                 closable = False
+                stretch = 0
 
-                Container:
-                    TreeView:
-                        attr objects = Groups(starship_manager.list_objects(),
-                                              starship_plot.manager)
-                        horizontal_headers = ['Calibration']
-                        resize_mode = 'resize_to_contents'
-                        horizontal_stretch = True
-                        items << objects.groups
-                        Looper:
-                            iterable << parent.items
-                            TreeViewItem:
-                                text << loop_item.item.name
-                                items << loop_item.subitems
-                                checkable = True
-                                checked := loop_item.selected
-                                Looper:
-                                    iterable << parent.items
-                                    TreeViewItem:
-                                        checkable = True
-                                        checked := loop_item.selected
-                                        text << str(loop_item.item.datetime)
+                CalibratedObjects:
+                    items << [ObjectGroup(o, starship_plot.manager) \
+                              for o in sorted(starship_manager.list_objects())]
 
             DockItem:
                 name = 'mic_list'
                 title = 'Microphone Calibrations'
                 closable = False
+                stretch = 0
 
-                Container:
-                    TreeView:
-                        horizontal_headers = ['Calibration']
-                        resize_mode = 'resize_to_contents'
-                        horizontal_stretch = True
-                        items << sorted(microphone_manager.list_objects())
-                        Looper:
-                            iterable << parent.items
-                            TreeViewItem:
-                                text << loop_item.name
-                                items << sorted(loop_item.list_calibrations(), reverse=True)
-                                checkable = True
-                                Looper:
-                                    iterable << parent.items
-                                    TreeViewItem:
-                                        checkable = True
-                                        text << str(loop_item.datetime)
+                CalibratedObjects:
+                    items << [ObjectGroup(o, microphone_plot.manager) \
+                              for o in sorted(microphone_manager.list_objects())]
