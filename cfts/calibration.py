@@ -243,8 +243,8 @@ class CFTSStarshipCalibration(Calibration):
     def load(self):
         index_col = ['n_bits', 'output_gain', 'frequency']
         sens = pd.read_csv(self.filename / 'golay_sens.csv', index_col=index_col)
-        n_bits = sens.index.unique('n_bits').max()
-        output_gain = sens.index.unique('output_gain').max()
+        n_bits = int(sens.index.unique('n_bits').max())
+        output_gain = float(sens.index.unique('output_gain').max())
         s = sens.loc[n_bits, output_gain]
         attrs ={
             'calibration_file': str(self.filename),
@@ -331,7 +331,18 @@ class CFTSInEarCalibration(Calibration):
         return dt.datetime.strptime(datestr, '%Y%m%d-%H%M%S')
 
     def load(self):
-        pass
+        index_col = ['hw_ao_chirp_level', 'frequency']
+        sens = pd.read_csv(self.filename / 'chirp_sens.csv', index_col=index_col)
+        level = int(sens.index.unique('hw_ao_chirp_level').max())
+        s = sens.loc[level]
+        attrs ={
+            'calibration_file': str(self.filename),
+            'name': self.name,
+            'string': self.to_string(),
+            'class': self.qualname,
+            'level': level,
+        }
+        return InterpCalibration(s.index.values, s['norm_spl'].values, attrs=attrs)
 
 
 class CFTSInEarLoader(CFTSBaseLoader):
