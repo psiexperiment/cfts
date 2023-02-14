@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 
 from atom.api import Atom, Bool, Float, List, Str, Value
@@ -11,13 +12,15 @@ import enaml
 with enaml.imports():
     from psi.data.plots_manifest import PGCanvas
 
+from enaml.colors import Color
 from enaml.core.api import Looper
 from enaml.layout.api import (
     align, hbox, spacer, vbox, AreaLayout, HSplitLayout, VSplitLayout, TabLayout
 )
+from enaml.stdlib.message_box import question
 from enaml.widgets.api import (
-    Container, Label, Field, Form, MainWindow, ObjectCombo, PopupView,
-    PushButton, DockArea, DockItem,
+    Action, ActionGroup, Container, Label, Field, Form, MainWindow, Menu, MenuBar,
+    ObjectCombo, PopupView, PushButton, DockArea, DockItem,
 )
 from enamlx.widgets.api import TreeView, TreeViewItem, TreeViewColumn
 
@@ -217,16 +220,20 @@ class BasePlotManager:
 
     def plot(self, calibration):
         if calibration not in self.plots:
-            self.plots[calibration] = self.make_plot(calibration)
-
-        self.legend.addItem(self.plots[calibration], str(calibration))
-        self.vb.addItem(self.plots[calibration])
+            color, plot = self.make_plot(calibration)
+            color = Color(color.red(), color.green(), color.blue(), color.alpha())
+            self.plots[calibration] = color, plot
+        color, plot = self.plots[calibration]
+        self.legend.addItem(plot, str(calibration))
+        self.vb.addItem(plot)
+        return color
 
     def remove(self, calibration):
         if calibration not in self.plots:
             return
-        self.legend.removeItem(self.plots[calibration])
-        self.vb.removeItem(self.plots[calibration])
+        _, plot = self.plots[calibration]
+        self.legend.removeItem(plot)
+        self.vb.removeItem(plot)
 
 
 class StarshipPlotManager(BasePlotManager):
@@ -239,7 +246,7 @@ class StarshipPlotManager(BasePlotManager):
         x = np.log10(cal.frequency[1:])
         y = cal.sensitivity[1:]
         plot.setData(x, y)
-        return plot
+        return color, plot
 
 
 class InEarPlotManager(BasePlotManager):
@@ -252,7 +259,7 @@ class InEarPlotManager(BasePlotManager):
         x = np.log10(cal.frequency[1:])
         y = cal.sensitivity[1:]
         plot.setData(x, y)
-        return plot
+        return color, plot
 
 
 class MicrophonePlotManager(BasePlotManager):
@@ -266,7 +273,7 @@ class MicrophonePlotManager(BasePlotManager):
         x = np.log10(psd.index.values)
         y = psd.values
         plot.setData(x, y)
-        return plot
+        return color, plot
 
 
 ################################################################################
@@ -276,12 +283,14 @@ class ObjectNode(Atom):
     selected = Bool(False)
     item = Value()
     manager = Value()
+    color = Value(None)
 
     def _observe_selected(self, event):
         if self.selected:
-            self.manager.plot(self.item)
+            self.color = self.manager.plot(self.item)
         else:
             self.manager.remove(self.item)
+            self.color = None
 
 
 class ObjectGroup(Atom):
@@ -290,6 +299,7 @@ class ObjectGroup(Atom):
     subitems = List(ObjectNode)
     item = Value()
     manager = Value()
+    color = Value(None)
 
     def __init__(self, item, manager):
         self.item = item
@@ -297,8 +307,11 @@ class ObjectGroup(Atom):
         self.update_subitems()
 
     def update_subitems(self):
-        subitems = self.subitems[:]
-        for obj in self.item.list_calibrations():
+        objects = sorted(self.item.list_calibrations(), reverse=True)
+        self.subitems = [ObjectNode(item=obj, manager=self.manager) for obj in objects]
+        return
+        subitems = [i for i in self.subitems if i.item in objects]
+        for obj in objects:
             for i in subitems:
                 if obj == i.item:
                     break
@@ -309,6 +322,7 @@ class ObjectGroup(Atom):
     def _observe_subitems(self, event):
         for i in self.subitems:
             i.observe('selected', self._check_selected)
+            i.observe('color', self._check_color)
 
     def _check_selected(self, event):
         for i in self.subitems:
@@ -318,6 +332,14 @@ class ObjectGroup(Atom):
                 self.skip_autoselect = False
                 return
         self.selected = False
+
+    def _check_color(self, event):
+        for i in self.subitems:
+            if i.color is not None:
+                self.color = i.color
+                break
+        else:
+            self.color = None
 
     def _observe_selected(self, event):
         if self.selected:
@@ -339,14 +361,19 @@ class ObjectCollection(Atom):
         self.update_groups()
 
     def update_groups(self):
-        groups = self.groups[:]
-        for obj in self.manager.list_objects():
+        objects = sorted(self.manager.list_objects())
+        self.groups = [ObjectGroup(obj, self.plot_manager) for obj in objects]
+        return
+        objects = self.manager.list_objects()
+        groups = [g for g in self.groups if g.item in objects]
+        for obj in objects:
             for i in groups:
                 if obj == i.item:
                     i.update_subitems()
                     break
             else:
                 groups.append(ObjectGroup(obj, self.plot_manager))
+
         self.groups = sorted(groups, key=lambda x: x.item)
 
 
@@ -361,17 +388,35 @@ enamldef CalibratedObjects(Container):
         items << collection.groups
         Looper:
             iterable << parent.items
-            TreeViewItem:
+            TreeViewItem: tree_group:
+                attr group << loop_item
                 text << loop_item.item.name
                 items << loop_item.subitems
                 checkable = True
                 checked := loop_item.selected
+                background << loop_item.color
                 Looper:
                     iterable << parent.items
-                    TreeViewItem:
+                    TreeViewItem: tree_node:
                         checkable = True
                         checked := loop_item.selected
                         text << str(loop_item.item.datetime)
+                        background << loop_item.color
+                        Menu:
+                            Action:
+                                text = 'Set as reference'
+                            Action:
+                                separator = True
+                            Action:
+                                text = 'Delete'
+                                triggered ::
+                                    name = f'{loop_item.item.datetime} from {loop_item.item.name}'
+                                    q = f'Are you sure you want to delete {name}?'
+                                    button = question(tree_node, '', q)
+                                    if button.text == 'Yes':
+                                        shutil.rmtree(loop_item.item.filename)
+                                        #tree_group.group.update_subitems()
+                                        collection.update_groups()
 
 
 ################################################################################
@@ -382,14 +427,25 @@ enamldef Main(MainWindow):
     title = 'Calibration'
     initial_size = (1248, 768)
 
+    MenuBar:
+        Menu:
+            title = '&Calibrate'
+            ActionGroup:
+                Action:
+                    text = '&Microphone'
+                Action:
+                    text = '&Starship'
+                Action:
+                    text = '&In-Ear'
+
     Container:
         DockArea: area:
             layout = AreaLayout(
                 HSplitLayout(
                     VSplitLayout(
                         TabLayout(*[di.name for di in children if di.name.startswith('settings')]),
-                        VSplitLayout('inear_list', 'starship_list', 'mic_list'),
-                        sizes=[50, 600],
+                        'inear_list', 'starship_list', 'mic_list',
+                        sizes=[50, 200, 200, 200],
                     ),
                     TabLayout(
                         'inear_sens_plot',
