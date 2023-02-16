@@ -3,7 +3,7 @@ import os
 import shutil
 import subprocess
 
-from atom.api import Atom, Bool, Float, List, Str, Value
+from atom.api import Atom, Bool, Float, List, Property, Str, Value
 import numpy as np
 from palettable.tableau import Tableau_20
 import pyqtgraph as pg
@@ -13,10 +13,11 @@ with enaml.imports():
     from psi.data.plots_manifest import PGCanvas
 
 from enaml.colors import Color
-from enaml.core.api import Looper
+from enaml.core.api import DynamicTemplate, Looper
 from enaml.layout.api import (
     align, hbox, spacer, vbox, AreaLayout, HSplitLayout, VSplitLayout, TabLayout
 )
+from enaml.stdlib.fields import FloatField
 from enaml.stdlib.message_box import question
 from enaml.widgets.api import (
     Action, ActionGroup, Container, Label, Field, Form, MainWindow, Menu, MenuBar,
@@ -28,8 +29,9 @@ from psi import get_config, get_config_folder
 from psi.data.plots import make_color
 
 from cfts.calibration import (
-    CFTSInEarLoader, CFTSMicrophoneLoader, CFTSStarshipLoader, inear_manager,
-    microphone_manager, starship_manager
+    CFTSInEarLoader, CFTSMicrophoneLoader, CFTSStarshipLoader,
+    CFTSMicrophoneCalibration, inear_manager, microphone_manager,
+    starship_manager
 )
 from cfts.util import list_starship_connections
 
@@ -40,15 +42,9 @@ cfts_inear_loader = CFTSInEarLoader()
 CAL_ROOT = get_config('CAL_ROOT')
 
 
-class OutputSettings(Atom):
+class PersistentSettings(Atom):
 
-    output = Str()
-    pistonphone = Str()
-    microphone = Str()
-    microphone_gain = Float(20)
-    starship = Str()
-    starship_gain = Float(40)
-    ear = Str()
+    filename = Property()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -57,15 +53,79 @@ class OutputSettings(Atom):
     def __del__(self):
         self.save_config()
 
-    def _default_starship(self):
-        try:
-            return next(cfts_starship_loader.list_names())
-        except StopIteration:
-            return ''
+    def save_config(self):
+        file = get_config_folder() / 'cfts' / 'calibration' / self.filename
+        file.parent.mkdir(exist_ok=True, parents=True)
+        config = {m: getattr(self, m) for m in self.members()}
+        file.write_text(json.dumps(config, indent=2))
+
+    def load_config(self):
+        file = get_config_folder() / 'cfts' / 'calibration' / self.filename
+        if not file.exists():
+            return
+        config = json.loads(file.read_text())
+        for k, v in config.items():
+            try:
+                setattr(self, k, v)
+            except:
+                pass
+
+    def _run_cal(self, filename, experiment, env=None):
+        if env is None:
+            env = {}
+        env = {**os.environ, **env, **self.get_env_vars()}
+        args = ['psi', experiment, str(filename)]
+        print(' '.join(args))
+        subprocess.check_output(args, env=env)
+
+
+class MicrophoneSettings(PersistentSettings):
+
+    pistonphone = Str()
+    pistonphone_frequency = Float(1e3)
+    pistonphone_level = Float(114)
+    microphone = Str()
+    microphone_gain = Float(20)
+
+    def get_env_vars(self):
+        mic = microphone_manager.get_object(self.microphone)
+        cal = mic.get_current_calibration()
+        return {
+            'CFTS_CAL_MIC': cal.to_string(),
+            'CFTS_CAL_MIC_GAIN': str(self.microphone_gain),
+            'CFTS_PISTONPHONE_LEVEL': str(self.pistonphone_level),
+            'CFTS_PISTONPHONE_FREQUENCY': str(self.pistonphone_frequency),
+        }
+
+    def _get_filename(self):
+        return 'microphone.json'
 
     def _default_microphone(self):
         try:
             return next(cfts_mic_loader.list_names())
+        except StopIteration:
+            return ''
+
+    def run_mic_cal(self):
+        filename = f'{{date_time}} {self.microphone} {self.pistonphone}'
+        filename = ' '.join(filename.split())
+        pathname = CAL_ROOT / 'microphone' / self.microphone / filename
+        self._run_cal(pathname, 'pistonphone_calibration')
+
+
+class OutputSettings(PersistentSettings):
+
+    output = Str()
+    starship = Str()
+    starship_gain = Float(40)
+    ear = Str()
+
+    def _get_filename(self):
+        return f'output_{self.output}.json'
+
+    def _default_starship(self):
+        try:
+            return next(cfts_starship_loader.list_names())
         except StopIteration:
             return ''
 
@@ -76,76 +136,33 @@ class OutputSettings(Atom):
             return ''
 
     def get_env_vars(self):
-        env = {
+        starship = starship_manager.get_object(self.starship)
+        cal = starship.get_current_calibration()
+        return {
             'CFTS_TEST_STARSHIP': self.output,
             f'CFTS_STARSHIP_{self.output}_GAIN': str(self.starship_gain),
-            'CFTS_CAL_MIC_GAIN': str(self.microphone_gain)
+            f'CFTS_STARSHIP_{self.output}': cal.to_string()
         }
-        try:
-            starship = starship_manager.get_object(self.starship)
-            cal = starship.get_current_calibration()
-            env[f'CFTS_STARSHIP_{self.output}'] = cal.to_string()
-        except:
-            pass
-        try:
-            mic = microphone_manager.get_object(self.microphone)
-            cal = mic.get_current_calibration()
-            env['CFTS_CAL_MIC'] = cal.to_string()
-        except:
-            pass
-        return env
 
-    def save_config(self):
-        filename = f'output_{self.output}.json'
-        file = get_config_folder() / 'cfts' / 'calibration' / filename
-        file.parent.mkdir(exist_ok=True, parents=True)
-        config = {
-            'microphone': self.microphone,
-            'microphone_gain': self.microphone_gain,
-            'starship': self.starship,
-            'starship_gain': self.starship_gain,
-            'ear': self.ear,
-        }
-        file.write_text(json.dumps(config, indent=2))
-
-    def load_config(self):
-        filename = f'output_{self.output}.json'
-        file = get_config_folder() / 'cfts' / 'calibration' / filename
-        if not file.exists():
-            return
-        config = json.loads(file.read_text())
-        for k, v in config.items():
-            setattr(self, k, v)
-
-    def run_mic_cal(self):
-        filename = f'{{date_time}} {self.microphone} {self.pistonphone}'
-        filename = ' '.join(filename.split())
-        pathname = CAL_ROOT / 'microphone' / self.microphone / filename
-        args = ['psi', 'pistonphone_calibration', str(pathname)]
-        print(' '.join(args))
-        subprocess.check_output(args, env=dict(os.environ, **self.get_env_vars()))
-
-    def _run_cal(self, experiment):
-        filename = f'{{date_time}} {self.starship} {self.microphone} {experiment}'
+    def run_pt_cal_golay(self, mic_settings):
+        filename = f'{{date_time}} {self.starship} {mic_settings.microphone} pt_calibration_golay'
         filename = ' '.join(filename.split())
         pathname = CAL_ROOT / 'starship' / self.starship / filename
-        args = ['psi', experiment, str(pathname)]
-        print(' '.join(args))
-        subprocess.check_output(args, env=dict(os.environ, **self.get_env_vars()))
-
-    def run_pt_cal_golay(self):
-        self._run_cal('pt_calibration_golay')
+        env = mic_settings.get_env_vars()
+        self._run_cal(pathname, 'pt_calibration_golay', env)
 
     def run_pt_cal_chirp(self):
-        self._run_cal('pt_calibration_chirp')
+        filename = f'{{date_time}} {self.starship} {mic_settings.microphone} pt_calibration_chirp'
+        filename = ' '.join(filename.split())
+        pathname = CAL_ROOT / 'starship' / self.starship / filename
+        env = mic_settings.get_env_vars()
+        self._run_cal(pathname, 'pt_calibration_chirp', env)
 
     def run_inear_cal_chirp(self, save=True):
         filename = f'{{date_time}} {self.ear} {self.starship}'
         filename = ' '.join(filename.split())
         pathname = CAL_ROOT / 'inear' / self.ear / filename
-        args = ['psi', 'inear_speaker_calibration_chirp', str(pathname)]
-        print(' '.join(args))
-        subprocess.check_output(args, env=dict(os.environ, **self.get_env_vars()))
+        self._run_cal(pathname, 'inear_speaker_calibration_chirp')
 
 
 enamldef AddItem(PopupView): popup:
@@ -378,6 +395,17 @@ class ObjectCollection(Atom):
         self.groups = sorted(groups, key=lambda x: x.item)
 
 
+template CalibratedObjectTemplate(item, MemberType: CFTSMicrophoneCalibration):
+    TreeViewColumn:
+        text << f'{item.sens:.2f} mV/Pa'
+    TreeViewColumn:
+        text << item.pistonphone
+
+
+template CalibratedObjectTemplate(item, MemberType):
+    pass
+
+
 enamldef CalibratedObjects(Container):
     alias headers: tree.horizontal_headers
     attr collection
@@ -416,8 +444,10 @@ enamldef CalibratedObjects(Container):
                                     button = question(tree_node, '', q)
                                     if button.text == 'Yes':
                                         shutil.rmtree(loop_item.item.filename)
-                                        #tree_group.group.update_subitems()
                                         collection.update_groups()
+                        DynamicTemplate:
+                            base = CalibratedObjectTemplate
+                            args = (loop_item.item, type(loop_item.item))
 
 
 ################################################################################
@@ -427,6 +457,9 @@ enamldef Main(MainWindow):
 
     title = 'Calibration'
     initial_size = (1248, 768)
+
+    attr mic_settings = MicrophoneSettings()
+    attr output_settings = [OutputSettings(output=o) for o in list_starship_connections()]
 
     MenuBar:
         Menu:
@@ -444,9 +477,10 @@ enamldef Main(MainWindow):
             layout = AreaLayout(
                 HSplitLayout(
                     VSplitLayout(
-                        TabLayout(*[di.name for di in children if di.name.startswith('settings')]),
+                        'settings_mic',
+                        TabLayout(*[di.name for di in children if 'output' in di.name]),
                         'inear_list', 'starship_list', 'mic_list',
-                        sizes=[50, 200, 200, 200],
+                        sizes=[25, 25, 200, 200, 200],
                     ),
                     TabLayout(
                         'inear_sens_plot',
@@ -457,32 +491,109 @@ enamldef Main(MainWindow):
                 ),
             )
 
+            DockItem:
+                name = 'settings_mic'
+                title = 'Microphone'
+                closable = False
+                stretch = 0
+
+                attr settings = mic_settings
+
+                Container:
+                    constraints = [
+                        vbox(
+                            hbox(
+                                pistonphone_label,
+                                pistonphone_select,
+                                pistonphone_frequency,
+                                pistonphone_frequency_label,
+                                pistonphone_level,
+                                pistonphone_level_label,
+                                spacer(0),
+                            ),
+                            hbox(
+                                mic_label,
+                                hbox(mic_select, mic_add, mic_gain, spacing=0),
+                                mic_gain_label,
+                                spacer(0),
+                                mic_cal_start,
+                                spacing=5,
+                            ),
+                            spacing=5,
+                        ),
+                        mic_add.width == 25,
+                        pistonphone_frequency.width == 50,
+                        pistonphone_level.width == 50,
+                        align('width', pistonphone_select, mic_select),
+                        align('left', pistonphone_label, mic_label),
+                        align('left', pistonphone_select, mic_select),
+                        align('v_center', pistonphone_label,
+                                pistonphone_select, pistonphone_frequency,
+                                pistonphone_frequency_label,
+                                pistonphone_level, pistonphone_level_label),
+                        align('v_center', mic_label, mic_select, mic_add,
+                                mic_gain, mic_gain_label, mic_cal_start),
+                    ]
+
+                    Label: pistonphone_label:
+                        text = 'Pistonphone'
+
+                    Field: pistonphone_select:
+                        text := settings.pistonphone
+
+                    FloatField: pistonphone_frequency:
+                        value := settings.pistonphone_frequency
+
+                    Label: pistonphone_frequency_label:
+                        text = 'Hz @'
+
+                    FloatField: pistonphone_level:
+                        value := settings.pistonphone_level
+
+                    Label: pistonphone_level_label:
+                        text = 'dB SPL'
+
+                    Label: mic_label:
+                        text = 'Microphone'
+
+                    ObjectCombo: mic_select:
+                        items = sorted(cfts_mic_loader.list_names())
+                        selected := settings.microphone
+
+                    PushButton: mic_add:
+                        text = '+'
+                        clicked ::
+                            popup = AddItem(self, combo=mic_select, label='Microphone')
+                            popup.show()
+
+                    ObjectCombo: mic_gain:
+                        items = [-20, -10, 0, 10, 20, 30, 40, 50]
+                        selected := settings.microphone_gain
+
+                    Label: mic_gain_label:
+                        text = 'dB gain'
+
+                    PushButton: mic_cal_start:
+                        text = 'Calibrate'
+                        enabled << bool(settings.microphone)
+                        clicked ::
+                            settings.run_mic_cal()
+                            mic_tree.collection.update_groups()
+
             Looper:
-                iterable << list(list_starship_connections())
+                iterable << output_settings
 
                 DockItem:
-                    name = f'settings_{loop_item}'
-                    title = f'Output {loop_item}'
+                    name = f'settings_output_{loop_item.output}'
+                    title = f'Output {loop_item.output}'
                     closable = False
                     stretch = 0
 
-                    attr settings = OutputSettings(output=loop_item)
+                    attr settings = loop_item
 
                     Container:
                         constraints = [
                             vbox(
-                                hbox(
-                                    pistonphone_label,
-                                    hbox(pistonphone_select, spacing=0)
-                                ),
-                                hbox(
-                                    mic_label,
-                                    hbox(mic_select, mic_add, mic_gain, spacing=0),
-                                    mic_gain_label,
-                                    spacer(0),
-                                    mic_cal_start,
-                                    spacing=5,
-                                ),
                                 hbox(
                                     starship_label,
                                     hbox(starship_select, starship_add, starship_gain, spacing=0),
@@ -491,64 +602,25 @@ enamldef Main(MainWindow):
                                     hbox(golay_start, chirp_start, spacing=0),
                                     spacing=5,
                                 ),
-                                hbox(inear_label, 
-                                     hbox(inear_select, inear_add, spacing=0), 
+                                hbox(inear_label,
+                                     hbox(inear_select, inear_add, spacing=0),
                                      spacer(0),
                                      inear_start),
                                 spacing=5,
                             ),
-                            mic_add.width == 25,
                             starship_add.width == 25,
                             inear_add.width == 25,
-                            align('width', pistonphone_select, mic_select, starship_select, inear_select),
-                            align('left', pistonphone_label, mic_label, starship_label, inear_label),
-                            align('left', pistonphone_select, mic_select, starship_select, inear_select),
-                            align('width', mic_gain, starship_gain),
-                            align('left', mic_cal_start, golay_start, inear_start),
-                            align('right', mic_cal_start, chirp_start, inear_start),
-                            align('v_center', pistonphone_label, pistonphone_select),
-                            align('v_center', mic_label, mic_select, mic_add,
-                                  mic_gain, mic_gain_label, mic_cal_start),
+                            align('width', starship_select, inear_select),
+                            align('left', starship_label, inear_label),
+                            align('left', starship_select, inear_select),
+                            align('left', golay_start, inear_start),
+                            align('right', chirp_start, inear_start),
                             align('v_center', starship_label, starship_select,
                                   starship_add, starship_gain,
                                   starship_gain_label, golay_start,
                                   chirp_start),
                             align('v_center', inear_label, inear_select, inear_add, inear_start),
                         ]
-
-                        Label: pistonphone_label:
-                            text = 'Pistonphone'
-
-                        Field: pistonphone_select:
-                            text := settings.pistonphone
-
-
-                        Label: mic_label:
-                            text = 'Microphone'
-
-                        ObjectCombo: mic_select:
-                            items = sorted(cfts_mic_loader.list_names())
-                            selected := settings.microphone
-
-                        PushButton: mic_add:
-                            text = '+'
-                            clicked ::
-                                popup = AddItem(self, combo=mic_select, label='Microphone')
-                                popup.show()
-
-                        ObjectCombo: mic_gain:
-                            items = [-20, -10, 0, 10, 20, 30, 40, 50]
-                            selected := settings.microphone_gain
-
-                        Label: mic_gain_label:
-                            text = 'dB gain'
-
-                        PushButton: mic_cal_start:
-                            text = 'Calibrate'
-                            enabled << bool(settings.microphone)
-                            clicked ::
-                                settings.run_mic_cal()
-                                mic_tree.collection.update_groups()
 
                         Label: starship_label:
                             text = 'Starship'
@@ -572,16 +644,16 @@ enamldef Main(MainWindow):
 
                         PushButton: golay_start:
                             text = 'Golay'
-                            enabled << bool(settings.microphone) and bool(settings.starship)
+                            enabled << bool(mic_settings.microphone) and bool(settings.starship)
                             clicked ::
-                                settings.run_pt_cal_golay()
+                                settings.run_pt_cal_golay(mic_settings)
                                 starship_tree.collection.update_groups()
 
                         PushButton: chirp_start:
                             text = 'Chirp'
-                            enabled << bool(settings.microphone) and bool(settings.starship)
+                            enabled << bool(mic_settings.microphone) and bool(settings.starship)
                             clicked ::
-                                settings.run_pt_cal_chirp()
+                                settings.run_pt_cal_chirp(mic_settings)
                                 starship_tree.collection.update_groups()
 
                         Label: inear_label:
@@ -666,6 +738,7 @@ enamldef Main(MainWindow):
                 stretch = 0
 
                 CalibratedObjects: mic_tree:
+                    headers = ['Name', 'Sens', 'Pistonphone']
                     collection = ObjectCollection(
                         microphone_manager, microphone_plot.manager
                     )

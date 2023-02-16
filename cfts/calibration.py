@@ -23,6 +23,8 @@ class Calibration:
         return f'Calibration :: {self.name} ({self.datetime} - {self.label})'
 
     def _get_cmp_key(self, obj):
+        if obj is None:
+            return (None, None, None)
         return obj.name, obj.datetime, obj.label
 
     def __lt__(self, obj):
@@ -161,6 +163,8 @@ class EPLStarshipCalibration(Calibration):
         self.qualname = f'{self.__class__.__module__}.{self.__class__.__name__}'
 
     def _get_cmp_key(self, obj):
+        if obj is None:
+            return (None, None, None, None)
         return obj.name, obj.datetime, obj.smoothed, obj.label
 
     @property
@@ -276,6 +280,10 @@ class CFTSMicrophoneCalibration(Calibration):
         self.name = name
         self.filename = Path(filename)
         self.qualname = f'{self.__class__.__module__}.{self.__class__.__name__}'
+
+    @property
+    def pistonphone(self):
+        return self.filename.stem.rsplit(' ', 1)[1]
 
     @property
     def datetime(self):
