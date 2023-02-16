@@ -43,6 +43,7 @@ CAL_ROOT = get_config('CAL_ROOT')
 class OutputSettings(Atom):
 
     output = Str()
+    pistonphone = Str()
     microphone = Str()
     microphone_gain = Float(20)
     starship = Str()
@@ -117,7 +118,7 @@ class OutputSettings(Atom):
             setattr(self, k, v)
 
     def run_mic_cal(self):
-        filename = f'{{date_time}} {self.microphone}'
+        filename = f'{{date_time}} {self.microphone} {self.pistonphone}'
         filename = ' '.join(filename.split())
         pathname = CAL_ROOT / 'microphone' / self.microphone / filename
         args = ['psi', 'pistonphone_calibration', str(pathname)]
@@ -471,6 +472,10 @@ enamldef Main(MainWindow):
                         constraints = [
                             vbox(
                                 hbox(
+                                    pistonphone_label,
+                                    hbox(pistonphone_select, spacing=0)
+                                ),
+                                hbox(
                                     mic_label,
                                     hbox(mic_select, mic_add, mic_gain, spacing=0),
                                     mic_gain_label,
@@ -495,12 +500,13 @@ enamldef Main(MainWindow):
                             mic_add.width == 25,
                             starship_add.width == 25,
                             inear_add.width == 25,
-                            align('width', mic_select, starship_select, inear_select),
-                            align('left', mic_label, starship_label, inear_label),
-                            align('left', mic_select, starship_select, inear_select),
+                            align('width', pistonphone_select, mic_select, starship_select, inear_select),
+                            align('left', pistonphone_label, mic_label, starship_label, inear_label),
+                            align('left', pistonphone_select, mic_select, starship_select, inear_select),
                             align('width', mic_gain, starship_gain),
                             align('left', mic_cal_start, golay_start, inear_start),
                             align('right', mic_cal_start, chirp_start, inear_start),
+                            align('v_center', pistonphone_label, pistonphone_select),
                             align('v_center', mic_label, mic_select, mic_add,
                                   mic_gain, mic_gain_label, mic_cal_start),
                             align('v_center', starship_label, starship_select,
@@ -509,6 +515,13 @@ enamldef Main(MainWindow):
                                   chirp_start),
                             align('v_center', inear_label, inear_select, inear_add, inear_start),
                         ]
+
+                        Label: pistonphone_label:
+                            text = 'Pistonphone'
+
+                        Field: pistonphone_select:
+                            text := settings.pistonphone
+
 
                         Label: mic_label:
                             text = 'Microphone'
