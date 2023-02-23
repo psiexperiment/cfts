@@ -152,7 +152,6 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
                 'level_name': manifest.level_name,
             }
 
-
         ExperimentAction:
             event = 'experiment_initialize'
             command = 'psi.context.initialize'
@@ -271,6 +270,12 @@ enamldef SAMEFRManifest(BaseEFRManifest):
             group_name = 'target'
 
         Parameter:
+            name = 'analysis_window'
+            label = 'SAM analysis window (s)'
+            default = 100e-3
+            group_name = 'target'
+
+        Parameter:
             name = 'fm'
             label = 'SAM tone FM (Hz)'
             default = 110
@@ -298,7 +303,7 @@ enamldef SAMEFRManifest(BaseEFRManifest):
 
         Expression:
             parameter = 'target_sam_tone_fc'
-            expression = 'fc'
+            expression = 'imul(fc, 1/analysis_window)'
 
         Expression:
             parameter = 'target_sam_tone_duration'

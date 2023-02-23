@@ -341,7 +341,7 @@ enamldef SAMEFRInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): man
 
     # Both the carrier and the sidebands need to be calibrated
     experiment = 'sam_efr'
-    outputs = {'target': ['fc', 'fm']}
+    outputs = {'target': ['target_sam_tone_fc', 'fm']}
     get_values = lambda values: set(v for fc, fm in values for v in (fc-fm, fc, fc+fm))
 
 
