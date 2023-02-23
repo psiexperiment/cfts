@@ -171,17 +171,17 @@ enamldef PluginPopup(PopupView): popup:
     arrow_size = 20
     VGroup:
         Looper:
-            iterable << paradigm_manager.get_paradigm(experiment.paradigm).plugins
+            iterable = paradigm_manager.get_paradigm(experiment.paradigm).plugins
             CheckBox:
-                checked << loop_item.name in experiment.plugins
+                checked = bool(loop_item.name in experiment.plugins)
                 checked ::
                     if checked:
                         if loop_item.name not in experiment.plugins:
                             experiment.plugins.append(loop_item.name)
-                        else:
-                            experiment.plugins.pop(loop_item.name)
-                text << loop_item.title
-                visible << not loop_item.required
+                    else:
+                        experiment.plugins.remove(loop_item.name)
+                text = loop_item.title
+                visible = not loop_item.required
 
 
 enamldef ExperimentSequence(GroupBox): experiment_box:
@@ -225,10 +225,9 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
         PushButton:
             constraints = [width == 30]
             text = '⚙'
-            visible << len([p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins if not p.required]) > 0
+            visible = len([p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins if not p.required]) > 0
             clicked ::
                 paradigm = paradigm_manager.get_paradigm(loop_item.paradigm)
-                available_plugins = paradigm.plugins[:]
                 popup = PluginPopup(parent=self, experiment=loop_item)
                 popup.show()
 
