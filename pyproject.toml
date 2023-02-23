@@ -10,10 +10,11 @@ maintainers = [
     {name = "Brad Buran", email="buran@ohsu.edu"},
 ]
 dependencies = [
-	"cftsdata",
+    "cftsdata",
     "psiaudio",
-	"psiexperiment",
+    "psiexperiment",
     "enaml[qt5-pyqt] >=0.13.0",
+    "enamlx >=0.6.2",
     "tqdm",
 ]
 dynamic = ["version"]
