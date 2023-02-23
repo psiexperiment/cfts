@@ -168,10 +168,11 @@ class Settings(Atom):
 
 enamldef PluginPopup(PopupView): popup:
     attr experiment
+    attr available_plugins
     arrow_size = 20
     VGroup:
         Looper:
-            iterable = paradigm_manager.get_paradigm(experiment.paradigm).plugins
+            iterable = available_plugins
             CheckBox:
                 checked = bool(loop_item.name in experiment.plugins)
                 checked ::
@@ -181,7 +182,6 @@ enamldef PluginPopup(PopupView): popup:
                     else:
                         experiment.plugins.remove(loop_item.name)
                 text = loop_item.title
-                visible = not loop_item.required
 
 
 enamldef ExperimentSequence(GroupBox): experiment_box:
@@ -223,12 +223,13 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
             to_string = lambda x: Path(x).stem
 
         PushButton:
+            attr plugins = [p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins \
+                            if not p.required and p.name != 'calibration_microphone']
             constraints = [width == 30]
             text = '⚙'
-            visible = len([p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins if not p.required]) > 0
+            visible = bool(plugins)
             clicked ::
-                paradigm = paradigm_manager.get_paradigm(loop_item.paradigm)
-                popup = PluginPopup(parent=self, experiment=loop_item)
+                popup = PluginPopup(parent=self, experiment=loop_item, available_plugins=plugins)
                 popup.show()
 
 
