@@ -94,17 +94,19 @@ CONTEXT_ITEM_DETAIL = {
 
     # SAM/RAM EFR
     'fm': {
-        'user_friendly_name': 'modulation frequencies',
+        'user_friendly_name': 'modulation frequency',
+        'user_friendly_name_plural': 'modulation frequencies',
         'step_unit': 'Hz',
         'unit': 'Hz',
         'order_user_managed': True,
     },
     'fc': {
-        'user_friendly_name': 'frequencies',
+        'user_friendly_name': 'carrier frequency',
+        'user_friendly_name_plural': 'carrier frequencies',
         'step_unit': 'octave',
         'unit': 'kHz',
         'order_user_managed': False,
-        'transform_fn': lambda x: (x * 1e3).round(0),
+        'transform_fn': lambda x: round(x * 1e3),
         'inverse_transform_fn': lambda x: x * 1e-3,
         'round_values': True,
         'range_fn': octave_space,
@@ -116,7 +118,7 @@ CONTEXT_ITEM_DETAIL = {
         'step_unit': 'octave',
         'unit': 'kHz',
         'order_user_managed': False,
-        'transform_fn': lambda x: (x * 1e3).round(0),
+        'transform_fn': lambda x: round(x * 1e3),
         'inverse_transform_fn': lambda x: x * 1e-3,
         'round_values': True,
         'range_fn': octave_space,

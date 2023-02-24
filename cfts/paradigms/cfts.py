@@ -130,7 +130,7 @@ ParadigmDescription(
 ParadigmDescription(
     'efr_sam', 'SAM EFR', 'ear', [
         selectable_starship_mixin,
-        {'manifest': CFTS_PATH + 'efr.SAMEFRManifest'},
+        {'manifest': CFTS_PATH + 'efr_epochs.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,
