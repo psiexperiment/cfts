@@ -17,7 +17,7 @@ from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, OrderedContextMeta, Parameter)
 
 from psi.context.selector import CartesianProduct
-from psi.controller.api import ExperimentAction
+from psi.controller.api import EngineStoppedException, ExperimentAction
 from psi.data.plots import (StackedEpochAveragePlot, TimeContainer, ViewBox)
 from psi.data.sinks.api import GroupedEpochCounter
 
@@ -180,7 +180,10 @@ def rebuffer(event):
     controller = event.workbench.get_plugin('psi.controller')
     output = controller.get_output('target')
     with output.engine.lock:
-        output.rebuffer(controller.get_ts() + 1.0)
+        try:
+            output.rebuffer(controller.get_ts() + 1.0)
+        except EngineStoppedException:
+            log.info('Failed to rebuffer because engine is stopped')
 
 
 enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
