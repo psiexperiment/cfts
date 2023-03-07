@@ -179,6 +179,9 @@ def skip_keys(event, output, frequency, keys):
 def rebuffer(event):
     controller = event.workbench.get_plugin('psi.controller')
     output = controller.get_output('target')
+    if output.queue.is_empty():
+        # Nothing to rebuffer
+        return
     with output.engine.lock:
         try:
             output.rebuffer(controller.get_ts() + 1.0)
