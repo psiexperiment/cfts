@@ -85,7 +85,7 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
                     mode = C.detrend_mode
                     RejectEpochs:
                         name = 'valid_erp'
-                        threshold = C.reject_threshold
+                        threshold = C.lookup('reject_threshold', True)
                         mode = C.reject_mode
 
     Extension:
