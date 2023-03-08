@@ -52,7 +52,7 @@ def configure_experiment(event):
     for frequency, level in max_level.items():
         sf = output.calibration.get_sf(frequency, level)
         max_sf[frequency] = sf
-    max_sf = max(max_sf.values()) * np.sqrt(2) * 1.01 * 2
+    max_sf = max(max_sf.values()) * np.sqrt(2) * 1.01 * 3
     output.channel.expected_range = (-max_sf, max_sf)
 
     # Set the EEG FFT to show only the modulation frequency
