@@ -51,21 +51,30 @@ def check_range(outputs, settings):
             sf = o.calibration.get_sf(f, l) * np.sqrt(2) * 1.01
 
             # If multiple tones are going out of a channel, then we need to
-            # assume they sum.
+            # assume they may sum at their peak.
             channel_sf[o.channel] = channel_sf.get(o.channel, 0) + sf
 
-        # Now, figure out the max SF for the good settings for each channel
         for c, sf in channel_sf.items():
+            # First, we check to see the required scaling factor exceeds the
+            # max range of any output channel for this particular setting. If
+            # it does, we exit the loop (and the else) is never executed. Since
+            # we are going to discard this setting, it should not be included
+            # in the determination of the max output for the channel.
             if sf > c.max_range[1]:
                 bad_settings.append(setting)
                 good_settings.remove(setting)
                 break
         else:
-            max_sf[c] = max(max_sf.get(c, -np.inf), sf)
+            # Ok, now we have established that this setting is doable, we go
+            # back through the channels and update the max SF for each channel!
+            for c, sf in channel_sf.items():
+                max_sf[c] = max(max_sf.get(c, -np.inf), sf)
 
     # Now, update the channel with the expected range.
     for channel, sf in max_sf.items():
         channel.expected_range = (-sf, sf)
+        log.info('Set expected range for channel %r to %f. Max range is %f',
+                 channel, sf, channel.max_range[1])
 
     return good_settings, bad_settings
 
