@@ -102,35 +102,10 @@ enamldef DPOAEThresholdManifest(PSIManifest): manifest:
                         print(self.data)
                         # There seems to be an initialization issue. Items are
                         # not getting bound properly. Probably need to set up a
-                        # plots manifest thing.
+                        # plots manifest thing. These print statements are
+                        # *not* debugging but to force the initialization
+                        # that's needed.
 
                     # TODO: Why is this not binding? I have to manually update
                     # in the dataframe_table below.
                     data << manifest.contribution.thresholds
-
-    Extension:
-        id = manifest.id + '.workspace'
-        point = 'psi.experiment.workspace'
-
-        DockItem:
-            closable = False
-            name = manifest.contribution.name
-            title = manifest.contribution.label
-
-            Container: th_container:
-                DataFrameTable: th_table:
-                    name = 'dpoae_threshold_table'
-                    header_resize_mode = 'contents'
-                    stretch_last_section = False
-                    columns_movable = False
-                    data << manifest.contribution.thresholds
-                    data ::
-                        # TODO: Why???
-                        th_plot.data = manifest.contribution.thresholds
-
-                    column_info = {
-                        'secondary_tone_frequency': {'label': 'F2'},
-                        'criterion': {'label': 'C'},
-                        'threshold': {'label': 'Th. (dB SPL)'},
-                    }
-                    columns = list(column_info.keys())
