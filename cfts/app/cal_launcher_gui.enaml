@@ -17,7 +17,7 @@ from enaml.core.api import DynamicTemplate, Looper
 from enaml.layout.api import (
     align, hbox, spacer, vbox, AreaLayout, HSplitLayout, VSplitLayout, TabLayout
 )
-from enaml.stdlib.fields import FloatField
+from enaml.stdlib.fields import FloatField, RegexField
 from enaml.stdlib.message_box import question
 from enaml.widgets.api import (
     Action, ActionGroup, Container, Label, Field, Form, MainWindow, Menu, MenuBar,
@@ -29,9 +29,9 @@ from psi import get_config, get_config_folder
 from psi.data.plots import make_color
 
 from cfts.calibration import (
-    CFTSInEarLoader, CFTSMicrophoneLoader, CFTSStarshipLoader,
-    CFTSMicrophoneCalibration, inear_manager, microphone_manager,
-    starship_manager
+    CFTSInEarCalibration, CFTSInEarLoader, CFTSMicrophoneLoader,
+    CFTSStarshipLoader, CFTSMicrophoneCalibration, inear_manager,
+    microphone_manager, starship_manager
 )
 from cfts.util import list_starship_connections
 
@@ -107,8 +107,7 @@ class MicrophoneSettings(PersistentSettings):
             return ''
 
     def run_mic_cal(self):
-        filename = f'{{date_time}} {self.microphone} {self.pistonphone}'
-        filename = ' '.join(filename.split())
+        filename = f'{{date_time}}_{self.microphone}_{self.pistonphone}'
         pathname = CAL_ROOT / 'microphone' / self.microphone / filename
         self._run_cal(pathname, 'pistonphone_calibration')
 
@@ -145,22 +144,19 @@ class OutputSettings(PersistentSettings):
         }
 
     def run_pt_cal_golay(self, mic_settings):
-        filename = f'{{date_time}} {self.starship} {mic_settings.microphone} pt_calibration_golay'
-        filename = ' '.join(filename.split())
+        filename = f'{{date_time}}_{self.starship}_{mic_settings.microphone}_golay'
         pathname = CAL_ROOT / 'starship' / self.starship / filename
         env = mic_settings.get_env_vars()
         self._run_cal(pathname, 'pt_calibration_golay', env)
 
     def run_pt_cal_chirp(self):
-        filename = f'{{date_time}} {self.starship} {mic_settings.microphone} pt_calibration_chirp'
-        filename = ' '.join(filename.split())
+        filename = f'{{date_time}}_{self.starship}_{mic_settings.microphone}_chirp'
         pathname = CAL_ROOT / 'starship' / self.starship / filename
         env = mic_settings.get_env_vars()
         self._run_cal(pathname, 'pt_calibration_chirp', env)
 
     def run_inear_cal_chirp(self, save=True):
-        filename = f'{{date_time}} {self.ear} {self.starship}'
-        filename = ' '.join(filename.split())
+        filename = f'{{date_time}}_{self.ear}_{self.starship}'
         pathname = CAL_ROOT / 'inear' / self.ear / filename
         self._run_cal(pathname, 'inear_speaker_calibration_chirp')
 
@@ -186,10 +182,11 @@ enamldef AddItem(PopupView): popup:
 
         Label: label:
             pass
-        Field: field:
-            pass
+        RegexField: field:
+            regex = f'^[\w\d]+$'
         PushButton: pb_ok:
             text = 'OK'
+            enabled << bool(field.text)
             clicked ::
                 items = combo.items[:]
                 items.append(field.text)
@@ -381,18 +378,6 @@ class ObjectCollection(Atom):
     def update_groups(self):
         objects = sorted(self.manager.list_objects())
         self.groups = [ObjectGroup(obj, self.plot_manager) for obj in objects]
-        return
-        objects = self.manager.list_objects()
-        groups = [g for g in self.groups if g.item in objects]
-        for obj in objects:
-            for i in groups:
-                if obj == i.item:
-                    i.update_subitems()
-                    break
-            else:
-                groups.append(ObjectGroup(obj, self.plot_manager))
-
-        self.groups = sorted(groups, key=lambda x: x.item)
 
 
 template CalibratedObjectTemplate(item, MemberType: CFTSMicrophoneCalibration):
@@ -400,6 +385,11 @@ template CalibratedObjectTemplate(item, MemberType: CFTSMicrophoneCalibration):
         text << f'{item.sens:.2f} mV/Pa'
     TreeViewColumn:
         text << item.pistonphone
+
+
+template CalibratedObjectTemplate(item, MemberType: CFTSInEarCalibration):
+    TreeViewColumn:
+        text << item.starship
 
 
 template CalibratedObjectTemplate(item, MemberType):
@@ -626,7 +616,7 @@ enamldef Main(MainWindow):
                             text = 'Starship'
 
                         ObjectCombo: starship_select:
-                            items = sorted(cfts_starship_loader.list_names())
+                            items = sorted(o.name for o in starship_manager.list_objects())
                             selected := settings.starship
 
                         PushButton: starship_add:
@@ -644,14 +634,18 @@ enamldef Main(MainWindow):
 
                         PushButton: golay_start:
                             text = 'Golay'
-                            enabled << bool(mic_settings.microphone) and bool(settings.starship)
+                            enabled << bool(mic_settings.microphone) \
+                                and bool(settings.starship) \
+                                and '(' not in settings.starship
                             clicked ::
                                 settings.run_pt_cal_golay(mic_settings)
                                 starship_tree.collection.update_groups()
 
                         PushButton: chirp_start:
                             text = 'Chirp'
-                            enabled << bool(mic_settings.microphone) and bool(settings.starship)
+                            enabled << bool(mic_settings.microphone) \
+                                and bool(settings.starship) \
+                                and '(' not in settings.starship
                             clicked ::
                                 settings.run_pt_cal_chirp(mic_settings)
                                 starship_tree.collection.update_groups()
@@ -716,6 +710,7 @@ enamldef Main(MainWindow):
                 stretch = 0
 
                 CalibratedObjects: inear_tree:
+                    headers = ['Name', 'Starship']
                     collection = ObjectCollection(
                         inear_manager, inear_plot.manager
                     )

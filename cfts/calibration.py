@@ -1,5 +1,5 @@
 import datetime as dt
-from functools import total_ordering
+from functools import cached_property, total_ordering
 import importlib
 import json
 from pathlib import Path
@@ -139,7 +139,7 @@ class CFTSBaseLoader(CalibrationLoader):
 
     def list_calibrations(self, name):
         calibrations = []
-        for path in (self.base_path / name).glob(f'* {name}*'):
+        for path in (self.base_path / name).glob(f'*_{name}_*'):
             calibrations.append(self.cal_class(name, path))
         return calibrations
 
@@ -241,7 +241,7 @@ class CFTSStarshipCalibration(Calibration):
 
     @property
     def datetime(self):
-        datestr, _ = self.filename.stem.split(' ', 1)
+        datestr, _ = self.filename.stem.split('_', 1)
         return dt.datetime.strptime(datestr, '%Y%m%d-%H%M%S')
 
     def load(self):
@@ -283,11 +283,11 @@ class CFTSMicrophoneCalibration(Calibration):
 
     @property
     def pistonphone(self):
-        return self.filename.stem.rsplit(' ', 1)[1]
+        return self.filename.stem.rsplit('_', 1)[1]
 
     @property
     def datetime(self):
-        datestr, _ = self.filename.stem.split(' ', 1)
+        datestr, _ = self.filename.stem.split('_', 1)
         return dt.datetime.strptime(datestr, '%Y%m%d-%H%M%S')
 
     @property
@@ -333,9 +333,13 @@ class CFTSInEarCalibration(Calibration):
         self.filename = Path(filename)
         self.qualname = f'{self.__class__.__module__}.{self.__class__.__name__}'
 
-    @property
+    @cached_property
+    def starship(self):
+        return self.filename.stem.rsplit('_', 1)[1]
+
+    @cached_property
     def datetime(self):
-        datestr, _ = self.filename.stem.split(' ', 1)
+        datestr, _ = self.filename.stem.split('_', 1)
         return dt.datetime.strptime(datestr, '%Y%m%d-%H%M%S')
 
     def load(self):
