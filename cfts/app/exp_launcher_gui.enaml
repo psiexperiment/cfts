@@ -17,8 +17,7 @@ from psi import get_config, get_config_folder
 from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
 
-from cfts.calibration import microphone_manager, starship_manager
-from cfts.util import list_starship_connections
+from cftscal.api import list_starship_connections, microphone_manager, starship_manager
 from cfts.paradigms import cfts
 
 

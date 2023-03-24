@@ -1,7 +1,7 @@
 from psi.experiment.api import ParadigmDescription
 
 
-CAL_PATH = 'psi.paradigms.calibration.'
+CAL_PATH = 'cftscal.paradigms.'
 CFTS_PATH = 'cfts.paradigms.'
 CORE_PATH = 'psi.paradigms.core.'
 
@@ -16,14 +16,14 @@ cal_mic_mixin = {
 
 
 selectable_starship_mixin = {
-    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
     'attrs': {'id': 'system', 'title': 'Starship', 'output_mode': 'select'}
 }
 
 
 dual_starship_mixin = {
-    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
     'attrs': {'id': 'system', 'title': 'Starship', 'output_mode': 'dual'}
 }
@@ -228,14 +228,14 @@ probe_mic_fft_mixin = {
 
 
 elicitor_starship_mixin = {
-    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
     'attrs': {'id': 'elicitor', 'title': 'Elicitor starship', 'side': 'test'}
 }
 
 
 probe_starship_mixin = {
-    'manifest': CFTS_PATH + 'cfts_mixins.Starship',
+    'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
     'attrs': {'id': 'probe', 'title': 'Probe starship', 'side': 'nontest'}
 }
