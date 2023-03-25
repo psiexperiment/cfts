@@ -128,7 +128,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'efr_sam', 'SAM EFR', 'ear', [
+    'efr_sam', 'SAM EFR (continuous)', 'ear', [
         selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'efr.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
@@ -142,9 +142,37 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'efr_ram', 'RAM EFR', 'ear', [
+    'efr_sam_epoch', 'SAM EFR (continuous)', 'ear', [
         selectable_starship_mixin,
-        {'manifest': CFTS_PATH + 'efr.RAMEFRManifest'},
+        {'manifest': CFTS_PATH + 'efr_epochs.SAMEFRManifest'},
+        {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
+        temperature_mixin,
+        microphone_mixin,
+        efr_microphone_fft_mixin,
+        eeg_view_mixin,
+        cal_mic_mixin,
+    ]
+)
+
+
+ParadigmDescription(
+    'efr_sam_epoch', 'SAM EFR (epoch)', 'ear', [
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'efr_epochs.SAMEFRManifest'},
+        {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
+        temperature_mixin,
+        microphone_mixin,
+        efr_microphone_fft_mixin,
+        eeg_view_mixin,
+        cal_mic_mixin,
+    ]
+)
+
+
+ParadigmDescription(
+    'efr_ram_epoch', 'RAM EFR (epoch)', 'ear', [
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'efr_epochs.RAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.RAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,

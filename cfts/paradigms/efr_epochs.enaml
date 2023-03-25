@@ -207,6 +207,7 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
             label = 'EEG FFT'
             name = 'eeg_fft_container'
 
+            auto_select = False
             max_buttons = 4
             fmt_button_cb << \
                 C.get_selector().get_formatter(fft_plot.tab_grouping)
@@ -229,6 +230,7 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
             label = 'Microphone segment FFT'
             name = 'mic_segment_fft_container'
 
+            auto_select = False
             max_buttons = 4
             fmt_button_cb << \
                 C.get_selector().get_formatter(fft_plot.tab_grouping)
@@ -348,10 +350,23 @@ enamldef RAMEFRManifest(BaseEFRManifest):
                 Tone:
                     hide = ['polarity', 'phase']
 
-
     Extension:
         id = EXPERIMENT + '.context_RAM'
         point = 'psi.context.items'
+
+        Parameter:
+            name = 'averages'
+            label = 'Averages'
+            default = 250
+            group_name = 'target'
+            scope = 'trial'
+
+        Parameter: rate:
+            name = 'rate'
+            label = 'Reps. per sec.'
+            default = 3.1
+            scope = 'trial'
+            group_name = 'target'
 
         BoolParameter:
             name = 'coerce_samples'
