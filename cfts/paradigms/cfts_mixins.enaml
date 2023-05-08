@@ -93,7 +93,7 @@ CONTEXT_ITEM_DETAIL = {
         'range_fn': octave_space,
     },
     'target_tone_level': {
-        'user_friendly_name': 'levels',
+        'user_friendly_name': 'level',
         'step_unit': 'dB',
         'unit': 'dB SPL',
         'order_user_managed': True,
