@@ -140,13 +140,13 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'AC'
 
-
-        ########################################################
-        # Starship B
-        ########################################################
         NIDAQEngine:
             name = 'NI_audio_B'
-            weight = 2
+            weight = 3
+
+            hw_ai_monitor_period = 0.125
+            hw_ao_monitor_period = 0.125
+            hw_ao_buffer_size = 5
 
             NIDAQHardwareAOChannel4461:
                 label = 'Starship B (primary)'
