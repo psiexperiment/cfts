@@ -65,12 +65,11 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
             target_name = 'system_output'
             token = tone_burst
             configurable = False
-            initialized ::
+            queue ::
                 # Once the queue has been configured in one of the
                 # subclasses, hook it up to the ExtractEpochs input so that
                 # they communicate properly.
-                self.connect(extract.added_queue.append, 'added')
-                self.connect(extract.removed_queue.append, 'removed')
+                extract.subscribe_to_queue(self.queue)
             complete ::
                 controller = workbench.get_plugin('psi.controller')
                 deferred_call(controller.invoke_actions, output.name + '_end')
