@@ -404,7 +404,6 @@ enamldef RAMEFRManifest(BaseEFRManifest):
 
         Expression:
             parameter = 'target_mod_fm'
-            #expression = 'fs("target") / round(fs("target") / fm)'
             expression = 'fm'
 
         Expression:
