@@ -963,8 +963,8 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
             ViewBox:
                 name = 'memr_fft_vb'
                 y_mode = 'mouse'
-                y_min = -5
-                y_max = 5
+                y_min = -3
+                y_max = 3
 
                 GroupedSimultaneousMEMRPlot:
                     name = 'memr_fft_plot'
