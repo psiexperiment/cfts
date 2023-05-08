@@ -16,7 +16,8 @@ from psi.controller.api import (
     Input, QueuedEpochOutput,
 )
 
-from psi.context.api import BoolParameter, ContextGroup, Expression, Parameter
+from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
+                             Expression, Parameter)
 from psi.token.primitives import (
     Cos2Envelope, Gate, SAMTone, SquareWaveEnvelope, Tone
 )
@@ -29,6 +30,12 @@ from .cfts_mixins import CFTSSelector, EEGInput
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
+def rng_generator(seed, lb, ub):
+    rng = np.random.RandomState(seed)
+    while True:
+        yield rng.uniform(lb, ub)
+
+
 def configure_experiment(event):
     fc_name = event.parameters['fc_name']
     level_name = event.parameters['level_name']
@@ -38,17 +45,15 @@ def configure_experiment(event):
     data = event.workbench.get_plugin('psi.data')
 
     averages = context.get_value('averages')
-    rate = context.get_value('rate')
+    isi = context.get_value('isi')
+    isi_jitter = context.get_value('isi_jitter')
     duration = context.get_value('duration')
-
-    iti = 1 / rate - duration
-    if iti <= 0:
-        raise ValueError('Repetition rate is too fast')
+    delays = rng_generator(123456789, isi, isi + isi_jitter)
 
     output = controller.get_output('target')
     max_level = {}
     for setting in context.iter_settings('default', 1):
-        output.add_setting(setting, averages=averages, iti_duration=iti)
+        output.add_setting(setting, averages=averages, iti_duration=delays)
         frequency = setting[fc_name]
         level = setting[level_name]
         max_level[frequency] = max(level, max_level.get(frequency, -np.inf))
@@ -102,10 +107,8 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
             auto_decrement = True
             token << workbench.get_plugin('psi.token').get_token(selected_token)
             initialized ::
-                self.queue.connect(extract_eeg.added_queue.append, 'added')
-                self.queue.connect(extract_eeg.removed_queue.append, 'removed')
-                self.queue.connect(extract_mic.added_queue.append, 'added')
-                self.queue.connect(extract_mic.removed_queue.append, 'removed')
+                extract_eeg.subscribe_to_queue(self.queue)
+                extract_mic.subscribe_to_queue(self.queue)
 
         EEGInput:
             ExtractEpochs: extract_eeg:
@@ -285,12 +288,24 @@ enamldef SAMEFRManifest(BaseEFRManifest):
             group_name = 'target'
             scope = 'trial'
 
-        Parameter: rate:
-            name = 'rate'
-            label = 'Reps. per sec.'
-            default = 3.1
-            scope = 'trial'
+        ContextRow:
+            name = 'isi'
+            fmt = ['ISI', isi, 's with', isi_jitter, 's jitter']
             group_name = 'target'
+
+            Parameter: isi:
+                name = 'isi'
+                label = 'ISI (sec)'
+                default = 100e-3
+                scope = 'trial'
+                group_name = 'target'
+
+            Parameter: isi_jitter:
+                name = 'isi_jitter'
+                label = 'ISI jitter (sec)'
+                default = 20e-3
+                scope = 'trial'
+                group_name = 'target'
 
         Parameter:
             name = 'fm'
@@ -361,12 +376,24 @@ enamldef RAMEFRManifest(BaseEFRManifest):
             group_name = 'target'
             scope = 'trial'
 
-        Parameter: rate:
-            name = 'rate'
-            label = 'Reps. per sec.'
-            default = 3.1
-            scope = 'trial'
+        ContextRow:
+            name = 'isi'
+            fmt = ['ISI', isi, 's with', isi_jitter, 's jitter']
             group_name = 'target'
+
+            Parameter: isi:
+                name = 'isi'
+                label = 'ISI (sec)'
+                default = 100e-3
+                scope = 'trial'
+                group_name = 'target'
+
+            Parameter: isi_jitter:
+                name = 'isi_jitter'
+                label = 'ISI jitter (sec)'
+                default = 20e-3
+                scope = 'trial'
+                group_name = 'target'
 
         BoolParameter:
             name = 'coerce_samples'
