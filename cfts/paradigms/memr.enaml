@@ -45,9 +45,6 @@ def configure_memr(event, duration_attr, iti_attr):
     probe.queue = BlockedFIFOSignalQueue()
     elicitor.queue = BlockedFIFOSignalQueue()
 
-    if probe.engine == elicitor.engine:
-        controller._master_engine = probe.engine
-
     elicitor_sf = 0
     probe_sf = 0
     for polarity in (1, -1):
