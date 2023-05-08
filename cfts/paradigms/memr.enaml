@@ -5,6 +5,7 @@ from functools import partial
 
 from atom.api import Dict, Float, Int
 from enaml.core.api import d_
+from enaml.stdlib.message_box import question
 from enaml.workbench.api import Extension
 from enaml.workbench.core.api import Command
 
@@ -17,8 +18,9 @@ from psiaudio import util
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, Expression, Parameter)
 from psi.controller.api import (
-    Blocked, ContinuousInput, ControllerManifest, Coroutine, EpochInput,
-    ExperimentAction, ExtractEpochs, Synchronized, QueuedEpochOutput
+    Blocked, ChannelOutOfRange, ContinuousInput, ControllerManifest, Coroutine,
+    EpochInput, ExperimentAction, ExtractEpochs, Synchronized,
+    QueuedEpochOutput
 )
 from psi.core.enaml.api import ExperimentManifest
 from psi.token.primitives import (
@@ -48,17 +50,39 @@ def configure_memr(event, duration_attr, iti_attr):
     elicitor_sf = 0
     probe_sf = 0
 
+    bad_settings = {}
     for setting in context.iter_settings('default', 1):
         for polarity in (1, -1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
             duration = setting[duration_attr] + setting[iti_attr]
             setting['elicitor_bandlimited_noise_polarity'] = polarity
-            _, probe_factory = probe.add_setting(
-                setting, averages=averages, total_duration=duration)
-            _, elicitor_factory = elicitor.add_setting(
-                setting, averages=averages, total_duration=duration)
+            try:
+                probe_uid, probe_factory = probe.add_setting(
+                    setting, averages=averages, total_duration=duration)
+            except ChannelOutOfRange as e:
+                raise ValueError(f'Probe level is {e.db:.1f} dB too high.')
+
+            try:
+                elicitor_uid, elicitor_factory = elicitor.add_setting(
+                    setting, averages=averages, total_duration=duration)
+            except ChannelOutOfRange as e:
+                level = setting['elicitor_bandlimited_noise_level']
+                bad_settings[level] = e.db
+
             elicitor_sf = max(elicitor_sf, elicitor_factory.max_amplitude() * 1.01)
             probe_sf = max(probe_sf, probe_factory.max_amplitude() * 1.01)
+
+    if len(bad_settings):
+        levels = list(sorted(bad_settings.keys()))
+        max_level = levels[0] - bad_settings[levels[0]]
+        to_remove_text = ', '.join(f'{l}' for l in sorted(levels))
+        mesg = f'Maximum elicitor level is {max_level:.1f} dB. Remove {to_remove_text} and proceed?'
+        result = question(None, 'Settings', mesg)
+        if result.text == 'Yes':
+            pass
+        else:
+            import sys
+            sys.exit()
 
     if probe.channel == elicitor.channel:
         sf = max(elicitor_sf, probe_sf)
