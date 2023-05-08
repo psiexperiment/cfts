@@ -199,8 +199,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 auto_decrement = True
                 token = workbench.get_plugin('psi.token').get_token(probe)
                 queue ::
-                    self.connect(extract_probe.added_queue.append, 'added')
-                    self.connect(extract_probe.removed_queue.append, 'removed')
+                    extract_probe.subscribe_to_queue(self.queue)
             QueuedEpochOutput:
                 name = 'elicitor'
                 label = 'Elicitor'
@@ -208,8 +207,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 auto_decrement = True
                 token = workbench.get_plugin('psi.token').get_token('noise')
                 queue ::
-                    self.connect(extract_elicitor.added_queue.append, 'added')
-                    self.connect(extract_elicitor.removed_queue.append, 'removed')
+                    extract_elicitor.subscribe_to_queue(self.queue)
 
     Extension:
         id = EXPERIMENT + '.selectors'
