@@ -28,11 +28,13 @@ def connect_trigger(event):
     channels = ai_channels + ao_channels
 
     # If no channels are active, we don't have any sync issues.
+    log.info('No channels are active.')
     if len(channels) == 0:
         return
 
     # If only one channel is active, we don't have any sync issues.
     if len(channels) == 1:
+        log.info('Only one channel active. Disabling start trigger.')
         channels[0].start_trigger = ''
         return
 
