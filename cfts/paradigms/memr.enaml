@@ -47,8 +47,9 @@ def configure_memr(event, duration_attr, iti_attr):
 
     elicitor_sf = 0
     probe_sf = 0
-    for polarity in (1, -1):
-        for setting in context.iter_settings('default', 1):
+
+    for setting in context.iter_settings('default', 1):
+        for polarity in (1, -1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
             duration = setting[duration_attr] + setting[iti_attr]
             setting['elicitor_bandlimited_noise_polarity'] = polarity
