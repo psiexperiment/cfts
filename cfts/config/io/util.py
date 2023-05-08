@@ -45,14 +45,18 @@ def connect_trigger(event):
 
     dev = c.channel.split('/', 1)[0]
     trigger = f'/{dev}/{direction}/StartTrigger'
+    master_engine = None
     for c in channels:
         if dev in c.channel and direction in c.channel:
             log.info(f'Setting {c} start_trigger to ""')
             c.start_trigger = ''
+            if master_engine is None:
+                master_engine = c.engine
         else:
             log.info(f'Setting {c} start_trigger to "{trigger}"')
             c.start_trigger = trigger
 
     # Now, make sure the master engine is set to the one that controls the
     # start trigger.
-    controller._master_engine = c.engine
+    log.info('Setting master engine to %s', master_engine.name)
+    controller._master_engine = master_engine
