@@ -9,7 +9,7 @@ from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
     Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx, GroupBox,
-    Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView, PushButton,
+    HGroup, Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView, PushButton,
     VGroup,
 )
 
@@ -194,29 +194,33 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
         if len(children) == 1:
             return []
 
-        start_buttons = children[:-1:3]
-        preferences = children[1:-1:3]
-        plugin_buttons = children[2:-1:3]
-        constraints = [
-            hbox(vbox(*start_buttons), vbox(*preferences), vbox(*plugin_buttons)),
-        ]
-        for sb, p, pb in zip(start_buttons, preferences, plugin_buttons):
-            constraints.append(align('v_center', sb, p, pb))
+        s = 4
+        widgets = [children[i:-1:s] for i in range(s)]
+        constraints = [hbox(*[vbox(*w) for w in widgets])]
+        for w in zip(*widgets):
+            constraints.append(align('v_center', *w))
         return constraints
 
     Looper:
         iterable << experiment_box.sequence
 
-        PushButton:
+        Label:
             text = loop_item.label
+
+        HGroup:
+            padding = 0
+            spacing = 0
             enabled << experiment_box.start_enabled
-            clicked ::
-                try:
-                    settings.run_experiment(loop_item, save=experiment_box.save)
-                except Exception as e:
-                    critical(experiment_box, 'Error starting experiment', str(e))
-                # Update the preferences in case new ones were created
-                preferences.items = [str(p) for p in list_preferences(loop_item.paradigm)]
+
+            PushButton:
+                text = 'Run'
+                clicked ::
+                    try:
+                        settings.run_experiment(loop_item, save=experiment_box.save)
+                    except Exception as e:
+                        critical(experiment_box, 'Error starting experiment', str(e))
+                    # Update the preferences in case new ones were created
+                    preferences.items = [str(p) for p in list_preferences(loop_item.paradigm)]
 
         ObjectCombo: preferences:
             items = [str(p) for p in list_preferences(loop_item.paradigm)]
@@ -369,7 +373,6 @@ enamldef Main(MainWindow):
             align('width', monitor_box.children[0], experiment_box.children[0]),
             align('width', monitor_box.children[1], experiment_box.children[1]),
             align('width', monitor_box.children[2], experiment_box.children[2]),
-            #align('width', starship_info.children[3], cal_mic_info.children[0]),
         ]
 
         GroupBox: starship_info:
