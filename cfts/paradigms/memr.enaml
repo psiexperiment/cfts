@@ -38,7 +38,7 @@ from .cfts_mixins import CFTSSelector, EEGInput
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
-def configure_memr(event, duration_attr, iti_attr):
+def configure_memr(event, duration_attr, iti_attr=None):
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
 
@@ -54,20 +54,29 @@ def configure_memr(event, duration_attr, iti_attr):
     for setting in context.iter_settings('default', 1):
         for polarity in (1, -1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
-            duration = setting[duration_attr] + setting[iti_attr]
+            if iti_attr is None:
+                iti = 0
+            else:
+                iti = setting[iti_attr]
+            duration = setting[duration_attr] + iti
             setting['elicitor_bandlimited_noise_polarity'] = polarity
-            try:
-                probe_uid, probe_factory = probe.add_setting(
-                    setting, averages=averages, total_duration=duration)
-            except ChannelOutOfRange as e:
-                raise ValueError(f'Probe level is {e.db:.1f} dB too high.')
-
             try:
                 elicitor_uid, elicitor_factory = elicitor.add_setting(
                     setting, averages=averages, total_duration=duration)
             except ChannelOutOfRange as e:
                 level = setting['elicitor_bandlimited_noise_level']
                 bad_settings[level] = e.db
+                # Important to continue! We do not want to add the probe to the
+                # queue if the elicitor was not queued.
+                continue
+
+            # This should come *after* so we don't add a probe with a silent
+            # elicitor to the queue.
+            try:
+                probe_uid, probe_factory = probe.add_setting(
+                    setting, averages=averages, total_duration=duration)
+            except ChannelOutOfRange as e:
+                raise ValueError(f'Probe level is {e.db:.1f} dB too high.')
 
             elicitor_sf = max(elicitor_sf, elicitor_factory.max_amplitude() * 1.01)
             probe_sf = max(probe_sf, probe_factory.max_amplitude() * 1.01)
@@ -555,7 +564,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
 
     # Implements the classic wideband acoustic reflex as described by Keefe.
     configure_experiment_cb = partial(configure_memr,
-                                      duration_attr='trial_period', iti=0)
+                                      duration_attr='trial_period', iti_attr=None)
     attr probe
 
     Extension:
