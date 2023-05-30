@@ -20,7 +20,7 @@ def mv_to_C(mv):
 
 
 START_TRIGGER = '/PXI1Slot6/ao/StartTrigger'
-MAX_RANGE = (-2, 2)
+MAX_RANGE = (-5, 5)
 
 
 enamldef IOManifest(PluginManifest): manifest:
