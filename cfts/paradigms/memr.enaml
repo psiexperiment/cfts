@@ -60,6 +60,7 @@ def configure_memr(event, duration_attr, iti_attr=None):
                 iti = setting[iti_attr]
             duration = setting[duration_attr] + iti
             setting['elicitor_bandlimited_noise_polarity'] = polarity
+            log.info('Duration %f, ITI %f', duration, iti)
             try:
                 elicitor_uid, elicitor_factory = elicitor.add_setting(
                     setting, averages=averages, total_duration=duration)
@@ -78,8 +79,8 @@ def configure_memr(event, duration_attr, iti_attr=None):
             except ChannelOutOfRange as e:
                 raise ValueError(f'Probe level is {e.db:.1f} dB too high.')
 
-            elicitor_sf = max(elicitor_sf, elicitor_factory.max_amplitude() * 1.01)
-            probe_sf = max(probe_sf, probe_factory.max_amplitude() * 1.01)
+            elicitor_sf = max(elicitor_sf, elicitor_factory.max_amplitude() * 1.1)
+            probe_sf = max(probe_sf, probe_factory.max_amplitude() * 1.1)
 
     if len(bad_settings):
         levels = list(sorted(bad_settings.keys()))
@@ -565,7 +566,6 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
     # Implements the classic wideband acoustic reflex as described by Keefe.
     configure_experiment_cb = partial(configure_memr,
                                       duration_attr='trial_period', iti_attr=None)
-    attr probe
 
     Extension:
         id = EXPERIMENT + '.interleaved_elicitor.tokens'
@@ -690,6 +690,16 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                     plot_grouping << C.get_names()
                     pen_width = 2
                     pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'
+
+
+enamldef InterleavedChirpMEMRManifest(InterleavedMEMRManifest):
+
+    probe = 'chirp'
+
+
+enamldef InterleavedClickMEMRManifest(InterleavedMEMRManifest):
+
+    probe = 'click'
 
 
 ################################################################################
