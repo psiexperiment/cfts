@@ -31,6 +31,10 @@ class Experiment(Atom):
     paradigm = Str()
     preference = Str()
     plugins = List(Str())
+    modes = List(Str())
+
+    def _default_modes(self):
+        return ['Run']
 
 
 class Settings(Atom):
@@ -63,7 +67,7 @@ class Settings(Atom):
             raise ValueError('Starships incorrectly configured')
         return next(iter(starship_to_use))
 
-    def run_experiment(self, experiment, save=True):
+    def run_experiment(self, experiment, mode, save=True):
         env = {}
         for k, v in self.starship_config.items():
             cal_string = v['calibration'].get_current_calibration().to_string()
@@ -71,11 +75,16 @@ class Settings(Atom):
             env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
 
         env['CFTS_TEST_STARSHIP'] = self.find_starship(self.ear, True)
-        try:
-            nontest_ear = 'right' if self.ear == 'left' else 'left'
-            env['CFTS_NONTEST_STARSHIP'] = self.find_starship(nontest_ear, False)
-        except ValueError:
+        if mode.lower() == 'run':
             pass
+        elif mode.lower() == 'ipsi':
+            env['CFTS_NONTEST_STARSHIP'] = env['CFTS_TEST_STARSHIP']
+        elif mode.lower() == 'contra':
+            try:
+                nontest_ear = 'right' if self.ear == 'left' else 'left'
+                env['CFTS_NONTEST_STARSHIP'] = self.find_starship(nontest_ear, False)
+            except ValueError:
+                pass
 
         filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
         filename = ' '.join(filename.split())
@@ -189,53 +198,60 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
     attr start_enabled = True
     attr save = True
     attr sequence
+    share_layout = True
 
     layout_constraints => ():
-        if len(children) == 1:
-            return []
-
-        s = 4
-        widgets = [children[i:-1:s] for i in range(s)]
-        constraints = [hbox(*[vbox(*w) for w in widgets])]
-        for w in zip(*widgets):
-            constraints.append(align('v_center', *w))
+        # Align the subwidgets vertically
+        subwidgets = [w.children for w in self.visible_widgets()]
+        constraints = [vbox(*self.visible_widgets())]
+        constraints.extend([align('width', *c) for c in zip(*subwidgets)])
         return constraints
 
     Looper:
         iterable << experiment_box.sequence
 
-        Label:
-            text = loop_item.label
-
-        HGroup:
+        Container:
+            share_layout = True
+            constraints = [hbox(*children), align('v_center', *self.visible_widgets())]
             padding = 0
-            spacing = 0
-            enabled << experiment_box.start_enabled
+
+            Label:
+                text = loop_item.label
+
+            HGroup:
+                padding = 0
+                spacing = 0
+                enabled << experiment_box.start_enabled
+
+                Looper: mode_loop:
+                    attr experiment = loop_item
+                    iterable << experiment.modes
+
+                    PushButton:
+                        text = loop_item.capitalize()
+                        clicked ::
+                            try:
+                                settings.run_experiment(mode_loop.experiment, loop_item,
+                                                        save=experiment_box.save)
+                            except Exception as e:
+                                critical(experiment_box, 'Error starting experiment', str(e))
+                            # Update the preferences in case new ones were created
+                            preferences.items = [str(p) for p in list_preferences(mode_loop.experiment.paradigm)]
+
+            ObjectCombo: preferences:
+                items = [str(p) for p in list_preferences(loop_item.paradigm)]
+                selected := loop_item.preference
+                to_string = lambda x: Path(x).stem
 
             PushButton:
-                text = 'Run'
+                attr plugins = [p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins \
+                                if not p.required and p.name != 'calibration_microphone']
+                constraints = [width == 30]
+                text = '⚙'
+                visible = bool(plugins)
                 clicked ::
-                    try:
-                        settings.run_experiment(loop_item, save=experiment_box.save)
-                    except Exception as e:
-                        critical(experiment_box, 'Error starting experiment', str(e))
-                    # Update the preferences in case new ones were created
-                    preferences.items = [str(p) for p in list_preferences(loop_item.paradigm)]
-
-        ObjectCombo: preferences:
-            items = [str(p) for p in list_preferences(loop_item.paradigm)]
-            selected := loop_item.preference
-            to_string = lambda x: Path(x).stem
-
-        PushButton:
-            attr plugins = [p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins \
-                            if not p.required and p.name != 'calibration_microphone']
-            constraints = [width == 30]
-            text = '⚙'
-            visible = bool(plugins)
-            clicked ::
-                popup = PluginPopup(parent=self, experiment=loop_item, available_plugins=plugins)
-                popup.show()
+                    popup = PluginPopup(parent=self, experiment=loop_item, available_plugins=plugins)
+                    popup.show()
 
 
 enamldef ExperimentInfo(GroupBox):
@@ -361,7 +377,6 @@ enamldef Main(MainWindow):
         constraints = [
             vbox(
                 starship_info,
-                #cal_mic_info,
                 monitor_box,
                 experiment_info,
                 experiment_box,
@@ -370,9 +385,10 @@ enamldef Main(MainWindow):
             # experiment/monitor box. The first three elements represent the
             # first "row" of widgets in each box. Once we align those, the rest
             # fall into line.
-            align('width', monitor_box.children[0], experiment_box.children[0]),
-            align('width', monitor_box.children[1], experiment_box.children[1]),
-            align('width', monitor_box.children[2], experiment_box.children[2]),
+            align('width', monitor_box.children[0].children[0], experiment_box.children[0].children[0]),
+            align('width', monitor_box.children[0].children[1], experiment_box.children[0].children[1]),
+            align('width', monitor_box.children[0].children[2], experiment_box.children[0].children[2]),
+            align('width', monitor_box.children[0].children[3], experiment_box.children[0].children[3]),
         ]
 
         GroupBox: starship_info:
