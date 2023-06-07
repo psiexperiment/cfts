@@ -84,7 +84,7 @@ def configure_memr(event, duration_attr, iti_attr=None):
     if len(bad_settings):
         levels = list(sorted(bad_settings.keys()))
         max_level = levels[0] - bad_settings[levels[0]]
-        to_remove_text = ', '.join(f'{l}' for l in sorted(levels))
+        to_remove_text = ', '.join([f'{l}' for l in sorted(levels)])
         mesg = f'Maximum elicitor level is {max_level:.1f} dB. Remove {to_remove_text} and proceed?'
         result = question(None, 'Settings', mesg)
         if result.text == 'Yes':
