@@ -41,7 +41,7 @@ class Experiment(Atom):
         for plugin in plugins[:]:
             for valid_plugin in valid_plugins:
                 if plugin == valid_plugin.name and not valid_plugin.required:
-                    continue
+                    break
             else:
                 plugins.remove(plugin)
         super().__init__(paradigm=paradigm, plugins=plugins, **kwargs)
