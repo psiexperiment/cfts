@@ -172,6 +172,7 @@ class Settings(Atom):
                 if s['calibration'] is not None:
                     s['calibration'] = starship_manager.get_object(s['calibration'])
 
+        # Add microphone in if it was not in a previously-saved config.
         if 'microphone' not in self.cal_mic_config:
             self.cal_mic_config['microphone'] = None
         if 'gain' not in self.cal_mic_config:
