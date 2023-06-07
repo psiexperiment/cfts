@@ -36,6 +36,16 @@ class Experiment(Atom):
     def _default_modes(self):
         return ['Run']
 
+    def __init__(self, paradigm, plugins, **kwargs):
+        valid_plugins = paradigm_manager.get_paradigm(paradigm).plugins
+        for plugin in plugins[:]:
+            for valid_plugin in valid_plugins:
+                if plugin == valid_plugin.name and not valid_plugin.required:
+                    continue
+            else:
+                plugins.remove(plugin)
+        super().__init__(paradigm=paradigm, plugins=plugins, **kwargs)
+
 
 class Settings(Atom):
 
