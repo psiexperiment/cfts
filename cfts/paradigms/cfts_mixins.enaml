@@ -362,10 +362,8 @@ enamldef RAMEFRInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): man
 
 enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
 
-    attr experiment
-    attr outputs
-    id = f'{experiment}_inear_calibration_mixin'
-    name = f'{experiment}_inear_calibration'
+    id = f'memr_inear_calibration_mixin'
+    name = f'memr_inear_calibration'
     title = 'In-ear calibration'
 
     Extension:
