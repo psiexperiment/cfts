@@ -197,64 +197,6 @@ ParadigmDescription(
 ################################################################################
 # Two-starship paradigms for MEMR
 ################################################################################
-elicitor_mic_mixin = {
-    'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
-    'attrs': {
-        'id': 'elicitor_microphone_signal_view',
-        'title': 'Elicitor microphone (time)',
-        'time_span': 4,
-        'time_delay': 0.125,
-        'source_name': 'elicitor_microphone',
-        'y_label': 'Signal (V)'
-    },
-}
-
-
-elicitor_mic_fft_mixin = {
-    'manifest': CORE_PATH + 'signal_mixins.SignalFFTViewManifest',
-    'attrs': {
-        'id': 'elicitor_microphone_fft_view',
-        'title': 'Elicitor microphone (PSD)',
-        'fft_time_span': 0.25,
-        'fft_freq_lb': 500,
-        'fft_freq_ub': 50000,
-        'source_name': 'elicitor_microphone',
-        'y_label': 'Signal (dB)'
-    }
-}
-
-
-probe_mic_mixin = {
-    'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
-    'required': True,
-    'attrs': {
-        'id': 'probe_microphone_signal_view',
-        'name': 'probe_microphone_signal_view',
-        'title': 'Probe microphone (time)',
-        'time_span': 4,
-        'time_delay': 0.125,
-        'source_name': 'probe_microphone',
-        'y_label': 'Signal (V)'
-    },
-}
-
-
-probe_mic_fft_mixin = {
-    'manifest': CORE_PATH + 'signal_mixins.SignalFFTViewManifest',
-    'required': True,
-    'attrs': {
-        'id': 'probe_microphone_fft_view',
-        'name': 'probe_microphone_fft_view',
-        'title': 'Probe microphone (PSD)',
-        'fft_time_span': 0.25,
-        'fft_freq_lb': 500,
-        'fft_freq_ub': 50000,
-        'source_name': 'probe_microphone',
-        'y_label': 'Signal (dB)'
-    }
-}
-
-
 elicitor_starship_mixin = {
     'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
@@ -277,12 +219,10 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedClickProbeMixin', 'required': True},
         temperature_mixin,
-        elicitor_mic_mixin,
-        elicitor_mic_fft_mixin,
-        probe_mic_mixin,
-        probe_mic_fft_mixin,
         cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
     ]
 )
 
@@ -295,12 +235,10 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpProbeMixin', 'required': True},
         temperature_mixin,
-        elicitor_mic_mixin,
-        elicitor_mic_fft_mixin,
-        probe_mic_mixin,
-        probe_mic_fft_mixin,
         cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
     ]
 )
 
@@ -312,12 +250,10 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'click'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousClickProbeMixin', 'required': True},
         temperature_mixin,
-        elicitor_mic_mixin,
-        elicitor_mic_fft_mixin,
-        probe_mic_mixin,
-        probe_mic_fft_mixin,
         cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
     ]
 )
 
@@ -329,11 +265,9 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
         temperature_mixin,
-        elicitor_mic_mixin,
-        elicitor_mic_fft_mixin,
-        probe_mic_mixin,
-        probe_mic_fft_mixin,
         cal_mic_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
+        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
     ]
 )

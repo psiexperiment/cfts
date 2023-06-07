@@ -4,7 +4,7 @@ log = logging.getLogger(__name__)
 from functools import partial
 
 from atom.api import Dict, Float, Int
-from enaml.core.api import d_
+from enaml.core.api import Conditional, d_
 from enaml.stdlib.message_box import question
 from enaml.workbench.api import Extension
 from enaml.workbench.core.api import Command
@@ -26,7 +26,9 @@ from psi.core.enaml.api import ExperimentManifest
 from psi.token.primitives import (
     BandlimitedClick, BandlimitedFIRNoise, Chirp, Cos2Envelope, Repeat
 )
-from psi.data.api import FFTContainer, TimeContainer, ViewBox
+from psi.data.api import (
+    ChannelPlot, FFTChannelPlot, FFTContainer, TimeContainer, ViewBox
+)
 from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
 
 from psi.data.api import (
@@ -36,6 +38,81 @@ from psi.data.api import (
 from .cfts_mixins import CFTSSelector, EEGInput
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
+
+
+################################################################################
+# Microphone mixins
+################################################################################
+enamldef MEMRSignalViewManifest(ExperimentManifest): manifest:
+
+    id = 'memr_microphone_signal_view'
+    title = 'Microphone (time)'
+
+    Extension:
+        id = 'plots'
+        point = 'psi.data.plots'
+
+        TimeContainer: time_container:
+            name << manifest.name + '_container'
+            label << manifest.title
+            span = 4
+            delay = 0.125
+
+            ViewBox: vb:
+                name << manifest.name + '_vb'
+                y_min = -0.2
+                y_max = 0.2
+                y_mode = 'mouse'
+                save_limits = True
+                y_label = 'Signal (V)'
+
+                ChannelPlot:
+                    name << manifest.name + '_elicitor_plot'
+                    pen_color = 'red'
+                    source_name = 'elicitor_microphone'
+
+                ChannelPlot:
+                    name << manifest.name + '_probe_plot'
+                    pen_color = 'blue'
+                    source_name = 'probe_microphone'
+
+
+enamldef MEMRSignalFFTViewManifest(ExperimentManifest): manifest:
+
+    id = 'memr_microphone_signal_fft_view'
+    title = 'Microphone (PSD)'
+
+    Extension:
+        id = manifest.id  + '.plots'
+        point = 'psi.data.plots'
+
+        FFTContainer: fft_container:
+            name << manifest.name + '_container'
+            label << manifest.title
+            freq_lb = 5
+            freq_ub = 50000
+
+            ViewBox: fft_vb:
+                name << manifest.name + '_vb'
+                y_min = -10
+                y_max = 100
+                y_mode = 'mouse'
+                save_limits = True
+                y_label = 'Signal (dB)'
+
+                FFTChannelPlot:
+                    name << manifest.name + '_elicitor_plot'
+                    source_name = 'elicitor_microphone'
+                    pen_color = 'red'
+                    time_span = 0.25
+                    apply_calibration = True
+
+                FFTChannelPlot:
+                    name << manifest.name + '_probe_plot'
+                    source_name = 'probe_microphone'
+                    pen_color = 'blue'
+                    time_span = 0.25
+                    apply_calibration = True
 
 
 def configure_memr(event, duration_attr, iti_attr=None):
