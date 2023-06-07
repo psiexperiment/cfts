@@ -68,12 +68,12 @@ enamldef MEMRSignalViewManifest(ExperimentManifest): manifest:
 
                 ChannelPlot:
                     name << manifest.name + '_elicitor_plot'
-                    pen_color = 'red'
+                    pen_color = 'DarkCyan'
                     source_name = 'elicitor_microphone'
 
                 ChannelPlot:
                     name << manifest.name + '_probe_plot'
-                    pen_color = 'blue'
+                    pen_color = 'DarkMagenta'
                     source_name = 'probe_microphone'
 
 
@@ -339,7 +339,9 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
 
             ContextRow:
                 name = 'elicitor'
-                fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh, 'Hz and equalize?', elicitor_eq]
+                fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh, 
+                       'Hz, equalize up to ±', elicitor_eq_max, 'db, apply',
+                       elicitor_audiogram, 'audiogram']
 
                 Parameter: elicitor_fl:
                     name = 'elicitor_fl'
@@ -351,14 +353,21 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                     default = 16e3
                     scope = 'trial'
 
-                BoolParameter: elicitor_eq:
-                    name = 'elicitor_equalize'
-                    default = False
+                Parameter: elicitor_eq_max:
+                    name = 'elicitor_max_equalize'
+                    default = 20
                     scope = 'trial'
+
+                EnumParameter: elicitor_audiogram:
+                    name = 'elicitor_audiogram_weighting'
+                    default = 'mouse'
+                    choices = {'no': None, 'mouse': "'mouse'"}
 
             ContextRow:
                 name = 'probe'
-                fmt = ['Probe', probe_fl, 'to', probe_fh, 'Hz at', probe_level, 'dB SPL and equalize?', probe_eq]
+                fmt = ['Probe', probe_fl, 'to', probe_fh, 'Hz at', probe_level,
+                       'dB SPL, equalize up to ±', probe_eq_max, 'db, apply',
+                       probe_audiogram, 'audiogram']
 
                 Parameter: probe_fl:
                     name = 'probe_fl'
@@ -375,10 +384,16 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                     default = 75
                     scope = 'trial'
 
-                BoolParameter: probe_eq:
-                    name = 'probe_equalize'
-                    default = False
+                Parameter: probe_eq_max:
+                    name = 'probe_max_equalize'
+                    default = 20
                     scope = 'trial'
+
+                EnumParameter: probe_audiogram:
+                    name = 'probe_audiogram_weighting'
+                    default = 'mouse'
+                    choices = {'no': None, 'mouse': "'mouse'"}
+
 
     Extension:
         id = EXPERIMENT + '.commands'
@@ -511,11 +526,19 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
 
         Expression:
             parameter = 'elicitor_bandlimited_noise_equalize'
-            expression = 'elicitor_equalize'
+            expression = 'elicitor_max_equalize != 0'
 
         Expression:
             parameter = 'elicitor_bandlimited_noise_seed'
             expression = '1'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_max_correction'
+            expression = 'elicitor_max_equalize'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_audiogram_weighting'
+            expression = 'elicitor_audiogram_weighting'
 
 
 enamldef InterleavedClickProbeMixin(ExperimentManifest):
@@ -634,7 +657,15 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
 
         Expression:
             parameter = 'probe_chirp_equalize'
-            expression = 'probe_equalize'
+            expression = 'probe_max_equalize != 0'
+
+        Expression:
+            parameter = 'probe_chirp_max_correction'
+            expression = 'probe_max_equalize'
+
+        Expression:
+            parameter = 'probe_chirp_audiogram_weighting'
+            expression = 'probe_audiogram_weighting'
 
 
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
@@ -874,7 +905,7 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
 
         Expression:
             parameter = 'probe_chirp_equalize'
-            expression = 'probe_equalize'
+            expression = 'probe_max_equalize != 0'
 
 
 enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
@@ -1010,7 +1041,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
 
         Expression:
             parameter = 'elicitor_bandlimited_noise_equalize'
-            expression = 'elicitor_equalize'
+            expression = 'elicitor_max_equalize != 0'
 
         Expression:
             parameter = 'elicitor_bandlimited_noise_seed'
@@ -1019,6 +1050,14 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         Expression:
             parameter = 'elicitor_noise_rise_time'
             expression = '20e-3'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_max_correction'
+            expression = 'elicitor_max_equalize'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_audiogram_weighting'
+            expression = 'elicitor_audiogram_weighting'
 
     Extension:
         id = EXPERIMENT + '.plots'
