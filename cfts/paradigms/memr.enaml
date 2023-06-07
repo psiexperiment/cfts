@@ -659,22 +659,19 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                 save_limits = True
 
                 GroupedEpochFFTPlot: probe_fft_plot:
+                    pen_color_cycle = 'palettable.cartocolors.qualitative.Bold_2_r'
                     source_name = 'probe'
-                    plot_grouping = ['repeat']
-                    autogenerate_keys = 'tab'
-                    plot_keys = [(k,) for k in range(C.elicitor_n + 1)]
                     tab_grouping << C.get_names()
                     apply_calibration = True
-                    fmt_plot_label_cb = lambda x, s: f'Probe {x[0]}'
+                    fmt_plot_label_cb = lambda x, s: f'Probe'
 
                 GroupedEpochFFTPlot: elicitor_fft_plot:
+                    pen_color_cycle = 'palettable.cartocolors.qualitative.Bold_2'
+                    average_mode = 'FFT'
                     source_name = 'elicitor'
-                    plot_grouping = ['repeat']
-                    autogenerate_keys = 'tab'
-                    plot_keys = [(k,) for k in range(C.elicitor_n + 1)]
                     tab_grouping << C.get_names()
                     apply_calibration = True
-                    fmt_plot_label_cb = lambda x, s: f'Elicitor {x[0]}'
+                    fmt_plot_label_cb = lambda x, s: f'Elicitor'
 
         FFTContainer:
             name = 'memr_fft_container'
