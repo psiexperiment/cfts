@@ -386,19 +386,22 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
         id = manifest.id + '.calibration'
         point = 'psi.controller.calibration.channels'
 
-        ChirpCalibrate:
+        ChirpCalibrate: probe_calibrate:
             name = f'memr_probe_calibration'
-            label = 'Probe calibration'
+            label = 'Calibration'
             input_name = 'probe_microphone'
             outputs = {'probe': []}
             gain << C.calibration_gain
 
-        ChirpCalibrate:
+        ChirpCalibrate: elicitor_calibrate:
             name = f'memr_elicitor_calibration'
-            label = 'Elicitor calibration'
             input_name = 'elicitor_microphone'
             outputs = {'elicitor': []}
             gain << C.calibration_gain
+            # We want to plot both calibrations on the same widget (for easier
+            # comparision).
+            show_widget = False
+            viewbox_name << probe_calibrate.viewbox_name
 
 
 def initialize_cal_mic(event):
