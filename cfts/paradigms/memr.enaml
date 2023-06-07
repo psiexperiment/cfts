@@ -60,7 +60,6 @@ def configure_memr(event, duration_attr, iti_attr=None):
                 iti = setting[iti_attr]
             duration = setting[duration_attr] + iti
             setting['elicitor_bandlimited_noise_polarity'] = polarity
-            log.info('Duration %f, ITI %f', duration, iti)
             try:
                 elicitor_uid, elicitor_factory = elicitor.add_setting(
                     setting, averages=averages, total_duration=duration)
