@@ -450,41 +450,65 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
         id = EXPERIMENT + '.interleaved_elicitor.items'
         point = 'psi.context.items'
 
-        Parameter:
-            name = 'elicitor_n'
-            label = 'Elicitor pulses'
-            default = 4
+        ContextRow:
+            name = 'train_timing'
             group_name = 'memr'
+            fmt = ['Pulse', elicitor_duration, 'sec elicitor', elicitor_n, 'times with', elicitor_iti, 'sec ITI']
 
-        Parameter:
-            name = 'repeat_period'
-            label = 'Stim repeat period'
-            default = 186e-3
-            group_name = 'memr'
+            Parameter: elicitor_n:
+                name = 'elicitor_n'
+                group_name = 'memr'
 
-        Parameter:
-            name = 'trial_period'
-            label = 'Trial repeat period'
-            default = 1.580
-            group_name = 'memr'
+            Parameter: elicitor_duration:
+                name = 'elicitor_duration'
+                default = 232e-3
+                group_name = 'memr'
 
-        Parameter:
-            name = 'trial_n'
-            label = 'Number of trials'
-            default = 2
-            group_name = 'memr'
+            Parameter: elicitor_iti:
+                name = 'elicitor_iti'
+                default = 140e-3
+                group_name = 'memr'
 
-        Parameter:
-            name = 'elicitor_duration'
-            label = 'Elicitor duration'
-            default = 116e-3
+        ContextRow:
+            name = 'trial_timing'
             group_name = 'memr'
+            fmt = ['Repeat', trial_n, 'times with', trial_iti, 'sec ITI']
+
+            Parameter: trial_n:
+                name = 'trial_n'
+                label = 'Number of trials'
+                default = 2
+                group_name = 'memr'
+
+            Parameter: trial_iti:
+                name = 'trial_iti'
+                label = 'Trial ITI'
+                default = 1.14
+                group_name = 'memr'
 
         Parameter:
             name = 'analysis_window'
             label = 'Analysis window'
             default = 46.4e-3
             group_name = 'memr'
+
+        Parameter:
+            name = 'repeat_period'
+            label = 'Stim repeat period'
+            group_name = 'memr'
+
+        Parameter:
+            name = 'trial_period'
+            label = 'Trial repeat period'
+            group_name = 'memr'
+
+        Expression:
+            parameter = 'repeat_period'
+            expression = 'elicitor_duration + elicitor_iti'
+
+        Expression:
+            parameter = 'trial_period'
+            expression = 'repeat_period * (elicitor_n + 1) + trial_iti'
 
         Expression:
             parameter = 'elicitor_noise_n'
@@ -678,6 +702,10 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
             parameter = 'probe_chirp_max_correction'
             expression = 'probe_max_equalize'
 
+        Expression:
+            parameter = 'probe_chirp_audiogram_weighting'
+            expression = 'None'
+
 
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
 
@@ -735,7 +763,6 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                 name = 'elicitor'
                 lb = C.elicitor_envelope_start_time
                 ub = C.elicitor_envelope_start_time + C.elicitor_duration
-
 
     Extension:
         id = EXPERIMENT + '.plots'
