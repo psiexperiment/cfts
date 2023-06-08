@@ -907,6 +907,14 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
             parameter = 'probe_chirp_equalize'
             expression = 'probe_max_equalize != 0'
 
+        Expression:
+            parameter = 'probe_chirp_max_correction'
+            expression = 'probe_max_equalize'
+
+        Expression:
+            parameter = 'probe_chirp_audiogram_weighting'
+            expression = 'probe_audiogram_weighting'
+
 
 enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
 
