@@ -340,7 +340,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
             ContextRow:
                 name = 'elicitor'
                 fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh, 
-                       'Hz, equalize up to ±', elicitor_eq_max, 'db, apply',
+                       'Hz, eq. up to ±', elicitor_eq_max, 'db, apply',
                        elicitor_audiogram, 'audiogram']
 
                 Parameter: elicitor_fl:
@@ -366,8 +366,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
             ContextRow:
                 name = 'probe'
                 fmt = ['Probe', probe_fl, 'to', probe_fh, 'Hz at', probe_level,
-                       'dB SPL, equalize up to ±', probe_eq_max, 'db, apply',
-                       probe_audiogram, 'audiogram']
+                       'dB SPL, eq. up to ±', probe_eq_max, 'db']
 
                 Parameter: probe_fl:
                     name = 'probe_fl'
@@ -388,11 +387,6 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                     name = 'probe_max_equalize'
                     default = 20
                     scope = 'trial'
-
-                EnumParameter: probe_audiogram:
-                    name = 'probe_audiogram_weighting'
-                    default = 'mouse'
-                    choices = {'no': None, 'mouse': "'mouse'"}
 
 
     Extension:
@@ -549,6 +543,15 @@ enamldef InterleavedClickProbeMixin(ExperimentManifest):
         id = EXPERIMENT + '.interleaved_click_probe.items'
         point = 'psi.context.items'
 
+        Parameter:
+            name = 'probe_delay'
+            label = 'probe delay'
+            group_name = 'memr'
+
+        Parameter: probe_duration:
+            name = 'probe_duration'
+            group_name = 'memr'
+
         Expression:
             parameter = f'probe_click_n'
             expression = 'elicitor_n + 1'
@@ -588,6 +591,18 @@ enamldef InterleavedClickProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_bandlimited_click_window'
             expression = '5e-3'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_equalize'
+            expression = 'probe_max_equalize != 0'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_max_correction'
+            expression = 'probe_max_equalize'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_audiogram_weighting'
+            expression = 'None'
 
 
 enamldef InterleavedChirpProbeMixin(ExperimentManifest):
@@ -662,10 +677,6 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_chirp_max_correction'
             expression = 'probe_max_equalize'
-
-        Expression:
-            parameter = 'probe_chirp_audiogram_weighting'
-            expression = 'probe_audiogram_weighting'
 
 
 enamldef InterleavedMEMRManifest(BaseMEMRManifest):
@@ -910,10 +921,6 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_chirp_max_correction'
             expression = 'probe_max_equalize'
-
-        Expression:
-            parameter = 'probe_chirp_audiogram_weighting'
-            expression = 'probe_audiogram_weighting'
 
 
 enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
