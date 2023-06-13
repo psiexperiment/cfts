@@ -293,6 +293,7 @@ enamldef InEarCalibrationMixinManifest(ExperimentManifest): manifest:
     attr experiment
     attr outputs
     attr get_values = lambda x: {si for i in x for si in i}
+    attr microphone_channel = 'system_microphone'
 
     id = f'{experiment}_inear_calibration_mixin'
     name = f'{experiment}_inear_calibration'
@@ -319,7 +320,7 @@ enamldef InEarCalibrationMixinManifest(ExperimentManifest): manifest:
         ToneCalibrate:
             name = f'{experiment}_tone_calibration'
             label = 'Tone calibration'
-            input_name = 'system_microphone'
+            input_name << manifest.microphone_channel
             outputs << manifest.outputs
             gain << C.calibration_gain
             max_thd = None
@@ -344,6 +345,65 @@ enamldef DPOAEInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): mani
         'primary': ['primary_tone_frequency'],
         'secondary': ['secondary_tone_frequency'],
     }
+
+
+enamldef BinauralDPOAEInEarCalibrationMixinManifest(ExperimentManifest): manifest:
+
+    id = f'binaural_inear_calibration_mixin'
+    name = f'binaural_inear_calibration'
+    title = 'In-ear calibration'
+
+    Extension:
+        id = manifest.id + '.binaural_context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'inear_calibration'
+            label = 'In-ear calibration'
+
+            Parameter:
+                name = 'calibration_gain'
+                label = 'Gain (dB)'
+                dtype = 'float'
+                default = -30
+
+    Extension:
+        id = manifest.id + '.calibration'
+        point = 'psi.controller.calibration.channels'
+
+        ToneCalibrate:
+            name = f'binaural_left_tone_calibration'
+            label = 'Left tone calibration'
+            input_name = 'left_microphone'
+            outputs = {
+                'left_primary': ['primary_left_tone_frequency'],
+                'left_secondary': ['secondary_left_tone_frequency'],
+            }
+            gain << C.calibration_gain
+            max_thd = None
+            min_snr = 5
+            duration = 0.1
+            trim = 0.01
+            iti = 0
+            get_values => (values):
+                return {si for i in values for si in i}
+
+        ToneCalibrate:
+            name = f'binaural_right_tone_calibration'
+            label = 'Right tone calibration'
+            input_name = 'right_microphone'
+            outputs = {
+                'right_primary': ['primary_right_tone_frequency'],
+                'right_secondary': ['secondary_right_tone_frequency'],
+            }
+            gain << C.calibration_gain
+            max_thd = None
+            min_snr = 5
+            duration = 0.1
+            trim = 0.01
+            iti = 0
+            get_values => (values):
+                return {si for i in values for si in i}
 
 
 enamldef SAMEFRInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): manifest:

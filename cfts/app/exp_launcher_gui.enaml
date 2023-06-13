@@ -66,7 +66,19 @@ class Settings(Atom):
         super().__init__(*args, **kwargs)
         self.load_config(r'C:\Users\mmm\psi\cfts\monaural.json')
 
-    def find_starship(self, ear, test=True):
+    def find_starship(self, ear, monaural=True):
+        '''
+        Return starship configured for specified ear
+
+        Parameters
+        ----------
+        ear : {'left', 'right'}
+            Ear to locate starship for
+        monaural : bool
+            If True, will load the starship marked for either ear if it exists
+            and it can't find a starship specifically designated for the
+            requested ear.
+        '''
         starship_to_use = set()
         for k, v in self.starship_config.items():
             if v['ear'] == ear:
@@ -95,6 +107,9 @@ class Settings(Atom):
                 env['CFTS_NONTEST_STARSHIP'] = self.find_starship(nontest_ear, False)
             except ValueError:
                 pass
+        elif mode.lower() == 'binaural':
+            env['CFTS_LEFT_STARSHIP'] = self.find_starship('left', False)
+            env['CFTS_RIGHT_STARSHIP'] = self.find_starship('right', False)
 
         filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
         filename = ' '.join(filename.split())

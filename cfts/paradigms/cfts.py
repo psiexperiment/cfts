@@ -52,7 +52,8 @@ microphone_fft_mixin = {
         'fft_freq_lb': 500,
         'fft_freq_ub': 50000,
         'source_name': 'system_microphone',
-        'y_label': 'Microphone (dB)'
+        'y_label': 'Microphone (dB)',
+        'apply_calibration': True,
     }
 }
 
@@ -117,7 +118,9 @@ ParadigmDescription(
 ParadigmDescription(
     'dpoae_io', 'DPOAE (input-output)', 'ear', [
         dual_starship_mixin,
-        {'manifest': CFTS_PATH + 'dpoae_io.DPOAEIOSimpleManifest'},
+        {'manifest': CFTS_PATH + 'dpoae_base.SingleDPOAEManifest'},
+        {'manifest': CFTS_PATH + 'dpoae_io.DPOAEIOSimpleManifest', 'required': True},
+        {'manifest': CFTS_PATH + 'dpoae_io.SingleDPOAEIO', 'required': True},
         {'manifest': CFTS_PATH + 'cfts_mixins.DPOAEInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,
@@ -197,6 +200,56 @@ ParadigmDescription(
 ################################################################################
 # Two-starship paradigms for MEMR
 ################################################################################
+multi_microphone_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.MultiSignalViewManifest',
+    'attrs': {
+        'id': 'microphone_signal_view',
+        'title': 'Microphone (time)',
+        'time_span': 4,
+        'time_delay': 0.125,
+        'sources': {
+            'left_microphone': {'color': 'DarkCyan'},
+            'right_microphone': {'color': 'DarkMagenta'}
+        },
+        'y_label': 'Microphone (V)'
+    },
+}
+
+
+multi_microphone_fft_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.MultiSignalFFTViewManifest',
+    'attrs': {
+        'id': 'microphone_fft_view',
+        'title': 'Microphone (PSD)',
+        'fft_time_span': 0.25,
+        'fft_freq_lb': 500,
+        'fft_freq_ub': 50000,
+        'sources': {
+            'left_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
+            'right_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
+        },
+        'y_label': 'Microphone (dB)'
+    }
+}
+
+ParadigmDescription(
+    'dual_dpoae_io', 'Dual DPOAE (input-output)', 'ear', [
+        {'manifest': CAL_PATH + 'objects.Starship', 'required': True,
+         'attrs': {'id': 'left', 'title': 'Left starship', 'side': 'left'}},
+        {'manifest': CAL_PATH + 'objects.Starship', 'required': True,
+         'attrs': {'id': 'right', 'title': 'Right starship', 'side': 'right'}},
+        {'manifest': CFTS_PATH + 'dpoae_base.DualDPOAEManifest'},
+        {'manifest': CFTS_PATH + 'dpoae_io.DualDPOAEIOSimpleManifest', 'required': True},
+        {'manifest': CFTS_PATH + 'dpoae_io.DualDPOAEIO'},
+        {'manifest': CFTS_PATH + 'cfts_mixins.BinauralDPOAEInEarCalibrationMixinManifest', 'selected': True},
+        temperature_mixin,
+        multi_microphone_mixin,
+        multi_microphone_fft_mixin,
+        cal_mic_mixin,
+    ],
+)
+
+
 elicitor_starship_mixin = {
     'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
