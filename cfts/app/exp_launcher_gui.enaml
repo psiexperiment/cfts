@@ -83,7 +83,7 @@ class Settings(Atom):
         for k, v in self.starship_config.items():
             if v['ear'] == ear:
                 starship_to_use.add(k)
-            elif v['ear'] == 'either' and test:
+            elif v['ear'] == 'either' and monaural:
                 starship_to_use.add(k)
         if len(starship_to_use) != 1:
             raise ValueError('Starships incorrectly configured')
