@@ -103,6 +103,16 @@ ParadigmDescription(
 
 
 ParadigmDescription(
+    'eeg_calibration', 'EEG calibration', 'ear', [
+        temperature_mixin,
+        eeg_view_mixin_required,
+        {'manifest': CFTS_PATH + 'monitor.EEGCalibrationManifest', 'selected': True},
+        cal_mic_mixin,
+    ],
+)
+
+
+ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
     'abr_io', 'ABR (input-output)', 'ear', [
         selectable_starship_mixin,
