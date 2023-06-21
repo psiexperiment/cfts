@@ -18,7 +18,7 @@ from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
 
 from psi.context.selector import CartesianProduct
 from psi.controller.api import EngineStoppedException, ExperimentAction
-from psi.data.plots import (StackedEpochAveragePlot, TimeContainer, ViewBox)
+from psi.data.plots import (StackedEpochAveragePlot, EpochTimeContainer, ViewBox)
 from psi.data.sinks.api import GroupedEpochCounter
 
 
@@ -276,7 +276,7 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
         id = EXPERIMENT + '.plots'
         point = 'psi.data.plots'
 
-        TimeContainer: time_container:
+        EpochTimeContainer: time_container:
             label = 'ERP average'
             span = 8.5e-3
             allow_auto_select << C.ordering == 'sequential'
