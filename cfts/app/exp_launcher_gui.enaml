@@ -1,3 +1,6 @@
+import logging
+log = logging.getLogger(__name__)
+
 import json
 import os
 from pathlib import Path
@@ -260,6 +263,7 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
                                 settings.run_experiment(mode_loop.experiment, loop_item,
                                                         save=experiment_box.save)
                             except Exception as e:
+                                log.exception(e)
                                 critical(experiment_box, 'Error starting experiment', str(e))
                             # Update the preferences in case new ones were created
                             preferences.items = [str(p) for p in list_preferences(mode_loop.experiment.paradigm)]
