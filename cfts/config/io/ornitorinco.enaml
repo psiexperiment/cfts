@@ -130,7 +130,7 @@ enamldef IOManifest(PluginManifest): manifest:
 
             NIDAQHardwareAIChannel:
                 label = 'Calibration microphone'
-                name = 'calibration_microphone'
+                name = 'microphone_calibration'
                 channel = 'PXI1Slot6/ai0'
                 start_trigger = START_TRIGGER
                 fs = 100e3
