@@ -3,7 +3,7 @@ log = logging.getLogger(__name__)
 
 from functools import partial
 
-from atom.api import Dict, Float, Int
+from atom.api import Dict, Float, Int, Value
 from enaml.core.api import Conditional, d_
 from enaml.stdlib.message_box import question
 from enaml.workbench.api import Extension
@@ -12,7 +12,7 @@ from enaml.workbench.core.api import Command
 import numpy as np
 
 from psiaudio.pipeline import concat, coroutine, PipelineData
-from psiaudio.queue import BlockedFIFOSignalQueue, GroupedFIFOSignalQueue
+from psiaudio.queue import FIFOSignalQueue
 from psiaudio import util
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
@@ -121,8 +121,8 @@ def configure_memr(event, duration_attr, iti_attr=None):
 
     probe = controller.get_output('probe')
     elicitor = controller.get_output('elicitor')
-    probe.queue = BlockedFIFOSignalQueue()
-    elicitor.queue = BlockedFIFOSignalQueue()
+    probe.queue = FIFOSignalQueue()
+    elicitor.queue = FIFOSignalQueue()
 
     elicitor_sf = 0
     probe_sf = 0
@@ -138,7 +138,7 @@ def configure_memr(event, duration_attr, iti_attr=None):
             duration = setting[duration_attr] + iti
             setting['elicitor_bandlimited_noise_polarity'] = polarity
             try:
-                elicitor_uid, elicitor_factory = elicitor.add_setting(
+                elicitor_uuid, elicitor_factory = elicitor.add_setting(
                     setting, averages=averages, total_duration=duration)
             except ChannelOutOfRange as e:
                 level = setting['elicitor_bandlimited_noise_level']
@@ -150,7 +150,8 @@ def configure_memr(event, duration_attr, iti_attr=None):
             # This should come *after* so we don't add a probe with a silent
             # elicitor to the queue.
             try:
-                probe_uid, probe_factory = probe.add_setting(
+                setting['elicitor_uuid'] = elicitor_uuid
+                _, probe_factory = probe.add_setting(
                     setting, averages=averages, total_duration=duration)
             except ChannelOutOfRange as e:
                 raise ValueError(f'Probe level is {e.db:.1f} dB too high.')
@@ -247,6 +248,51 @@ class ExtractStim(EpochInput):
         return extract_stim(self.lb, self.ub, cb).send
 
 
+@coroutine
+def process_memr(fl, fh, reject_threshold, probe_output, elicitor_output, fs,
+                 calibration, target):
+    while True:
+        data = (yield)
+        n = data.shape[-1] // 2
+        probe = data[..., 0, :n]
+        silence = data[..., 0, n:]
+
+        silence_psd = calibration.get_db(util.psd_df(silence, fs))
+        probe_psd = calibration.get_db(util.psd_df(probe, fs))
+        silence_rms = silence_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1)
+        probe_rms = probe_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1)
+        if np.all(silence_rms < reject_threshold):
+            target(data)
+            with probe_output.engine.lock:
+                with elicitor_output.engine.lock:
+                    probe_uuid = data[0].metadata['key']
+                    elicitor_uuid = data[0].metadata['elicitor_uuid']
+                    try:
+                        probe_output.queue.decrement_key(probe_uuid)
+                        elicitor_output.queue.decrement_key(elicitor_uuid)
+                    except:
+                        pass
+                    log.error(f'N probe trials: {probe_output.queue.count_trials()}')
+                    log.error(f'N elicitor trials: {probe_output.queue.count_trials()}')
+        else:
+            log.info('Rejecting MEMR trial due to artifact')
+
+
+class ProcessMEMR(EpochInput):
+
+    fl = d_(Float())
+    fh = d_(Float())
+    reject_threshold = d_(Float())
+    probe_output = d_(Value())
+    elicitor_output = d_(Value())
+
+    def configure_callback(self):
+        cb = super().configure_callback()
+        return process_memr(self.fl, self.fh, self.reject_threshold,
+                            self.probe_output, self.elicitor_output, self.fs,
+                            self.calibration, cb).send
+
+
 class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
 
     final_probe = d_(Int())
@@ -307,7 +353,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 name = 'probe'
                 label = 'Probe'
                 target_name = 'probe_primary'
-                auto_decrement = True
+                auto_decrement = False
                 token = workbench.get_plugin('psi.token').get_token(probe)
                 queue ::
                     extract_probe.subscribe_to_queue(self.queue)
@@ -315,7 +361,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 name = 'elicitor'
                 label = 'Elicitor'
                 target_name = 'elicitor_secondary'
-                auto_decrement = True
+                auto_decrement = False
                 token = workbench.get_plugin('psi.token').get_token('noise')
                 queue ::
                     extract_elicitor.subscribe_to_queue(self.queue)
@@ -339,7 +385,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
 
             ContextRow:
                 name = 'elicitor'
-                fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh, 
+                fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh,
                        'Hz, eq. up to ±', elicitor_eq_max, 'db, apply',
                        elicitor_audiogram, 'audiogram']
 
@@ -427,7 +473,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         EpochCounter: counter:
             name = 'memr_counter'
             label = 'MEMRs acquired'
-            source_name = 'memr_probe'
+            source_name = 'memr_probe_valid'
             output_name = 'probe'
 
         BinaryStore:
@@ -490,6 +536,12 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
             name = 'analysis_window'
             label = 'Analysis window'
             default = 46.4e-3
+            group_name = 'memr'
+
+        Parameter:
+            name = 'reject_threshold'
+            label = 'Reject threshold (dB SPL)'
+            default = 50
             group_name = 'memr'
 
         Parameter:
@@ -748,9 +800,28 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
             ExtractStim:
                 # Add a bit of padding to capture the tail end of the
                 # probe due to acoustic delays
-                name = 'probe'
-                lb = C.probe_delay + 0.75e-3
-                ub = C.probe_delay + C.probe_duration + 0.75e-3
+                name = 'probe_silence'
+                lb << C.probe_delay + 0.75e-3
+                ub << lb + C.probe_duration * 2
+
+                ProcessMEMR:
+                    name = 'memr_probe_valid'
+                    force_active = True
+                    fl = C.probe_fl
+                    fh = C.probe_fh
+                    reject_threshold = C.reject_threshold
+                    probe_output = controller.get_output('probe')
+                    elicitor_output = controller.get_output('elicitor')
+
+                    ExtractStim: probe:
+                        name = 'probe'
+                        lb << 0
+                        ub << C.probe_duration
+
+                    ExtractStim: silence:
+                        name = 'silence'
+                        lb << probe.ub
+                        ub << lb + C.probe_duration
 
         StackRepeats:
             source_name = 'memr_elicitor'
@@ -810,6 +881,13 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                     tab_grouping << C.get_names()
                     apply_calibration = True
                     fmt_plot_label_cb = lambda x, s: f'Probe'
+
+                GroupedEpochFFTPlot: probe_fft_plot:
+                    pen_color_cycle = 'palettable.cartocolors.qualitative.Bold_2_r'
+                    source_name = 'silence'
+                    tab_grouping << C.get_names()
+                    apply_calibration = True
+                    fmt_plot_label_cb = lambda x, s: f'Silence'
 
                 GroupedEpochFFTPlot: elicitor_fft_plot:
                     pen_color_cycle = 'palettable.cartocolors.qualitative.Bold_2'
