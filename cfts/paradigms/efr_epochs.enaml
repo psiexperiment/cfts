@@ -25,7 +25,7 @@ from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
 from psi.data.api import (FFTContainer, GroupedEpochFFTPlot, PlotContainer,
                           ResultPlot, ViewBox)
 
-from .cfts_mixins import CFTSSelector, EEGInput
+from .cfts_mixins import CFTSSelector
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
@@ -110,12 +110,12 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
                 extract_eeg.subscribe_to_queue(self.queue)
                 extract_mic.subscribe_to_queue(self.queue)
 
-        EEGInput:
-            ExtractEpochs: extract_eeg:
-                epoch_size = getattr(C, f'target_{selected_token}_duration')
-                name = 'erp'
-                Input:
-                    name = 'analyze_efr'
+        ExtractEpochs: extract_eeg:
+            source_name = 'eeg'
+            epoch_size = getattr(C, f'target_{selected_token}_duration')
+            name = 'erp'
+            Input:
+                name = 'analyze_efr'
 
     Extension:
         id = EXPERIMENT + '.selectors'

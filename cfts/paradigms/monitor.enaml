@@ -2,7 +2,6 @@ from enaml.workbench.api import Extension
 
 from psi.context.api import ContextGroup
 from psi.controller.api import ControllerManifest, ExperimentAction
-from cftscal.paradigms.objects import DecimatedAmplifierInput
 
 
 EXPERIMENT = 'monitor'
@@ -29,14 +28,3 @@ enamldef MonitorManifest(ControllerManifest):
         ExperimentAction:
             event = 'experiment_initialize'
             command = 'psi.context.initialize'
-
-    Extension:
-        id = EXPERIMENT + '.monitor.io'
-        point = 'psi.controller.io'
-
-        DecimatedAmplifierInput:
-            target_fs = 12.5e3
-            force_active = True
-            name = 'eeg'
-
-

@@ -12,22 +12,19 @@ import numpy as np
 
 from psiaudio.util import octave_space
 
-from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
-                             EnumParameter, FriendlyCartesianProduct,
-                             Parameter)
-from psi.controller.api import (Callback, ContinuousInput, DecimateTo, Downsample,
-                                ExperimentAction, get_hw_ai_choices, get_hw_ao_choices,
-                                IIRFilter)
+from psi.context.api import (ContextGroup, FriendlyCartesianProduct, Parameter)
+from psi.controller.api import (Callback, ContinuousInput, Downsample,
+                                ExperimentAction, get_hw_ai_choices,
+                                get_hw_ao_choices, IIRFilter)
 from psi.controller.calibration.api import ChirpCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
 from psi.data.sinks.api import BinaryStore
 from psi.experiment.api import StatusItem
 
-from psi.paradigms.core.io_mixins import ChannelInput, ChannelInputManifest, \
-    QueuedEpochChannelOutput
+from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 
 
-from cftscal.api import list_starship_connections, microphone_manager, starship_manager
+from cftscal.api import microphone_manager
 
 
 ################################################################################
@@ -192,97 +189,6 @@ enamldef TemperatureMixinManifest(ExperimentManifest): manifest:
 
                 Callback:
                     function = lambda x: setattr(temp, 'text', f'{x[0, -1]:.1f}°C')
-
-
-################################################################################
-# Hardware mixins
-################################################################################
-enamldef EEGFilter(IIRFilter):
-    N = 2
-    btype = 'bandpass'
-    ftype = 'butter'
-    passthrough = not C.digital_filter
-    f_highpass = C.digital_highpass
-    f_lowpass = C.digital_lowpass
-
-
-enamldef BaseEEGInput(ChannelInput):
-    label = 'EEG'
-    show_gain_setting = False
-
-
-enamldef EEGInput(BaseEEGInput): base:
-    name = 'eeg'
-    EEGFilter:
-        name = 'eeg_filtered'
-
-
-enamldef DecimatedEEGInput(BaseEEGInput): base:
-    '''
-    This makes it easier to use the EEGInput with various assays (e.g., ABR vs.
-    EFR) that require different filtering parameters.
-    '''
-    alias target_fs: dec.target_fs
-    DecimateTo: dec:
-        name = 'eeg'
-        EEGFilter:
-            name = 'eeg_filtered'
-
-
-enamldef BaseEEGInputManifest(ChannelInputManifest): manifest:
-
-    Extension:
-        id = manifest.id + '.eeg.context'
-        point = 'psi.context.items'
-
-        ContextRow:
-            fmt = ['Amplifier filter', hp, 'to', lp, 'Hz at', gain, '✕ gain']
-            group_name = 'hardware_settings'
-
-            Parameter: hp:
-                name = 'amplifier_highpass'
-                label = 'Amplifier highpass filter cutoff'
-                default = 10
-                scope = 'experiment'
-
-            Parameter: lp:
-                name = 'amplifier_lowpass'
-                label = 'Amplifier lowpass filter cutoff'
-                default = 10e3
-                scope = 'experiment'
-                group_name = 'hardware_settings'
-
-            Parameter: gain:
-                name = 'amplifier_gain'
-                label = 'Amplifier gain'
-                default = 100e3
-                scope = 'experiment'
-                group_name = 'hardware_settings'
-
-        ContextRow:
-            name = 'digital_filter_settings'
-            fmt << ['Digital filter?', filt_on] \
-                if filt_on.expression == 'False' else \
-                ['Digital filter?', filt_on, 'from', filt_hp, 'to', filt_lp, 'Hz']
-            group_name = 'acquisition'
-
-            BoolParameter: filt_on:
-                name = 'digital_filter'
-                label = 'Digital filter?'
-                scope = 'experiment'
-                default = True
-
-            Parameter: filt_hp:
-                name = 'digital_highpass'
-                label = 'Digital highpass filter cutoff'
-                default = 300
-                scope = 'experiment'
-
-            Parameter: filt_lp:
-                name = 'digital_lowpass'
-                label = 'Digital lowpass filter cutoff'
-                default = 3000
-                scope = 'experiment'
 
 
 ################################################################################

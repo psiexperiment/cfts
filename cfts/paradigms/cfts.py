@@ -15,6 +15,20 @@ cal_mic_mixin = {
 }
 
 
+eeg_dec_mixin = {
+    'manifest': CAL_PATH + 'objects.AmplifierInput',
+    'required': True,
+    'attrs': {'id': 'eeg', 'title': 'EEG', 'target_fs': 12.5e3},
+}
+
+
+eeg_mixin = {
+    'manifest': CAL_PATH + 'objects.AmplifierInput',
+    'required': True,
+    'attrs': {'id': 'eeg', 'title': 'EEG', 'target_fs': None},
+}
+
+
 selectable_starship_mixin = {
     'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
@@ -95,6 +109,7 @@ efr_microphone_fft_mixin = {
 ParadigmDescription(
     'monitor', 'Monitor', 'ear', [
         temperature_mixin,
+        eeg_dec_mixin,
         eeg_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
         cal_mic_mixin,
@@ -105,6 +120,7 @@ ParadigmDescription(
 ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
     'abr_io', 'ABR (input-output)', 'ear', [
+        eeg_dec_mixin,
         selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOSimpleManifest'},
         temperature_mixin,
@@ -133,6 +149,7 @@ ParadigmDescription(
 ParadigmDescription(
     'efr_sam', 'SAM EFR (continuous)', 'ear', [
         selectable_starship_mixin,
+        eeg_mixin,
         {'manifest': CFTS_PATH + 'efr.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -147,6 +164,7 @@ ParadigmDescription(
 ParadigmDescription(
     'efr_sam_epoch', 'SAM EFR (continuous)', 'ear', [
         selectable_starship_mixin,
+        eeg_mixin,
         {'manifest': CFTS_PATH + 'efr_epochs.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -161,6 +179,7 @@ ParadigmDescription(
 ParadigmDescription(
     'efr_sam_epoch', 'SAM EFR (epoch)', 'ear', [
         selectable_starship_mixin,
+        eeg_mixin,
         {'manifest': CFTS_PATH + 'efr_epochs.SAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
@@ -175,6 +194,7 @@ ParadigmDescription(
 ParadigmDescription(
     'efr_ram_epoch', 'RAM EFR (epoch)', 'ear', [
         selectable_starship_mixin,
+        eeg_mixin,
         {'manifest': CFTS_PATH + 'efr_epochs.RAMEFRManifest'},
         {'manifest': CFTS_PATH + 'cfts_mixins.RAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,

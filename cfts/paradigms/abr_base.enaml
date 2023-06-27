@@ -20,8 +20,6 @@ from psi.controller.api import (
 from psi.data.sinks.api import BinaryStore, TextStore
 from psi.token.primitives import Cos2Envelope, Tone
 
-from .cfts_mixins import DecimatedEEGInput
-
 
 EXPERIMENT = 'abr_base'
 
@@ -74,18 +72,17 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
                 controller = workbench.get_plugin('psi.controller')
                 deferred_call(controller.invoke_actions, output.name + '_end')
 
-        DecimatedEEGInput:
-            target_fs = 12.5e3
-            ExtractEpochs: extract:
-                name = 'erp'
-                epoch_size = 8.5e-3
-                Detrend:
-                    name = 'erp_detrend'
-                    mode = C.detrend_mode
-                    RejectEpochs:
-                        name = 'valid_erp'
-                        threshold = C.lookup('reject_threshold', True)
-                        mode = C.reject_mode
+        ExtractEpochs: extract:
+            name = 'erp'
+            source_name = 'eeg_filtered'
+            epoch_size = 8.5e-3
+            Detrend:
+                name = 'erp_detrend'
+                mode = C.detrend_mode
+                RejectEpochs:
+                    name = 'valid_erp'
+                    threshold = C.lookup('reject_threshold', True)
+                    mode = C.reject_mode
 
     Extension:
         id = EXPERIMENT + '.abr.context'
