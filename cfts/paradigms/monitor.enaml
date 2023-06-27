@@ -1,20 +1,8 @@
-import logging
-log = logging.getLogger(__name__)
-
-from functools import partial
-
 from enaml.workbench.api import Extension
 
-from psiaudio.pipeline import coroutine
 from psi.context.api import ContextGroup
-from psi.controller.api import (
-    AutoThreshold, Coroutine, ControllerManifest, Edges, ExperimentAction,
-    ExtractEpochs
-)
-from psi.data.api import GroupedEpochAveragePlot, EpochTimeContainer, ViewBox
-from psi.data.sinks.api import BinaryStore, TextStore
-
-from .cfts_mixins import DecimatedEEGInput
+from psi.controller.api import ControllerManifest, ExperimentAction
+from cftscal.paradigms.objects import DecimatedAmplifierInput
 
 
 EXPERIMENT = 'monitor'
@@ -46,93 +34,9 @@ enamldef MonitorManifest(ControllerManifest):
         id = EXPERIMENT + '.monitor.io'
         point = 'psi.controller.io'
 
-        DecimatedEEGInput:
+        DecimatedAmplifierInput:
             target_fs = 12.5e3
             force_active = True
+            name = 'eeg'
 
 
-@coroutine
-def notify_queue(queue, target):
-    while True:
-        data = (yield)
-        for _, row in data.events.iterrows():
-            log.info(row)
-            info = {
-                't0': row['ts'],
-                'metadata': {'edge': row['event']},
-            }
-            queue.append(info)
-
-
-enamldef EEGCalibrationManifest(ControllerManifest):
-
-    Extension:
-        id = EXPERIMENT + '.monitor.context'
-        point = 'psi.context.items'
-
-        ContextGroup:
-            name = 'hardware_settings'
-            label = 'Hardware'
-
-        ContextGroup:
-            name = 'acquisition'
-            label = 'Acquisition'
-
-    Extension:
-        id = EXPERIMENT + '.monitor.actions'
-        point = 'psi.controller.actions'
-
-        ExperimentAction:
-            event = 'experiment_initialize'
-            command = 'psi.context.initialize'
-
-    Extension:
-        id = EXPERIMENT + '.monitor.io'
-        point = 'psi.controller.io'
-
-        DecimatedEEGInput:
-            target_fs = 12.5e3
-            force_active = True
-
-            AutoThreshold:
-                baseline = 1
-                Edges:
-                    debounce = 25
-                    detect = 'both'
-                    Coroutine:
-                        coroutine = partial(notify_queue,
-                                            extract.added_queue)
-
-            ExtractEpochs: extract:
-                name = 'crp'
-                prestim_time = 0.1
-                epoch_size = 0.5
-
-    Extension:
-        id = EXPERIMENT + '.monitor.sinks'
-        point = 'psi.data.sinks'
-
-        BinaryStore:
-            name = 'erp_eeg'
-            continuous_inputs = ['eeg']
-
-        TextStore:
-            epoch_inputs = ['crp']
-
-    Extension:
-        id = EXPERIMENT + '.monitor.plots'
-        point = 'psi.data.plots'
-
-        EpochTimeContainer:
-            label = 'Calibration signal'
-            span = 0.6
-
-            ViewBox:
-                y_mode = 'mouse'
-                save_limits = True
-
-                GroupedEpochAveragePlot:
-                    source_name = 'crp'
-                    plot_grouping = ['edge']
-                    autogenerate_keys = 'neither'
-                    plot_keys = [('rising',), ('falling',)]
