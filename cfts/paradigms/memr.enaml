@@ -35,7 +35,7 @@ from psi.data.api import (
     EpochTimeContainer, GroupedEpochAveragePlot, GroupedEpochFFTPlot
 )
 
-from .cfts_mixins import CFTSSelector, EEGInput
+from .cfts_mixins import CFTSSelector
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
