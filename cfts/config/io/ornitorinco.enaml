@@ -52,8 +52,8 @@ enamldef IOManifest(PluginManifest): manifest:
             weight = 1
 
             NIDAQHardwareAIChannel:
-                label = 'EEG'
-                name = 'eeg_channel'
+                label = 'Grass P511'
+                name = 'amplifier_grass'
                 channel = 'PXI1Slot7/ai0'
                 start_trigger = START_TRIGGER
                 fs = 100e3
