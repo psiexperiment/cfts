@@ -4,6 +4,7 @@ log = logging.getLogger(__name__)
 from functools import partial
 
 from atom.api import Dict, Float, Int, Typed, Value
+from enaml.application import deferred_call
 from enaml.core.api import Conditional, d_
 from enaml.stdlib.message_box import question
 from enaml.workbench.api import Extension
@@ -302,7 +303,12 @@ def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
                 except Exception as e:
                     pass
 
-            counter.current_n = probe_output.queue.count_requested_trials() - probe_output.queue.count_trials()
+            current_n = probe_output.queue.count_requested_trials() - probe_output.queue.count_trials()
+            def update_counter():
+                nonlocal current_n
+                nonlocal counter
+                counter.current_n = current_n
+            deferred_call(update_counter)
 
             for v in probe_output.queue._data.values():
                 log.error(f'Trials {v["trials"]} for {v["metadata"]["elicitor_bandlimited_noise_level"]} {v["metadata"]["elicitor_bandlimited_noise_polarity"]}')
