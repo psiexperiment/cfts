@@ -128,7 +128,7 @@ CONTEXT_ITEM_DETAIL = {
         'range_fn': octave_space,
     },
     'f2_level': {
-        'user_friendly_name': 'levels',
+        'user_friendly_name': 'level',
         'step_unit': 'dB',
         'unit': 'dB SPL',
         'order_user_managed': True,
@@ -136,7 +136,7 @@ CONTEXT_ITEM_DETAIL = {
 
     # MEMR
     'elicitor_bandlimited_noise_level': {
-        'user_friendly_name': 'levels',
+        'user_friendly_name': 'level',
         'step_unit': 'dB',
         'unit': 'dB SPL',
     }
