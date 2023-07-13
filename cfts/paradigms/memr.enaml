@@ -475,6 +475,10 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
             label = 'MEMRs acquired'
             source_name = 'memr_probe_valid'
             output_name = 'probe'
+            set_requested_n => (controller):
+                output = controller.get_output(self.output_name)
+                self.requested_n = output.queue.count_requested_trials() * (C.elicitor_n + 1)
+                log.info('Expecting a total of %d trials for %s', self.requested_n, self.output_name)
 
         BinaryStore:
             name = 'memr_binary_store'
