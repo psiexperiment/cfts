@@ -123,8 +123,8 @@ def configure_memr(event, duration_attr, iti_attr=None):
     counter = data.find_sink('memr_counter')
     probe = controller.get_output('probe')
     elicitor = controller.get_output('elicitor')
-    probe.queue = InterleavedFIFOSignalQueue()
-    elicitor.queue = InterleavedFIFOSignalQueue()
+    probe.queue = InterleavedFIFOSignalQueue(keep_complete_waveforms=False)
+    elicitor.queue = InterleavedFIFOSignalQueue(keep_complete_waveforms=False)
 
     elicitor_sf = 0
     probe_sf = 0
