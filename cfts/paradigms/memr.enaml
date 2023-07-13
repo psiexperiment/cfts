@@ -470,16 +470,6 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.data'
         point = 'psi.data.sinks'
 
-        EpochCounter: counter:
-            name = 'memr_counter'
-            label = 'MEMRs acquired'
-            source_name = 'memr_probe_valid'
-            output_name = 'probe'
-            set_requested_n => (controller):
-                output = controller.get_output(self.output_name)
-                self.requested_n = output.queue.count_requested_trials() * (C.elicitor_n + 1)
-                log.info('Expecting a total of %d trials for %s', self.requested_n, self.output_name)
-
         BinaryStore:
             name = 'memr_binary_store'
             continuous_inputs = ['probe_microphone', 'elicitor_microphone']
@@ -770,6 +760,20 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                                       duration_attr='trial_period', iti_attr=None)
 
     Extension:
+        id = EXPERIMENT + '.interleaved_memr.data'
+        point = 'psi.data.sinks'
+
+        EpochCounter: counter:
+            name = 'memr_counter'
+            label = 'MEMRs acquired'
+            source_name = 'memr_probe_valid'
+            output_name = 'probe'
+            set_requested_n => (controller):
+                output = controller.get_output(self.output_name)
+                self.requested_n = output.queue.count_requested_trials() * (C.elicitor_n + 1)
+                log.info('Expecting a total of %d trials for %s', self.requested_n, self.output_name)
+
+    Extension:
         id = EXPERIMENT + '.interleaved_elicitor.tokens'
         point = 'psi.token.tokens'
 
@@ -1031,6 +1035,10 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
             parameter = 'probe_chirp_max_correction'
             expression = 'probe_max_equalize'
 
+        Expression:
+            parameter = 'probe_chirp_audiogram_weighting'
+            expression = 'None'
+
 
 enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
 
@@ -1041,7 +1049,17 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
     attr probe
 
     Extension:
-        id = EXPERIMENT + '.interleaved_memr.io'
+        id = EXPERIMENT + '.simultaneous_memr.sinks'
+        point = 'psi.data.sinks'
+
+        EpochCounter: counter:
+            name = 'memr_counter'
+            label = 'MEMRs acquired'
+            source_name = 'memr_probe'
+            output_name = 'probe'
+
+    Extension:
+        id = EXPERIMENT + '.simultaneous_memr.io'
         point = 'psi.controller.io'
 
         StackRepeats:
@@ -1184,7 +1202,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
             expression = 'elicitor_audiogram_weighting'
 
     Extension:
-        id = EXPERIMENT + '.plots'
+        id = EXPERIMENT + '.simultaneous_memr.plots'
         point = 'psi.data.plots'
 
         EpochTimeContainer: probe_time_container:
