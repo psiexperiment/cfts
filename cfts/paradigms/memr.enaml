@@ -3,7 +3,7 @@ log = logging.getLogger(__name__)
 
 from functools import partial
 
-from atom.api import Dict, Float, Int, Value
+from atom.api import Dict, Float, Int, Typed, Value
 from enaml.core.api import Conditional, d_
 from enaml.stdlib.message_box import question
 from enaml.workbench.api import Extension
@@ -12,7 +12,7 @@ from enaml.workbench.core.api import Command
 import numpy as np
 
 from psiaudio.pipeline import concat, coroutine, PipelineData
-from psiaudio.queue import FIFOSignalQueue
+from psiaudio.queue import InterleavedFIFOSignalQueue
 from psiaudio import util
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
@@ -29,7 +29,7 @@ from psi.token.primitives import (
 from psi.data.api import (
     ChannelPlot, FFTChannelPlot, FFTContainer, TimeContainer, ViewBox
 )
-from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
+from psi.data.sinks.api import BinaryStore, SimpleCounter, TextStore
 
 from psi.data.api import (
     EpochTimeContainer, GroupedEpochAveragePlot, GroupedEpochFFTPlot
@@ -118,11 +118,13 @@ enamldef MEMRSignalFFTViewManifest(ExperimentManifest): manifest:
 def configure_memr(event, duration_attr, iti_attr=None):
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
+    data = event.workbench.get_plugin('psi.data')
 
+    counter = data.find_sink('memr_counter')
     probe = controller.get_output('probe')
     elicitor = controller.get_output('elicitor')
-    probe.queue = FIFOSignalQueue()
-    elicitor.queue = FIFOSignalQueue()
+    probe.queue = InterleavedFIFOSignalQueue()
+    elicitor.queue = InterleavedFIFOSignalQueue()
 
     elicitor_sf = 0
     probe_sf = 0
@@ -177,6 +179,8 @@ def configure_memr(event, duration_attr, iti_attr=None):
     else:
         probe.channel.expected_range = (-probe_sf, probe_sf)
         elicitor.channel.expected_range = (-elicitor_sf, elicitor_sf)
+
+    counter.requested_n = probe.queue.count_requested_trials()
 
 
 @coroutine
@@ -249,8 +253,25 @@ class ExtractStim(EpochInput):
 
 
 @coroutine
-def process_memr(fl, fh, reject_threshold, probe_output, elicitor_output, fs,
-                 calibration, target):
+def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
+                 elicitor_output, fs, counter, calibration, target):
+    '''
+    Parameters
+    ----------
+    fl : float
+        Lowest frequency in probe stim
+    fh : float
+        Highest frequency in probe stim
+    reject_threshold : float
+        Reject trial if silence RMS is less than specified threshold in dB
+        (remember to factor in noise floor of microphone). The noise level of
+        the silent segment is calculated only over the frequency range spanning
+        fl to fh.
+    min_probe_corr : float
+        Reject trial if correlation between probe segments is less than this
+        threshold.
+    '''
+
     while True:
         data = (yield)
         n = data.shape[-1] // 2
@@ -259,21 +280,32 @@ def process_memr(fl, fh, reject_threshold, probe_output, elicitor_output, fs,
 
         silence_psd = calibration.get_db(util.psd_df(silence, fs))
         probe_psd = calibration.get_db(util.psd_df(probe, fs))
-        silence_rms = silence_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1)
+        silence_rms = silence_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1).max()
         probe_rms = probe_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1)
-        if np.all(silence_rms < reject_threshold):
+
+        probe_corr = np.corrcoef(probe).min()
+        silence_corr = np.corrcoef(silence).min()
+
+        log.info('Trial probe_corr %.2f, silence_corr %.2f, silence dB %.2f',
+                 probe_corr, silence_corr, silence_rms)
+
+        if (silence_rms < reject_threshold) \
+                and (probe_corr > min_probe_corr):
+
             target(data)
-            with probe_output.engine.lock:
-                with elicitor_output.engine.lock:
-                    probe_uuid = data[0].metadata['key']
-                    elicitor_uuid = data[0].metadata['elicitor_uuid']
-                    try:
-                        probe_output.queue.decrement_key(probe_uuid)
-                        elicitor_output.queue.decrement_key(elicitor_uuid)
-                    except:
-                        pass
-                    log.error(f'N probe trials: {probe_output.queue.count_trials()}')
-                    log.error(f'N elicitor trials: {probe_output.queue.count_trials()}')
+            with probe_output.engine.lock, elicitor_output.engine.lock:
+                probe_uuid = data[0].metadata['key']
+                elicitor_uuid = data[0].metadata['elicitor_uuid']
+                try:
+                    probe_output.queue.decrement_key(probe_uuid)
+                    elicitor_output.queue.decrement_key(elicitor_uuid)
+                except Exception as e:
+                    pass
+
+            counter.current_n = probe_output.queue.count_requested_trials() - probe_output.queue.count_trials()
+
+            for v in probe_output.queue._data.values():
+                log.error(f'Trials {v["trials"]} for {v["metadata"]["elicitor_bandlimited_noise_level"]} {v["metadata"]["elicitor_bandlimited_noise_polarity"]}')
         else:
             log.info('Rejecting MEMR trial due to artifact')
 
@@ -285,12 +317,22 @@ class ProcessMEMR(EpochInput):
     reject_threshold = d_(Float())
     probe_output = d_(Value())
     elicitor_output = d_(Value())
+    min_probe_corr = d_(Float(0.99))
+    counter = d_(Typed(SimpleCounter))
 
     def configure_callback(self):
         cb = super().configure_callback()
-        return process_memr(self.fl, self.fh, self.reject_threshold,
-                            self.probe_output, self.elicitor_output, self.fs,
-                            self.calibration, cb).send
+        return process_memr(
+            fl=self.fl,
+            fh=self.fh,
+            reject_threshold=self.reject_threshold,
+            min_probe_corr=self.min_probe_corr,
+            probe_output=self.probe_output,
+            elicitor_output=self.elicitor_output,
+            fs=self.fs,
+            counter=self.counter,
+            calibration=self.calibration,
+            target=cb).send
 
 
 class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
@@ -760,18 +802,8 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                                       duration_attr='trial_period', iti_attr=None)
 
     Extension:
-        id = EXPERIMENT + '.interleaved_memr.data'
-        point = 'psi.data.sinks'
-
-        EpochCounter: counter:
-            name = 'memr_counter'
-            label = 'MEMRs acquired'
-            source_name = 'memr_probe_valid'
-            output_name = 'probe'
-            set_requested_n => (controller):
-                output = controller.get_output(self.output_name)
-                self.requested_n = output.queue.count_requested_trials() * (C.elicitor_n + 1)
-                log.info('Expecting a total of %d trials for %s', self.requested_n, self.output_name)
+        id = EXPERIMENT + '.interleaved_memr.'
+        point = 'psi.experiment.status'
 
     Extension:
         id = EXPERIMENT + '.interleaved_elicitor.tokens'
@@ -820,6 +852,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                     reject_threshold = C.reject_threshold
                     probe_output = controller.get_output('probe')
                     elicitor_output = controller.get_output('elicitor')
+                    counter = counter
 
                     ExtractStim: probe:
                         name = 'probe'
@@ -842,6 +875,14 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                 name = 'elicitor'
                 lb = C.elicitor_envelope_start_time
                 ub = C.elicitor_envelope_start_time + C.elicitor_duration
+
+    Extension:
+        id = EXPERIMENT + '.interleaved_sinks'
+        point = 'psi.data.sinks'
+
+        SimpleCounter: counter:
+            name = 'memr_counter'
+            label = 'MEMRs acquired'
 
     Extension:
         id = EXPERIMENT + '.plots'
@@ -1052,11 +1093,9 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         id = EXPERIMENT + '.simultaneous_memr.sinks'
         point = 'psi.data.sinks'
 
-        EpochCounter: counter:
+        SimpleCounter: counter:
             name = 'memr_counter'
             label = 'MEMRs acquired'
-            source_name = 'memr_probe'
-            output_name = 'probe'
 
     Extension:
         id = EXPERIMENT + '.simultaneous_memr.io'
