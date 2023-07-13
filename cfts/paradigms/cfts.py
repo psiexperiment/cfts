@@ -16,14 +16,14 @@ cal_mic_mixin = {
 
 
 eeg_dec_mixin = {
-    'manifest': CAL_PATH + 'objects.AmplifierInput',
+    'manifest': CAL_PATH + 'objects.InputAmplifier',
     'required': True,
     'attrs': {'id': 'eeg', 'title': 'EEG', 'target_fs': 12.5e3},
 }
 
 
 eeg_mixin = {
-    'manifest': CAL_PATH + 'objects.AmplifierInput',
+    'manifest': CAL_PATH + 'objects.InputAmplifier',
     'required': True,
     'attrs': {'id': 'eeg', 'title': 'EEG', 'target_fs': None},
 }
