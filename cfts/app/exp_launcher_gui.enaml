@@ -20,7 +20,10 @@ from psi import get_config, get_config_folder
 from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
 
-from cftscal.api import list_starship_connections, microphone_manager, starship_manager
+from cftscal.api import (
+    list_input_amplifier_connections, list_starship_connections,
+    microphone_manager, starship_manager
+)
 from cfts.paradigms import cfts
 
 
@@ -64,6 +67,7 @@ class Settings(Atom):
     starship_config = Dict()
     cal_mic_config = Dict()
     record_cal_mic = Bool(False)
+    input_amp_config = Dict()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,7 +97,13 @@ class Settings(Atom):
         return next(iter(starship_to_use))
 
     def run_experiment(self, experiment, mode, save=True):
-        env = {}
+        amp_input_name, = self.input_amp_settings['input_name']
+        env = {
+            'CFTS_INPUT_AMPLIFIER': amp_input_name,
+            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.uper()}_GAIN': str(self.input_amp_settings['gain']),
+            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_settings['freq_lb']),
+            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_UB': str(self.input_amp_settings['freq_ub']),
+        }
         for k, v in self.starship_config.items():
             cal_string = v['calibration'].get_current_calibration().to_string()
             env[f'CFTS_STARSHIP_{k.upper()}'] = cal_string
@@ -147,7 +157,13 @@ class Settings(Atom):
                 'microphone': self.cal_mic_config['microphone'].name,
                 'gain': self.cal_mic_config['gain'],
                 'starship': self.cal_mic_config['starship'],
-            }
+            },
+            'input_amp_config': {
+                'input_name': self.input_amp_config['input_name'],
+                'gain': self.input_amp_config['gain'],
+                'freq_lb': self.input_amp_config['freq_lb'],
+                'freq_ub': self.input_amp_config['freq_ub'],
+            },
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
@@ -202,6 +218,14 @@ class Settings(Atom):
             self.cal_mic_config['microphone'] = \
                 microphone_manager.get_object(self.cal_mic_config['microphone'])
 
+        if 'input_name' not in self.input_amp_config:
+            self.input_amp_config['input_name'] = None
+        if 'gain' not in self.input_amp_config:
+            self.input_amp_config['gain'] = 50e3
+        if 'freq_lb' not in self.input_amp_config:
+            self.input_amp_config['freq_lb'] = 10
+        if 'freq_ub' not in self.input_amp_config:
+            self.input_amp_config['freq_ub'] = 10e3
 
 enamldef PluginPopup(PopupView): popup:
     attr experiment
@@ -428,7 +452,11 @@ enamldef Main(MainWindow):
 
             layout_constraints => ():
                 header = children[:3]
-                widgets = [c for c in children[3:] if not isinstance(c, Looper)]
+                widgets = [c for c in children[3:] \
+                           if not isinstance(c, Looper) \
+                           and not isinstance(c, Container)]
+                extra_widgets = [c for c in children[3:] if isinstance(c, Container)]
+                extra_labels = [w.children[0] for w in extra_widgets]
                 zipped = list(zip(
                     widgets[0::4],   # labels
                     widgets[1::4],   # ear select
@@ -438,13 +466,17 @@ enamldef Main(MainWindow):
                 constraints = [
                     vbox(
                         hbox(*header),
-                        *[hbox(*r) for r in zipped])
+                        *[hbox(*r) for r in zipped],
+                        *extra_widgets,
+                    ),
                 ]
                 constraints.extend([align('v_center', *r) for r in zipped])
                 constraints.extend([
                     align('left', header[0], *widgets[1::4]),
                     align('left', header[1], *widgets[2::4]),
                     align('left', header[2], *widgets[3::4]),
+                    align('left', eeg_label, *widgets[0::4]),
+                    align('left', eeg_input_name, header[0]),
                 ])
                 return constraints
 
@@ -496,6 +528,51 @@ enamldef Main(MainWindow):
                 selected ::
                     settings.cal_mic_config['gain'] = selected
                 visible << settings.record_cal_mic
+
+            Container:
+                padding = 0
+                share_layout = True
+
+                constraints = [
+                    hbox(*self.visible_widgets()),
+                    align('v_center', *self.visible_widgets()),
+                ]
+
+                Label: eeg_label:
+                    text ='EEG amplifier'
+
+                ObjectCombo: eeg_input_name:
+                    attr choices = list_input_amplifier_connections()
+                    attr choices_lookup << {v: k for k, v in choices.items()}
+                    items << list(choices_lookup)
+                    selected << settings.input_amp_config['input_name']
+                    selected ::
+                        settings.input_amp_config['input_name'] = selected
+                    to_string = choices_lookup.get
+
+                ObjectCombo: eeg_gain:
+                    items = [10e3, 20e3, 50e3, 100e3]
+                    selected << settings.input_amp_config['gain']
+                    selected ::
+                        settings.input_amp_config['gain'] = selected
+                    to_string = lambda x: f'{x:.0f} ✕'
+
+                ObjectCombo: eeg_freq_lb:
+                    items = [10, 300]
+                    selected << settings.input_amp_config['freq_lb']
+                    selected ::
+                        settings.input_amp_config['freq_lb'] = selected
+                    to_string = lambda x: f'{x} Hz'
+
+                Label: eeg_to_label:
+                    text = 'to'
+
+                ObjectCombo: eeg_freq_ub:
+                    items = [3000, 10000]
+                    selected << settings.input_amp_config['freq_ub']
+                    selected ::
+                        settings.input_amp_config['freq_ub'] = selected
+                    to_string = lambda x: f'{x} Hz'
 
         ExperimentInfo: experiment_info:
             pass
