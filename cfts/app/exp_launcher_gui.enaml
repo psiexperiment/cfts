@@ -97,12 +97,12 @@ class Settings(Atom):
         return next(iter(starship_to_use))
 
     def run_experiment(self, experiment, mode, save=True):
-        amp_input_name, = self.input_amp_settings['input_name']
+        amp_input_name = self.input_amp_config['input_name']
         env = {
             'CFTS_INPUT_AMPLIFIER': amp_input_name,
-            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.uper()}_GAIN': str(self.input_amp_settings['gain']),
-            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_settings['freq_lb']),
-            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_UB': str(self.input_amp_settings['freq_ub']),
+            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_GAIN': str(self.input_amp_config['gain']),
+            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_config['freq_lb']),
+            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_UB': str(self.input_amp_config['freq_ub']),
         }
         for k, v in self.starship_config.items():
             cal_string = v['calibration'].get_current_calibration().to_string()
