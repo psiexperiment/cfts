@@ -18,6 +18,64 @@ from .dpoae_mixins import DPOAEThreshold
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
+enamldef DPOAEPlotContainer(PlotContainer): pc:
+    attr suffix = ''
+    name = f'dpoae_io{suffix}_container'
+    label = 'DPOAE IO'
+    fmt_button => (key):
+        return '{} Hz'.format(key[0])
+
+    ViewBox: vb:
+        name = f'dpoae_io{suffix}_viewbox'
+        y_mode = 'mouse'
+        save_limits = True
+
+        ResultPlot: grp:
+            source_name = f'analyze_dpoae{suffix}'
+            x_column = f'secondary{suffix}_tone_level'
+            pen_width = 2
+            tab_grouping = [f'secondary{suffix}_tone_frequency']
+            tab_keys >> pc.buttons
+            selected_tab := pc.current_button
+            auto_select := pc.auto_select
+            label = 'F2'
+            y_column = 'f2_level'
+            pen_color = 'indianred'
+
+        ResultPlot:
+            source_name << grp.source_name
+            x_column << grp.x_column
+            pen_width << grp.pen_width
+            tab_grouping << grp.tab_grouping
+            selected_tab << grp.selected_tab
+            auto_select << grp.auto_select
+            label = 'F1'
+            y_column = 'f1_level'
+            pen_color = 'lightsalmon'
+
+        ResultPlot:
+            source_name << grp.source_name
+            x_column << grp.x_column
+            pen_width << grp.pen_width
+            tab_grouping << grp.tab_grouping
+            selected_tab << grp.selected_tab
+            auto_select << grp.auto_select
+            label = 'Noise Floor'
+            y_column = 'dpoae_noise_floor'
+            pen_color = 'lightsteelblue'
+
+        ResultPlot:
+            source_name << grp.source_name
+            x_column << grp.x_column
+            pen_width << grp.pen_width
+            tab_grouping << grp.tab_grouping
+            selected_tab << grp.selected_tab
+            auto_select << grp.auto_select
+            label = 'DPOAE'
+            y_column = 'dpoae_level'
+            pen_color = 'darkred'
+
+
 enamldef DPOAEIOBaseManifest(ExperimentManifest): manifest:
 
     id = EXPERIMENT
@@ -88,61 +146,8 @@ enamldef SingleDPOAEIO(ExperimentManifest): manifest:
         id = manifest.id + '.plots'
         point = 'psi.data.plots'
 
-        PlotContainer: pc:
-            name = 'dpoae_io_container'
-            label = 'DPOAE input-output functions'
-            fmt_button => (key):
-                return '{} Hz'.format(key[0])
-
-            ViewBox: vb:
-                name = 'dpoae_io_viewbox'
-                y_mode = 'mouse'
-                save_limits = True
-
-                ResultPlot: grp:
-                    source_name = 'analyze_dpoae'
-                    x_column = 'secondary_tone_level'
-                    pen_width = 2
-                    tab_grouping = ['secondary_tone_frequency']
-                    tab_keys >> pc.buttons
-                    selected_tab := pc.current_button
-                    auto_select := pc.auto_select
-                    label = 'F2'
-                    y_column = 'f2_level'
-                    pen_color = 'indianred'
-
-                ResultPlot:
-                    source_name << grp.source_name
-                    x_column << grp.x_column
-                    pen_width << grp.pen_width
-                    tab_grouping << grp.tab_grouping
-                    selected_tab << grp.selected_tab
-                    auto_select << grp.auto_select
-                    label = 'F1'
-                    y_column = 'f1_level'
-                    pen_color = 'lightsalmon'
-
-                ResultPlot:
-                    source_name << grp.source_name
-                    x_column << grp.x_column
-                    pen_width << grp.pen_width
-                    tab_grouping << grp.tab_grouping
-                    selected_tab << grp.selected_tab
-                    auto_select << grp.auto_select
-                    label = 'Noise Floor'
-                    y_column = 'dpoae_noise_floor'
-                    pen_color = 'lightsteelblue'
-
-                ResultPlot:
-                    source_name << grp.source_name
-                    x_column << grp.x_column
-                    pen_width << grp.pen_width
-                    tab_grouping << grp.tab_grouping
-                    selected_tab << grp.selected_tab
-                    auto_select << grp.auto_select
-                    label = 'DPOAE'
-                    y_column = 'dpoae_level'
-                    pen_color = 'darkred'
+        DPOAEPlotContainer: pc:
+            pass
 
 
 enamldef DualDPOAEIO(ExperimentManifest): manifest:
@@ -190,61 +195,13 @@ enamldef DualDPOAEIO(ExperimentManifest): manifest:
         id = manifest.id + '.plots'
         point = 'psi.data.plots'
 
-        PlotContainer: pc:
-            name = 'dpoae_io_container'
-            label = 'DPOAE input-output functions'
-            fmt_button => (key):
-                return '{} Hz'.format(key[0])
+        DPOAEPlotContainer: pc:
+            suffix = '_left'
+            label = 'Left DPOAE IO'
 
-            ViewBox: vb:
-                name = 'dpoae_io_viewbox'
-                y_mode = 'mouse'
-                save_limits = True
-
-                ResultPlot: grp:
-                    source_name = 'analyze_dpoae_left'
-                    x_column = 'secondary_left_tone_level'
-                    pen_width = 2
-                    tab_grouping = ['secondary_left_tone_frequency']
-                    tab_keys >> pc.buttons
-                    selected_tab := pc.current_button
-                    auto_select := pc.auto_select
-                    label = 'F2'
-                    y_column = 'f2_level'
-                    pen_color = 'indianred'
-
-                ResultPlot:
-                    source_name << grp.source_name
-                    x_column << grp.x_column
-                    pen_width << grp.pen_width
-                    tab_grouping << grp.tab_grouping
-                    selected_tab << grp.selected_tab
-                    auto_select << grp.auto_select
-                    label = 'F1'
-                    y_column = 'f1_level'
-                    pen_color = 'lightsalmon'
-
-                ResultPlot:
-                    source_name << grp.source_name
-                    x_column << grp.x_column
-                    pen_width << grp.pen_width
-                    tab_grouping << grp.tab_grouping
-                    selected_tab << grp.selected_tab
-                    auto_select << grp.auto_select
-                    label = 'Noise Floor'
-                    y_column = 'dpoae_noise_floor'
-                    pen_color = 'lightsteelblue'
-
-                ResultPlot:
-                    source_name << grp.source_name
-                    x_column << grp.x_column
-                    pen_width << grp.pen_width
-                    tab_grouping << grp.tab_grouping
-                    selected_tab << grp.selected_tab
-                    auto_select << grp.auto_select
-                    label = 'DPOAE'
-                    y_column = 'dpoae_level'
-                    pen_color = 'darkred'
+        DPOAEPlotContainer: pc:
+            suffix = '_right'
+            label = 'Right DPOAE IO'
 
 
 def configure_dpoaeio_gui(event):
@@ -423,13 +380,13 @@ def configure_dual_dpoaeio_gui(event):
     levels = l1 | l2
 
     data = event.workbench.get_plugin('psi.data')
-    vb = data.find_viewbox('dpoae_io_viewbox')
-    pc = data.find_plot_container('dpoae_io_container')
-
-    pc.x_min = min(levels) - 10
-    pc.x_max = max(levels) + 10
-    vb.y_min = min(vb.y_min, min(levels) - 10)
-    vb.y_max = max(vb.y_max, max(levels) + 10)
+    for side in ('left', 'right'):
+        pc = data.find_plot_container(f'dpoae_io_{side}_container')
+        vb = data.find_viewbox(f'dpoae_io_{side}_viewbox')
+        pc.x_min = min(levels) - 10
+        pc.x_max = max(levels) + 10
+        vb.y_min = min(vb.y_min, min(levels) - 10)
+        vb.y_max = max(vb.y_max, max(levels) + 10)
 
     # This demonstrates how to modify a plugin that may or may not have been
     # loaded by the user.
