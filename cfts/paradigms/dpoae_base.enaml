@@ -193,9 +193,6 @@ enamldef BaseDPOAEManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.sinks'
         point = 'psi.data.sinks'
 
-        TableStore:
-            name = 'dpoae_store'
-
         EventLog:
             show_widget = False
 
