@@ -7,6 +7,7 @@ from atom.api import Dict, Float, Int, Typed, Value
 from enaml.application import deferred_call
 from enaml.core.api import Conditional, d_
 from enaml.stdlib.message_box import question
+from enaml.widgets.api import Label
 from enaml.workbench.api import Extension
 from enaml.workbench.core.api import Command
 
@@ -24,6 +25,7 @@ from psi.controller.api import (
     QueuedEpochOutput
 )
 from psi.core.enaml.api import ExperimentManifest
+from psi.experiment.api import StatusItem
 from psi.token.primitives import (
     BandlimitedClick, BandlimitedFIRNoise, Chirp, Cos2Envelope, Repeat
 )
@@ -183,6 +185,9 @@ def configure_memr(event, duration_attr, iti_attr=None):
 
     counter.requested_n = probe.queue.count_requested_trials()
 
+    for i, k in enumerate(probe.queue._ordering):
+        log.info(f'{i}: {k}')
+
 
 @coroutine
 def stack_repeats(repeat_period, target):
@@ -255,7 +260,7 @@ class ExtractStim(EpochInput):
 
 @coroutine
 def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
-                 elicitor_output, fs, counter, calibration, target):
+                 elicitor_output, fs, counter, calibration, status_cb, target):
     '''
     Parameters
     ----------
@@ -264,13 +269,16 @@ def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
     fh : float
         Highest frequency in probe stim
     reject_threshold : float
-        Reject trial if silence RMS is less than specified threshold in dB
+        Reject trial if silence RMS is greater than specified threshold in dB
         (remember to factor in noise floor of microphone). The noise level of
         the silent segment is calculated only over the frequency range spanning
         fl to fh.
     min_probe_corr : float
         Reject trial if correlation between probe segments is less than this
         threshold.
+    status_cb : callable
+        Callable taking a single argument. True indicates trial was rejected.
+        False indicates trial was accepted.
     '''
 
     while True:
@@ -294,6 +302,7 @@ def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
                 and (probe_corr > min_probe_corr):
 
             target(data)
+            status_cb(False)
             with probe_output.engine.lock, elicitor_output.engine.lock:
                 probe_uuid = data[0].metadata['key']
                 elicitor_uuid = data[0].metadata['elicitor_uuid']
@@ -303,17 +312,19 @@ def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
                 except Exception as e:
                     pass
 
-            current_n = probe_output.queue.count_requested_trials() - probe_output.queue.count_trials()
+            current_n = probe_output.queue.count_requested_trials() \
+                - probe_output.queue.count_trials()
             def update_counter():
                 nonlocal current_n
                 nonlocal counter
                 counter.current_n = current_n
             deferred_call(update_counter)
 
-            for v in probe_output.queue._data.values():
-                log.error(f'Trials {v["trials"]} for {v["metadata"]["elicitor_bandlimited_noise_level"]} {v["metadata"]["elicitor_bandlimited_noise_polarity"]}')
+            for k, v in probe_output.queue._data.items():
+                log.error(f'{k}: Trials {v["trials"]} for {v["metadata"]["elicitor_bandlimited_noise_level"]} {v["metadata"]["elicitor_bandlimited_noise_polarity"]}')
         else:
             log.info('Rejecting MEMR trial due to artifact')
+            status_cb(True)
 
 
 class ProcessMEMR(EpochInput):
@@ -323,8 +334,17 @@ class ProcessMEMR(EpochInput):
     reject_threshold = d_(Float())
     probe_output = d_(Value())
     elicitor_output = d_(Value())
-    min_probe_corr = d_(Float(0.99))
+    min_probe_corr = d_(Float(0.5))
     counter = d_(Typed(SimpleCounter))
+
+    n_reject = d_(Int(0))
+    n_trials = d_(Int(0))
+
+    def status_cb(self, reject):
+        # True if trial rejected, False otherwise.
+        if reject:
+            self.n_reject += 1
+        self.n_trials += 1
 
     def configure_callback(self):
         cb = super().configure_callback()
@@ -338,6 +358,7 @@ class ProcessMEMR(EpochInput):
             fs=self.fs,
             counter=self.counter,
             calibration=self.calibration,
+            status_cb=self.status_cb,
             target=cb).send
 
 
@@ -580,11 +601,19 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
             default = 46.4e-3
             group_name = 'memr'
 
-        Parameter:
-            name = 'reject_threshold'
-            label = 'Reject threshold (dB SPL)'
-            default = 50
+        ContextRow:
+            name = 'artifact_reject'
             group_name = 'memr'
+            fmt = ['Reject if probe. corr <', min_probe_corr,
+                   'or silent interval level >', max_silence_db]
+
+            Parameter: max_silence_db:
+                name = 'max_silence_db'
+                default = 50
+
+            Parameter: min_probe_corr:
+                name = 'min_probe_corr'
+                default = 0.5
 
         Parameter:
             name = 'repeat_period'
@@ -811,6 +840,12 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
         id = EXPERIMENT + '.interleaved_memr.'
         point = 'psi.experiment.status'
 
+        StatusItem:
+            name = 'memr_reject'
+            label = 'MEMRs rejected'
+            Label:
+                text << f'{proc_memr.n_reject} of {proc_memr.n_trials}'
+
     Extension:
         id = EXPERIMENT + '.interleaved_elicitor.tokens'
         point = 'psi.token.tokens'
@@ -846,16 +881,16 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
             ExtractStim:
                 # Add a bit of padding to capture the tail end of the
                 # probe due to acoustic delays
-                name = 'probe_silence'
                 lb << C.probe_delay + 0.75e-3
                 ub << lb + C.probe_duration * 2
 
-                ProcessMEMR:
+                ProcessMEMR: proc_memr:
                     name = 'memr_probe_valid'
                     force_active = True
                     fl = C.probe_fl
                     fh = C.probe_fh
-                    reject_threshold = C.reject_threshold
+                    reject_threshold = C.max_silence_db
+                    min_probe_corr = C.min_probe_corr
                     probe_output = controller.get_output('probe')
                     elicitor_output = controller.get_output('elicitor')
                     counter = counter
