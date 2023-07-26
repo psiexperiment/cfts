@@ -302,8 +302,11 @@ enamldef SAMEFRManifest(BaseEFRManifest):
             expression = 'depth'
 
         Expression:
+            # Ensure an integer number of cycles within the EFR token. This is
+            # probably overkill and not necessary, but is a legacy holdover
+            # from the continuous EFR approch.
             parameter = 'target_sam_tone_fc'
-            expression = 'imul(fc, 1/analysis_window)'
+            expression = 'imul(fc, 1/duration)'
 
         Expression:
             parameter = 'target_sam_tone_duration'
@@ -370,14 +373,15 @@ enamldef RAMEFRManifest(BaseEFRManifest):
 
         Expression:
             parameter = 'target_mod_fm'
-            #expression = 'fs("target") / round(fs("target") / fm)'
             expression = 'fm'
 
         Expression:
+            # Ensure that duty cycle has an integer number of cycles of the target tone frequency.
             parameter = 'target_mod_duty_cycle'
             expression = '(round(duty_cycle * target_tone_frequency) / target_tone_frequency) if coerce_samples else duty_cycle'
 
         Expression:
+            # Ensure that the target tone frequency has an integer number of modulations.
             parameter = 'target_tone_frequency'
             expression = '(target_mod_fm * round(fc / target_mod_fm)) if coerce_samples else fc'
 
