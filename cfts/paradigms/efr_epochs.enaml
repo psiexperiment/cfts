@@ -39,12 +39,18 @@ def rng_generator(seed, lb, ub):
 def configure_experiment(event):
     fc_name = event.parameters['fc_name']
     level_name = event.parameters['level_name']
+    polarity_name = event.parameters['polarity_name']
 
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
     data = event.workbench.get_plugin('psi.data')
 
     averages = context.get_value('averages')
+    alternate_polarity = context.get_value('alternate_polarity')
+    if alternate_polarity and (averages % 2):
+        # Round to the nearest multiple of 2
+        averages = (round(averages/2) + 1) * 2
+
     isi = context.get_value('isi')
     isi_jitter = context.get_value('isi_jitter')
     duration = context.get_value('duration')
@@ -53,7 +59,13 @@ def configure_experiment(event):
     output = controller.get_output('target')
     max_level = {}
     for setting in context.iter_settings('default', 1):
-        output.add_setting(setting, averages=averages, iti_duration=delays)
+        if not alternate_polarity:
+            output.add_setting(setting, averages=averages, iti_duration=delays)
+        else:
+            setting[polarity_name] = 1
+            output.add_setting(setting, averages=averages/2, iti_duration=delays)
+            setting[polarity_name] = -1
+            output.add_setting(setting, averages=averages/2, iti_duration=delays)
         frequency = setting[fc_name]
         level = setting[level_name]
         max_level[frequency] = max(level, max_level.get(frequency, -np.inf))
@@ -90,6 +102,7 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
     attr selected_token
     attr fc_name
     attr level_name
+    attr polarity_name
 
     Extension:
         id = EXPERIMENT + '.io'
@@ -160,6 +173,7 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
             kwargs = {
                 'fc_name': manifest.fc_name,
                 'level_name': manifest.level_name,
+                'polarity_name': manifest.polarity_name,
             }
 
         ExperimentAction:
@@ -258,6 +272,7 @@ enamldef SAMEFRManifest(BaseEFRManifest):
     selected_token = 'sam_tone'
     fc_name = 'target_sam_tone_fc'
     level_name = 'target_sam_tone_level'
+    polarity_name = 'target_sam_tone_polarity'
 
     Extension:
         id = EXPERIMENT + '.tokens'
@@ -281,12 +296,18 @@ enamldef SAMEFRManifest(BaseEFRManifest):
             default = 200e-3
             group_name = 'target'
 
-        Parameter:
+        ContextRow:
             name = 'averages'
-            label = 'Averages'
-            default = 250
+            fmt = ['Average', averages, 'trials and alternate polarity?', alt_pol]
             group_name = 'target'
-            scope = 'trial'
+
+            Parameter: averages:
+                name = 'averages'
+                default = 250
+
+            BoolParameter: alt_pol:
+                name = 'alternate_polarity'
+                default = True
 
         ContextRow:
             name = 'isi'
@@ -351,6 +372,7 @@ enamldef RAMEFRManifest(BaseEFRManifest):
     selected_token = 'ram_tone'
     fc_name = 'target_tone_frequency'
     level_name = 'target_tone_level'
+    polarity_name = 'target_tone_polarity'
 
     Extension:
         id = EXPERIMENT + '.tokens_RAM'
@@ -369,12 +391,18 @@ enamldef RAMEFRManifest(BaseEFRManifest):
         id = EXPERIMENT + '.context_RAM'
         point = 'psi.context.items'
 
-        Parameter:
+        ContextRow:
             name = 'averages'
-            label = 'Averages'
-            default = 250
+            fmt = ['Average', averages, 'trials and alternate polarity?', alt_pol]
             group_name = 'target'
-            scope = 'trial'
+
+            Parameter: averages:
+                name = 'averages'
+                default = 250
+
+            BoolParameter: alt_pol:
+                name = 'alternate_polarity'
+                default = True
 
         ContextRow:
             name = 'isi'
