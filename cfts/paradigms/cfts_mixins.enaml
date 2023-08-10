@@ -80,11 +80,12 @@ def check_range(outputs, settings):
 CONTEXT_ITEM_DETAIL = {
     # ABR and SAM/RAM EFR
     'target_tone_frequency': {
-        'user_friendly_name': 'frequencies',
+        'user_friendly_name': 'frequency',
+        'user_friendly_name_plural': 'frequencies',
         'step_unit': 'octave',
         'unit': 'kHz',
         'order_user_managed': False,
-        'transform_fn': lambda x: (x * 1e3).round(0),
+        'transform_fn': lambda x: round(x * 1e3, 0),
         'inverse_transform_fn': lambda x: x * 1e-3,
         'round_values': True,
         'range_fn': octave_space,
