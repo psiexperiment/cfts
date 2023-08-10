@@ -15,6 +15,12 @@ cal_mic_mixin = {
 }
 
 
+output_monitor_mixin = {
+    'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitor',
+    'required': False,
+}
+
+
 eeg_dec_mixin = {
     'manifest': CAL_PATH + 'objects.InputAmplifier',
     'required': True,
@@ -113,6 +119,7 @@ ParadigmDescription(
         eeg_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
         cal_mic_mixin,
+        output_monitor_mixin,
     ],
 )
 
@@ -127,6 +134,7 @@ ParadigmDescription(
         eeg_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest', 'selected': True},
         cal_mic_mixin,
+        output_monitor_mixin,
     ]
 )
 
@@ -142,6 +150,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ],
 )
 
@@ -157,6 +166,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ],
 )
 
@@ -172,6 +182,7 @@ ParadigmDescription(
         efr_microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ]
 )
 
@@ -187,6 +198,7 @@ ParadigmDescription(
         efr_microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ]
 )
 
@@ -202,6 +214,7 @@ ParadigmDescription(
         efr_microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ]
 )
 
@@ -217,6 +230,7 @@ ParadigmDescription(
         efr_microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ]
 )
 
@@ -231,6 +245,7 @@ ParadigmDescription(
         {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
         cal_mic_mixin,
+        output_monitor_mixin,
     ]
 )
 
@@ -284,6 +299,7 @@ ParadigmDescription(
         multi_microphone_mixin,
         multi_microphone_fft_mixin,
         cal_mic_mixin,
+        output_monitor_mixin,
     ],
 )
 
@@ -310,6 +326,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedClickProbeMixin', 'required': True},
         cal_mic_mixin,
+        output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
@@ -325,6 +342,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpProbeMixin', 'required': True},
         cal_mic_mixin,
+        output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
@@ -339,6 +357,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'click'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousClickProbeMixin', 'required': True},
         cal_mic_mixin,
+        output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
@@ -353,6 +372,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
         cal_mic_mixin,
+        output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},

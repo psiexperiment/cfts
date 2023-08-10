@@ -372,7 +372,7 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
 
 def initialize_cal_mic(event):
     controller = event.workbench.get_plugin('psi.controller')
-    channel = controller.get_channel('hw_ai::calibration_microphone')
+    channel = controller.get_channel('hw_ai::microphone_calibration')
     cal_mic = os.environ[f'CFTS_CAL_MIC']
     cal_mic_gain = os.environ[f'CFTS_CAL_MIC_GAIN']
     channel.calibration = microphone_manager.from_string(cal_mic).load()
@@ -419,3 +419,27 @@ enamldef CalibrationMicrophone(ExperimentManifest): manifest:
         BinaryStore:
             name = manifest.id + '.cal_mic_store'
             continuous_inputs = ['calibration_microphone']
+
+
+enamldef OutputMonitor(ExperimentManifest): manifest:
+    '''
+    Automatically record from the output monitor
+    '''
+    id = 'output_monitor'
+    title = manifest.id.capitalize().replace('_', ' ')
+
+    Extension:
+        id = manifest.id + '.output_monitor_io'
+        point = 'psi.controller.io'
+
+        ContinuousInput:
+            name = 'output_monitor'
+            source_name = 'hw_ai::output_monitor'
+
+    Extension:
+        id = manifest.id + '.sinks'
+        point = 'psi.data.sinks'
+
+        BinaryStore:
+            name = manifest.id + '.output_monitor_store'
+            continuous_inputs = ['output_monitor']

@@ -171,6 +171,19 @@ enamldef IOManifest(PluginManifest): manifest:
                 terminal_mode = 'pseudodifferential'
 
             NIDAQHardwareAIChannel:
+                label = 'Output Monitor'
+                name = 'output_monitor'
+                channel = 'PXI1Slot8/ai0'
+                start_trigger = START_TRIGGER
+                fs = 100e3
+                reference_clock = 'PXI_Clk10'
+                expected_range = (-10, 10)
+                dtype = 'float64'
+                terminal_mode = 'pseudodifferential'
+                terminal_coupling = 'DC'
+                unit = 'V'
+
+            NIDAQHardwareAIChannel:
                 label = 'Starship B (microphone)'
                 name = 'starship_B_microphone'
                 channel = 'PXI1Slot8/ai1'
@@ -181,3 +194,4 @@ enamldef IOManifest(PluginManifest): manifest:
                 dtype = 'float64'
                 terminal_mode = 'pseudodifferential'
                 terminal_coupling = 'AC'
+

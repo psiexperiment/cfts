@@ -89,6 +89,7 @@ class Settings(Atom):
     starship_config = Dict()
     cal_mic_config = Dict()
     record_cal_mic = Bool(False)
+    record_output_monitor = Bool(False)
     input_amp_config = Dict()
 
     def __init__(self, *args, **kwargs):
@@ -163,6 +164,9 @@ class Settings(Atom):
             env['CFTS_CAL_MIC_GAIN'] = str(self.cal_mic_config['gain'])
             env['CFTS_CAL_MIC_STARSHIP'] = self.cal_mic_config['starship']
             args.extend(['--plugin', 'calibration_microphone'])
+
+        if self.record_output_monitor:
+            args.extend(['--plugin', 'output_monitor'])
 
         print(env)
         print(' '.join(args))
@@ -446,6 +450,10 @@ enamldef Main(MainWindow):
                 text = '&Record calibration microphone'
                 checkable = True
                 checked := settings.record_cal_mic
+            Action:
+                text = '&Record output monitor signal'
+                checkable = True
+                checked := settings.record_output_monitor
 
     Container:
 
