@@ -147,6 +147,21 @@ ParadigmDescription(
 
 
 ParadigmDescription(
+    'dpgram', 'DP-Gram', 'ear', [
+        dual_starship_mixin,
+        {'manifest': CFTS_PATH + 'dpoae_base.SingleDPOAEManifest'},
+        {'manifest': CFTS_PATH + 'dpgram.DPGramSimpleManifest', 'required': True},
+        {'manifest': CFTS_PATH + 'dpgram.SingleDPGram', 'required': True},
+        {'manifest': CFTS_PATH + 'cfts_mixins.DPOAEInEarCalibrationMixinManifest', 'selected': True},
+        temperature_mixin,
+        microphone_mixin,
+        microphone_fft_mixin,
+        cal_mic_mixin,
+    ],
+)
+
+
+ParadigmDescription(
     'efr_sam', 'SAM EFR (continuous)', 'ear', [
         selectable_starship_mixin,
         eeg_mixin,
