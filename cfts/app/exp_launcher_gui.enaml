@@ -27,6 +27,10 @@ from cftscal.api import (
 from cfts.paradigms import cfts
 
 
+def get_config_folder():
+    return Path(r'C:\Users\mmm\projects\psi4\src\mmm-psi\config')
+
+
 DATA_ROOT = get_config('DATA_ROOT')
 PROC_ROOT = get_config('PROCESSED_ROOT')
 
@@ -76,7 +80,7 @@ class Settings(Atom):
     logging_level = Enum('trace', 'debug', 'info', 'warning', 'error')('info')
     animal = Str()
     ear = Enum('left', 'right')
-    experimenter = Enum('Sean', 'Brad')
+    experimenter = Str()
     note = Str()
 
     monitor_sequence = List(Experiment)
@@ -166,7 +170,6 @@ class Settings(Atom):
 
     def save_config(self, filename):
         info = {
-            'experimenter': self.experimenter,
             'ear': self.ear,
             'logging_level': self.logging_level,
             'starship_config': self.starship_config,
@@ -199,6 +202,7 @@ class Settings(Atom):
     def load_config(self, filename):
         filename = Path(filename)
         info = json.loads(filename.read_text())
+        info.pop('experimenter', None)
         info['experiment_sequence'] = [Experiment(**s) for s in info['experiment_sequence']]
         info['monitor_sequence'] = [Experiment(**s) for s in info['monitor_sequence']]
         for k, v in info.items():
@@ -272,7 +276,7 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
     share_layout = True
 
     layout_constraints => ():
-        # Align the subwidgets vertically
+        # Align the subwidgets verticalls
         subwidgets = [w.children for w in self.visible_widgets()]
         constraints = [vbox(*self.visible_widgets())]
         constraints.extend([align('width', *c) for c in zip(*subwidgets)])
@@ -351,11 +355,23 @@ enamldef ExperimentInfo(GroupBox):
     ButtonGroup: ear_group:
         pass
 
+    Label: experimenter_label:
+        text = 'Experimenter'
+
+    Field: experimenter_field:
+        text := settings.experimenter
+
     Label: animal_label:
         text = 'Animal'
 
     Field: animal_field:
         text := settings.animal
+
+    Label: note_label:
+        text = 'Note'
+
+    Field: note_field:
+        text := settings.note
 
     PushButton: l_button:
         text = 'L'
@@ -373,26 +389,13 @@ enamldef ExperimentInfo(GroupBox):
         checked ::
             settings.ear = 'right'
 
-    Label: experimenter_label:
-        text = 'Experimenter'
-
-    ObjectCombo: experimenter_field:
-        items = ['Sean', 'Brad']
-        selected := settings.experimenter
-
-    Label: note_label:
-        text = 'Note'
-
-    Field: note_field:
-        text := settings.note
-
     PushButton: pb_raw:
-        text = '📂 (Raw)'
+        text = '📂 Raw'
         clicked ::
             os.startfile(DATA_ROOT)
 
     PushButton: pb_proc:
-        text = '📂 (Processed)'
+        text = '📂 Processed'
         clicked ::
             os.startfile(PROC_ROOT)
 
@@ -409,7 +412,7 @@ enamldef Main(MainWindow):
             Action:
                 text = 'Load config\tCtrl+O'
                 triggered ::
-                    path = get_config_folder() / 'cfts'
+                    path = get_config_folder() / 'cfts-launcher'
                     path.mkdir(exist_ok=True)
                     filename = FileDialogEx.get_open_file_name(
                         current_path=str(path),
@@ -419,7 +422,7 @@ enamldef Main(MainWindow):
             Action:
                 text = 'Save config\tCtrl+O'
                 triggered ::
-                    path = get_config_folder() / 'cfts'
+                    path = get_config_folder() / 'cfts-launcher'
                     path.mkdir(exist_ok=True)
                     filename = FileDialogEx.get_save_file_name(
                         current_path=str(path),
@@ -603,5 +606,5 @@ enamldef Main(MainWindow):
 
         ExperimentSequence: experiment_box:
             share_layout = True
-            start_enabled << bool(settings.animal)
+            start_enabled << (bool(settings.animal) and bool(settings.experimenter))
             sequence << settings.experiment_sequence
