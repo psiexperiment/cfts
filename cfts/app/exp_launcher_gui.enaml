@@ -42,7 +42,7 @@ class Experiment(Atom):
     def _default_modes(self):
         return ['Run']
 
-    def __init__(self, paradigm, plugins, **kwargs):
+    def __init__(self, paradigm, plugins, preference, **kwargs):
         valid_plugins = paradigm_manager.get_paradigm(paradigm).plugins
         for plugin in plugins[:]:
             for valid_plugin in valid_plugins:
@@ -50,7 +50,25 @@ class Experiment(Atom):
                     break
             else:
                 plugins.remove(plugin)
-        super().__init__(paradigm=paradigm, plugins=plugins, **kwargs)
+
+        # We only save preference name, not the full path to the preference. We
+        # need to restore the full path to the preference by scanning through
+        # the list of avaialble preferences. This allows for portability across
+        # systems.
+        preference = Path(preference)
+        for valid_preference in list_preferences(paradigm):
+            if valid_preference.stem == preference.stem:
+                preference = str(valid_preference)
+                break
+        else:
+            raise ValueError(f'Invalid preference requested {preference}')
+        super().__init__(paradigm=paradigm, plugins=plugins,
+                         preference=preference, **kwargs)
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state['preference'] = Path(state['preference']).name
+        return state
 
 
 class Settings(Atom):
