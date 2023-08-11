@@ -66,7 +66,8 @@ class Experiment(Atom):
                 preference = str(valid_preference)
                 break
         else:
-            raise ValueError(f'Invalid preference requested {preference}')
+            log.warning('Invalid preference requested: %s', preference)
+            preference = ''
         super().__init__(paradigm=paradigm, plugins=plugins,
                          preference=preference, **kwargs)
 
