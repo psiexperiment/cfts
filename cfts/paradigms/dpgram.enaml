@@ -77,7 +77,7 @@ enamldef DPGramBaseManifest(ExperimentManifest): manifest:
         ExperimentAction:
             event = 'context_next_setting'
             command = 'dpoae.start'
-            kwargs = {'delay': 1.0}
+            kwargs = {'delay': 0.25}
 
         ExperimentAction:
             event = 'context_complete'
