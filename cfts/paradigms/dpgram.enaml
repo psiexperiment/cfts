@@ -22,6 +22,8 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
     attr suffix = ''
     name = f'dpgram{suffix}_container'
     label = 'DP-Gram'
+    fmt_button => (key):
+        return '{} dB SPL'.format(key[0])
 
     ViewBox: vb:
         name = f'dpgram{suffix}_viewbox'
@@ -35,6 +37,10 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             label = 'F2'
             y_column = 'f2_level'
             pen_color = 'indianred'
+            tab_keys >> pc.buttons
+            tab_grouping = [f'secondary{suffix}_tone_level']
+            selected_tab := pc.current_button
+            auto_select := pc.auto_select
 
         ResultPlot:
             source_name << grp.source_name
@@ -43,6 +49,9 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             label = 'F1'
             y_column = 'f1_level'
             pen_color = 'lightsalmon'
+            tab_grouping << grp.tab_grouping
+            selected_tab << grp.selected_tab
+            auto_select << grp.auto_select
 
         ResultPlot:
             source_name << grp.source_name
@@ -51,6 +60,9 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             label = 'Noise Floor'
             y_column = 'dpoae_noise_floor'
             pen_color = 'lightsteelblue'
+            tab_grouping << grp.tab_grouping
+            selected_tab << grp.selected_tab
+            auto_select << grp.auto_select
 
         ResultPlot:
             source_name << grp.source_name
@@ -59,6 +71,9 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             label = 'DPOAE'
             y_column = 'dpoae_level'
             pen_color = 'darkred'
+            tab_grouping << grp.tab_grouping
+            selected_tab << grp.selected_tab
+            auto_select << grp.auto_select
 
 
 enamldef DPGramBaseManifest(ExperimentManifest): manifest:
@@ -268,7 +283,7 @@ enamldef DPGramSimpleManifest(DPGramBaseManifest): manifest:
             # This is the selector shown in the GUI and will represent what the
             # user is hoping for.
             label = 'DPOAE stimuli'
-            can_manage = ['f2_frequency', 'f2_level']
+            can_manage = ['f2_level', 'f2_frequency']
             user_managed = False
 
         SequenceSelector:
