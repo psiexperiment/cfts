@@ -5,8 +5,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 
-from atom.api import Atom, Bool, Dict, Enum, List, Str
+from atom.api import Atom, Bool, Dict, Enum, Int, List, Str
 from enaml.core.api import Looper
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
@@ -92,6 +93,8 @@ class Settings(Atom):
     record_output_monitor = Bool(False)
     input_amp_config = Dict()
 
+    duration = Int()
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.load_config(r'C:\Users\mmm\psi\cfts\monaural.json')
@@ -170,7 +173,9 @@ class Settings(Atom):
 
         print(env)
         print(' '.join(args))
+        start_time = time.time()
         subprocess.check_output(args, env=dict(os.environ, **env))
+        self.duration = int(round(time.time() - start_time))
 
     def save_config(self, filename):
         info = {
@@ -463,6 +468,7 @@ enamldef Main(MainWindow):
                 monitor_box,
                 experiment_info,
                 experiment_box,
+                experiment_stats,
             ),
             # Align the widths of the first three elements in the
             # experiment/monitor box. The first three elements represent the
@@ -616,3 +622,12 @@ enamldef Main(MainWindow):
             share_layout = True
             start_enabled << (bool(settings.animal) and bool(settings.experimenter))
             sequence << settings.experiment_sequence
+
+        GroupBox: experiment_stats:
+            title = 'Experiment Info'
+            flat = True
+            share_layout = True
+
+            Label:
+                text << f'Last run took {settings.duration//60} min and {settings.duration % 60} sec'
+
