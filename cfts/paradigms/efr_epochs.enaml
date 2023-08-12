@@ -385,7 +385,7 @@ enamldef RAMEFRManifest(BaseEFRManifest):
             SquareWaveEnvelope:
                 name = 'mod'
                 Tone:
-                    hide = ['polarity', 'phase']
+                    hide = ['polarity']
 
     Extension:
         id = EXPERIMENT + '.context_RAM'
@@ -423,12 +423,6 @@ enamldef RAMEFRManifest(BaseEFRManifest):
                 scope = 'trial'
                 group_name = 'target'
 
-        BoolParameter:
-            name = 'coerce_samples'
-            label = 'Coerce FC and duty cycle?'
-            default = True
-            group_name = 'target'
-
         Parameter:
             name = 'duration'
             label = 'RAM tone duration (s)'
@@ -454,6 +448,11 @@ enamldef RAMEFRManifest(BaseEFRManifest):
             group_name = 'target'
 
         Expression:
+            # Apply a 2.5% Tukey window to the square wave modulation.
+            parameter = 'target_mod_alpha'
+            expression = '0.025'
+
+        Expression:
             parameter = 'target_tone_phase'
             expression = '-np.pi/2'
 
@@ -463,11 +462,11 @@ enamldef RAMEFRManifest(BaseEFRManifest):
 
         Expression:
             parameter = 'target_mod_duty_cycle'
-            expression = '(round(duty_cycle * target_tone_frequency) / target_tone_frequency) if coerce_samples else duty_cycle'
+            expression = 'duty_cycle'
 
         Expression:
             parameter = 'target_tone_frequency'
-            expression = '(target_mod_fm * round(fc / target_mod_fm)) if coerce_samples else fc'
+            expression = 'fc'
 
         Expression:
             parameter = 'target_ram_tone_duration'
