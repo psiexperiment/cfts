@@ -48,6 +48,11 @@ class Experiment(Atom):
         return ['Run']
 
     def __init__(self, paradigm, plugins, preference, **kwargs):
+        # Make sure the plugins saved to the config file are valid plugins (we
+        # sometimes remove or rename plugins). If the plugin is no longer
+        # valid, remove it. If the plugin is required, remove it as a plugin
+        # that the user can select from in the GUI (since it automatically gets
+        # loaded).
         valid_plugins = paradigm_manager.get_paradigm(paradigm).plugins
         for plugin in plugins[:]:
             for valid_plugin in valid_plugins:
@@ -66,7 +71,7 @@ class Experiment(Atom):
                 preference = str(valid_preference)
                 break
         else:
-            log.warning('Invalid preference requested: %s', preference)
+            log.warning('Invalid preference requested for %s: %s', paradigm, preference)
             preference = ''
         super().__init__(paradigm=paradigm, plugins=plugins,
                          preference=preference, **kwargs)
@@ -95,10 +100,6 @@ class Settings(Atom):
     input_amp_config = Dict()
 
     duration = Int()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.load_config(r'C:\Users\mmm\psi\cfts\monaural.json')
 
     def find_starship(self, ear, monaural=True):
         '''
