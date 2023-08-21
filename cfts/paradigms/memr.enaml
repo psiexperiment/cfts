@@ -259,8 +259,9 @@ class ExtractStim(EpochInput):
 
 
 @coroutine
-def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
-                 elicitor_output, fs, counter, calibration, status_cb, target):
+def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
+                             probe_output, elicitor_output, fs, counter,
+                             calibration, status_cb, target):
     '''
     Parameters
     ----------
@@ -295,9 +296,6 @@ def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
         probe_corr = np.corrcoef(probe).min()
         silence_corr = np.corrcoef(silence).min()
 
-        log.info('Trial probe_corr %.2f, silence_corr %.2f, silence dB %.2f',
-                 probe_corr, silence_corr, silence_rms)
-
         if (silence_rms < reject_threshold) \
                 and (probe_corr > min_probe_corr):
 
@@ -319,22 +317,52 @@ def process_memr(fl, fh, reject_threshold, min_probe_corr, probe_output,
                 nonlocal counter
                 counter.current_n = current_n
             deferred_call(update_counter)
-
-            for k, v in probe_output.queue._data.items():
-                log.error(f'{k}: Trials {v["trials"]} for {v["metadata"]["elicitor_bandlimited_noise_level"]} {v["metadata"]["elicitor_bandlimited_noise_polarity"]}')
         else:
-            log.info('Rejecting MEMR trial due to artifact')
             status_cb(True)
+
+
+@coroutine
+def process_simultaneous_memr(fl, fh, probe_output, elicitor_output, fs,
+                              counter, calibration, status_cb, target):
+    '''
+    Parameters
+    ----------
+    fl : float
+        Lowest frequency in probe stim
+    fh : float
+        Highest frequency in probe stim
+    status_cb : callable
+        Callable taking a single argument. True indicates trial was rejected.
+        False indicates trial was accepted.
+    '''
+    while True:
+        data = (yield)
+        target(data)
+        status_cb(False)
+        with probe_output.engine.lock, elicitor_output.engine.lock:
+            probe_uuid = data[0].metadata['key']
+            elicitor_uuid = data[0].metadata['elicitor_uuid']
+            try:
+                probe_output.queue.decrement_key(probe_uuid)
+                elicitor_output.queue.decrement_key(elicitor_uuid)
+            except Exception as e:
+                pass
+
+            current_n = probe_output.queue.count_requested_trials() \
+                - probe_output.queue.count_trials()
+            def update_counter():
+                nonlocal current_n
+                nonlocal counter
+                counter.current_n = current_n
+            deferred_call(update_counter)
 
 
 class ProcessMEMR(EpochInput):
 
     fl = d_(Float())
     fh = d_(Float())
-    reject_threshold = d_(Float())
     probe_output = d_(Value())
     elicitor_output = d_(Value())
-    min_probe_corr = d_(Float(0.5))
     counter = d_(Typed(SimpleCounter))
 
     n_reject = d_(Int(0))
@@ -346,13 +374,34 @@ class ProcessMEMR(EpochInput):
             self.n_reject += 1
         self.n_trials += 1
 
+
+class ProcessInterleavedMEMR(ProcessMEMR):
+
+    reject_threshold = d_(Float())
+    min_probe_corr = d_(Float(0.5))
+
     def configure_callback(self):
         cb = super().configure_callback()
-        return process_memr(
+        return process_interleaved_memr(
             fl=self.fl,
             fh=self.fh,
             reject_threshold=self.reject_threshold,
             min_probe_corr=self.min_probe_corr,
+            probe_output=self.probe_output,
+            elicitor_output=self.elicitor_output,
+            fs=self.fs,
+            counter=self.counter,
+            calibration=self.calibration,
+            status_cb=self.status_cb,
+            target=cb).send
+
+class ProcessSimultaneousMEMR(ProcessMEMR):
+
+    def configure_callback(self):
+        cb = super().configure_callback()
+        return process_simultaneous_memr(
+            fl=self.fl,
+            fh=self.fh,
             probe_output=self.probe_output,
             elicitor_output=self.elicitor_output,
             fs=self.fs,
@@ -371,21 +420,23 @@ class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
         r = [e for e in epoch if e.metadata['repeat'] == self.final_probe]
         b = np.array(concat(b, axis='epoch'))[:, self.channel]
         r = np.array(concat(r, axis='epoch'))[:, self.channel]
-        result = util.db(util.psd(r, self.source.fs)) - util.db(util.psd(b, self.source.fs))
-        return result.mean(axis=0)
+
+        r_psd = util.db(util.psd(r, self.source.fs).mean(axis=0))
+        b_psd = util.db(util.psd(b, self.source.fs).mean(axis=0))
+        return r_psd - b_psd
 
 
 class GroupedSimultaneousMEMRPlot(GroupedEpochFFTPlot):
 
     def _y(self, epoch):
-        norm = [e for e in epoch if e.metadata['range'] == 'norm']
-        elicitor = [e for e in epoch if e.metadata['range'] == 'elicitor']
-        norm = np.array(concat(norm, axis='epoch'))[:, self.channel]
-        elicitor = np.array(concat(elicitor, axis='epoch'))[:, self.channel]
+        n = [e for e in epoch if e.metadata['range'] == 'norm']
+        e = [e for e in epoch if e.metadata['range'] == 'elicitor']
+        n = np.array(concat(n, axis='epoch'))[:, self.channel]
+        e = np.array(concat(e, axis='epoch'))[:, self.channel]
 
-        norm_psd = util.db(util.psd(norm.mean(axis=0), self.source.fs))
-        elicitor_psd = util.db(util.psd(elicitor.mean(axis=0), self.source.fs))
-        return elicitor_psd - norm_psd
+        n_psd = util.db(util.psd(n.mean(axis=0), self.source.fs))
+        e_psd = util.db(util.psd(e.mean(axis=0), self.source.fs))
+        return e_psd - n_psd
 
 
 enamldef BaseMEMRManifest(ControllerManifest): manifest:
@@ -503,7 +554,6 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                     default = 20
                     scope = 'trial'
 
-
     Extension:
         id = EXPERIMENT + '.commands'
         point = 'enaml.workbench.core.commands'
@@ -562,7 +612,8 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
         ContextRow:
             name = 'train_timing'
             group_name = 'memr'
-            fmt = ['Pulse', elicitor_duration, 'sec elicitor', elicitor_n, 'times with', elicitor_iti, 'sec ITI']
+            fmt = ['Pulse', elicitor_duration, 'sec elicitor', elicitor_n,
+                   'times with', elicitor_iti, 'sec ITI']
 
             Parameter: elicitor_n:
                 name = 'elicitor_n'
@@ -884,7 +935,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                 lb << C.probe_delay + 0.75e-3
                 ub << lb + C.probe_duration * 2
 
-                ProcessMEMR: proc_memr:
+                ProcessInterleavedMEMR: proc_memr:
                     name = 'memr_probe_valid'
                     force_active = True
                     fl = C.probe_fl
@@ -1147,25 +1198,34 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
             name = 'memr_repeat'
             duration = 1 / C.probe_rate
 
-            ExtractStim:
-                # Add a bit of padding to capture the tail end of the
-                # probe due to acoustic delays
-                name = 'probe'
-                lb = 0
-                ub = C.probe_duration + 1e-3
+            ProcessSimultaneousMEMR: proc_memr:
+                name = 'memr_probe_valid'
+                force_active = True
+                fl = C.probe_fl
+                fh = C.probe_fh
+                probe_output = controller.get_output('probe')
+                elicitor_output = controller.get_output('elicitor')
+                counter = counter
 
-                ExtractRepeats:
-                    name = 'probe_norm'
-                    ranges = {
-                        'norm': (
-                            int(round((C.elicitor_onset - C.norm_window) * C.probe_rate)),
-                            int(round(C.elicitor_onset * C.probe_rate)),
-                        ),
-                        'elicitor': (
-                            int(round((C.elicitor_onset + C.elicitor_noise_rise_time) * C.probe_rate)),
-                            int(round((C.elicitor_onset + C.elicitor_noise_rise_time + C.norm_window) * C.probe_rate)),
-                        )
-                    }
+                ExtractStim:
+                    # Add a bit of padding to capture the tail end of the
+                    # probe due to acoustic delays
+                    name = 'probe'
+                    lb = 0.75e-3
+                    ub = lb + C.probe_duration
+
+                    ExtractRepeats:
+                        name = 'probe_norm'
+                        ranges = {
+                            'norm': (
+                                int(round((C.elicitor_onset - C.norm_window) * C.probe_rate)),
+                                int(round(C.elicitor_onset * C.probe_rate)),
+                            ),
+                            'elicitor': (
+                                int(round((C.elicitor_onset + C.elicitor_noise_rise_time) * C.probe_rate)),
+                                int(round((C.elicitor_onset + C.elicitor_noise_rise_time + C.norm_window) * C.probe_rate)),
+                            )
+                        }
 
         ExtractStim:
             source_name = 'memr_elicitor'
