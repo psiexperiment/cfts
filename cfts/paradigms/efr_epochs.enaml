@@ -25,7 +25,8 @@ from psi.data.sinks.api import BinaryStore, EpochCounter, TextStore
 from psi.data.api import (FFTContainer, GroupedEpochFFTPlot, PlotContainer,
                           ResultPlot, ViewBox)
 
-from .cfts_mixins import CFTSSelector
+from .cfts_mixins import CFTSSequenceSelector
+
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
@@ -134,10 +135,13 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.selectors'
         point = 'psi.context.selectors'
 
-        CFTSSelector:
+        CFTSSequenceSelector:
             label = 'EFR stimuli'
-            user_managed = True
-            can_manage = ['fm', 'fc', 'target_tone_level']
+
+        #CFTSSelector:
+        #    label = 'EFR stimuli'
+        #    user_managed = True
+        #    can_manage = ['fm', 'fc']
 
     Extension:
         id = EXPERIMENT + '.items'

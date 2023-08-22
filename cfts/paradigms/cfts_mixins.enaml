@@ -12,7 +12,8 @@ import numpy as np
 
 from psiaudio.util import octave_space
 
-from psi.context.api import (ContextGroup, FriendlyCartesianProduct, Parameter)
+from psi.context.api import (ContextGroup, FriendlyCartesianProduct, Parameter,
+                             SequenceSelector)
 from psi.controller.api import (Callback, ContinuousInput, Downsample,
                                 ExperimentAction, get_hw_ai_choices,
                                 get_hw_ao_choices, IIRFilter)
@@ -146,6 +147,11 @@ CONTEXT_ITEM_DETAIL = {
 
 
 class CFTSSelector(FriendlyCartesianProduct):
+
+    context_detail = CONTEXT_ITEM_DETAIL
+
+
+class CFTSSequenceSelector(SequenceSelector):
 
     context_detail = CONTEXT_ITEM_DETAIL
 
