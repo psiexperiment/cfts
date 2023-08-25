@@ -112,11 +112,38 @@ efr_microphone_fft_mixin = {
 }
 
 
+turntable_mixin = {
+    'manifest': CFTS_PATH + 'turntable.TurntableManifest',
+    'required': True,
+}
+
+
+turntable_view_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
+    'attrs': {
+        'id': 'turntable_view_mixin',
+        'title': 'Turntable',
+        'time_span': 2,
+        'time_delay': 0.125,
+        'source_name': 'turntable_angle',
+        'y_label': 'Turntable angle (radians)'
+    }
+}
+turntable_view_mixin_required = turntable_view_mixin.copy()
+turntable_view_mixin_required['required'] = True
+
+
+################################################################################
+# Paradigm descriptions
+################################################################################
 ParadigmDescription(
+    # This is for monitoring the incoming EEG trace
     'monitor', 'Monitor', 'ear', [
         temperature_mixin,
         eeg_dec_mixin,
         eeg_view_mixin_required,
+        turntable_view_mixin_required,
+        turntable_mixin,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
         cal_mic_mixin,
         output_monitor_mixin,

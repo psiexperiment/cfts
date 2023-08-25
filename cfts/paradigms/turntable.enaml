@@ -1,0 +1,27 @@
+from enaml.workbench.api import Extension
+
+from psi.context.api import ContextGroup
+from psi.core.enaml.api import ExperimentManifest
+from psi.controller.api import Input
+
+
+EXPERIMENT = 'turntable'
+
+
+enamldef TurntableManifest(ExperimentManifest):
+
+    id = 'turntable_mixin'
+    name = 'turntable'
+    title = 'Turntable'
+
+    Extension:
+        id = EXPERIMENT + '.turntable.context'
+        point = 'psi.context.items'
+
+    Extension:
+        id = EXPERIMENT + '.turntable.io'
+        point = 'psi.controller.io'
+
+        Input:
+            source_name = 'hw_ci::turntable_angle'
+            name = 'turntable_angle'
