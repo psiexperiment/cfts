@@ -10,21 +10,20 @@ maintainers = [
     {name = "Brad Buran", email="buran@ohsu.edu"},
 ]
 dependencies = [
+	"cftscal",
     "cftsdata",
-    "psiaudio",
-    "psiexperiment",
-    "enaml[qt5-pyqt] >=0.13.0",
+    "psiexperiment[zarr]",
+    "enaml[qt6-pyside] >=0.13.0",
     "enamlx >=0.6.2",
     "tqdm",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
-ni = ["pydaqmx"]
-tdt = ["tdtpy >=0.9.0"]
+ni = ["psiexperiment[ni]"]
+tdt = ["psiexperiment[tdt]"]
 docs = ["sphinx", "sphinx_rtd_theme", "pygments-enaml"]
 test = ["pytest", "pytest-console-scripts", "matplotlib"] # Matplotlib is used in some of the validation scripts.
-zarr-backend = ["zarr"]
 dev = ["coloredlogs"]
 
 [project.scripts]
