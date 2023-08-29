@@ -143,6 +143,17 @@ ParadigmDescription(
         temperature_mixin,
         eeg_dec_mixin,
         eeg_view_mixin_required,
+        {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
+        cal_mic_mixin,
+        output_monitor_mixin,
+    ],
+)
+
+
+################################################################################
+ParadigmDescription(
+    # This is for testing the turntable
+    'turntable_monitor', 'Turntable Monitor', 'ear', [
         turntable_view_mixin_required,
         turntable_mixin,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
@@ -358,6 +369,8 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        turntable_view_mixin_required,
+        turntable_mixin,
     ]
 )
 
@@ -374,6 +387,8 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        turntable_view_mixin_required,
+        turntable_mixin,
     ]
 )
 
@@ -389,6 +404,8 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        turntable_view_mixin_required,
+        turntable_mixin,
     ]
 )
 
@@ -404,5 +421,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        turntable_view_mixin_required,
+        turntable_mixin,
     ]
 )
