@@ -2,15 +2,15 @@ from enaml.workbench.api import Extension
 
 from psi.context.api import ContextGroup
 from psi.core.enaml.api import ExperimentManifest
-from psi.controller.api import Input
+from psi.controller.api import ContinuousInput, DecimateTo, Derivative
 
 
 EXPERIMENT = 'turntable'
 
 
-enamldef TurntableManifest(ExperimentManifest):
+enamldef TurntableManifest(ExperimentManifest): manifest:
 
-    id = 'turntable_mixin'
+    id = 'turntable'
     name = 'turntable'
     title = 'Turntable'
 
@@ -19,9 +19,17 @@ enamldef TurntableManifest(ExperimentManifest):
         point = 'psi.context.items'
 
     Extension:
-        id = EXPERIMENT + '.turntable.io'
+        id = manifest.id + '.io'
         point = 'psi.controller.io'
 
-        Input:
-            source_name = 'hw_ci::turntable_angle'
+        ContinuousInput:
             name = 'turntable_angle'
+            source_name = 'hw_ci::turntable_angle'
+
+            Derivative:
+                name = 'turntable_velocity_raw'
+                initial_value = 0
+
+                DecimateTo:
+                    name = 'turntable_velocity'
+                    target_fs = 20

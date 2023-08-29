@@ -123,10 +123,11 @@ turntable_view_mixin = {
     'attrs': {
         'id': 'turntable_view_mixin',
         'title': 'Turntable',
-        'time_span': 2,
+        'time_span': 30,
         'time_delay': 0.125,
-        'source_name': 'turntable_angle',
-        'y_label': 'Turntable angle (radians)'
+        'source_name': 'turntable_velocity',
+        'y_label': 'Turntable velocity (radians/sec)',
+        'decimate_mode': 'none',
     }
 }
 turntable_view_mixin_required = turntable_view_mixin.copy()
