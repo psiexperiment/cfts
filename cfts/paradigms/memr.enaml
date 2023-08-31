@@ -185,7 +185,8 @@ class ExtractStim(EpochInput):
 
 @coroutine
 def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
-                             probe_output, elicitor_output, fs, counter,
+                             max_turntable_speed, probe_output,
+                             elicitor_output, turntable_sink, fs, counter,
                              calibration, status_cb, target):
     '''
     Parameters
@@ -202,6 +203,8 @@ def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
     min_probe_corr : float
         Reject trial if correlation between probe segments is less than this
         threshold.
+    max_turntable_speed : float
+        Reject trial if turntable speed exceeds this value in cm/s.
     status_cb : callable
         Callable taking a single argument. True indicates trial was rejected.
         False indicates trial was accepted.
@@ -221,9 +224,23 @@ def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
         probe_corr = np.corrcoef(probe).min()
         silence_corr = np.corrcoef(silence).min()
 
-        if (silence_rms < reject_threshold) \
-                and (probe_corr > min_probe_corr):
+        t0 = data.metadata[0]['t0']
+        duration = data.metadata[0]['duration']
 
+        speed = turntable_sink.get_segment(t0, offset=0, duration=duration,
+                                           preload=False, allow_partial=True)
+        speed_cm_s = np.max(np.abs(speed))
+
+        if (speed_cm_s > max_turntable_speed):
+            log.info('Rejecting trial since speed is %.2f cm', speed_cm_s)
+            status_cb(True)
+        elif (silence_rms > reject_threshold):
+            log.info('Rejecting trial since silent period RMS is %.2f', silence_rms)
+            status_cb(True)
+        elif (probe_corr < min_probe_corr):
+            log.info('Rejecting trial since probe corr is %.2f', probe_corr)
+            status_cb(True)
+        else:
             target(data)
             status_cb(False)
             with probe_output.engine.lock, elicitor_output.engine.lock:
@@ -242,8 +259,6 @@ def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
                 nonlocal counter
                 counter.current_n = current_n
             deferred_call(update_counter)
-        else:
-            status_cb(True)
 
 
 @coroutine
@@ -289,6 +304,7 @@ class ProcessMEMR(EpochInput):
     probe_output = d_(Value())
     elicitor_output = d_(Value())
     counter = d_(Typed(SimpleCounter))
+    turntable_sink = d_(Value())
 
     n_reject = d_(Int(0))
     n_trials = d_(Int(0))
@@ -304,6 +320,7 @@ class ProcessInterleavedMEMR(ProcessMEMR):
 
     reject_threshold = d_(Float())
     min_probe_corr = d_(Float(0.5))
+    max_turntable_speed = d_(Float())
 
     def configure_callback(self):
         cb = super().configure_callback()
@@ -312,8 +329,10 @@ class ProcessInterleavedMEMR(ProcessMEMR):
             fh=self.fh,
             reject_threshold=self.reject_threshold,
             min_probe_corr=self.min_probe_corr,
+            max_turntable_speed=self.max_turntable_speed,
             probe_output=self.probe_output,
             elicitor_output=self.elicitor_output,
+            turntable_sink=self.turntable_sink,
             fs=self.fs,
             counter=self.counter,
             calibration=self.calibration,
@@ -592,6 +611,12 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
                 default = 0.5
 
         Parameter:
+            name = 'max_turntable_speed'
+            label = 'Max. turntable speed (cm/s)'
+            default = 0.5
+            group_name = 'memr'
+
+        Parameter:
             name = 'repeat_period'
             label = 'Stim repeat period'
             group_name = 'memr'
@@ -867,8 +892,11 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
                     fh = C.probe_fh
                     reject_threshold = C.max_silence_db
                     min_probe_corr = C.min_probe_corr
+                    max_turntable_speed = C.max_turntable_speed
                     probe_output = controller.get_output('probe')
                     elicitor_output = controller.get_output('elicitor')
+                    turntable_sink = data.find_sink('turntable_store') \
+                        .get_ai_signal('turntable_linear_velocity')
                     counter = counter
 
                     ExtractStim: probe:
