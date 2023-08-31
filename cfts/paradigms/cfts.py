@@ -145,9 +145,9 @@ turntable_linear_velocity_view_mixin = {
         'time_span': 30,
         'time_delay': 0.125,
         'source_name': 'turntable_linear_velocity',
-        'y_label': 'Turntable velocity (m/sec)',
-        'y_min': -50e-3,
-        'y_max': 50e-3,
+        'y_label': 'Turntable velocity (cm/sec)',
+        'y_min': -5,
+        'y_max': 5,
         'decimate_mode': 'none',
     }
 }

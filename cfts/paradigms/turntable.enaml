@@ -20,7 +20,7 @@ enamldef TurntableManifest(ExperimentManifest): manifest:
 
         BinaryStore:
             name = 'turntable_store'
-            continuous_inputs = ['turntable_angle']
+            continuous_inputs = ['turntable_angle', 'turntable_angular_velocity', 'turntable_linear_velocity']
 
     Extension:
         id = manifest.id + '.turntable.context'
@@ -28,9 +28,9 @@ enamldef TurntableManifest(ExperimentManifest): manifest:
 
         Parameter:
             name = 'turntable_radius'
-            label = 'Turntable radius (m)'
+            label = 'Turntable radius (cm)'
             group_name = 'hardware_settings'
-            expression = '8.5e-3'
+            expression = '8.5'
 
     Extension:
         id = manifest.id + '.io'
