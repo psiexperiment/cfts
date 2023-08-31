@@ -1,3 +1,4 @@
+import numpy as np
 from psi.experiment.api import ParadigmDescription
 
 
@@ -118,20 +119,40 @@ turntable_mixin = {
 }
 
 
-turntable_view_mixin = {
+turntable_angular_velocity_view_mixin = {
     'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
     'attrs': {
-        'id': 'turntable_view_mixin',
+        'id': 'turntable_angular_velocity_view_mixin',
         'title': 'Turntable',
         'time_span': 30,
         'time_delay': 0.125,
-        'source_name': 'turntable_velocity',
+        'source_name': 'turntable_angular_velocity',
         'y_label': 'Turntable velocity (radians/sec)',
+        'y_min': -np.pi,
+        'y_max': np.pi,
         'decimate_mode': 'none',
     }
 }
-turntable_view_mixin_required = turntable_view_mixin.copy()
-turntable_view_mixin_required['required'] = True
+turntable_angular_velocity_view_mixin_required = turntable_angular_velocity_view_mixin.copy()
+turntable_angular_velocity_view_mixin_required['required'] = True
+
+
+turntable_linear_velocity_view_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
+    'attrs': {
+        'id': 'turntable_linear_velocity_view_mixin',
+        'title': 'Turntable',
+        'time_span': 30,
+        'time_delay': 0.125,
+        'source_name': 'turntable_linear_velocity',
+        'y_label': 'Turntable velocity (m/sec)',
+        'y_min': -50e-3,
+        'y_max': 50e-3,
+        'decimate_mode': 'none',
+    }
+}
+turntable_linear_velocity_view_mixin_required = turntable_linear_velocity_view_mixin.copy()
+turntable_linear_velocity_view_mixin_required['required'] = True
 
 
 ################################################################################
@@ -154,7 +175,8 @@ ParadigmDescription(
 ParadigmDescription(
     # This is for testing the turntable
     'turntable_monitor', 'Turntable Monitor', 'ear', [
-        turntable_view_mixin_required,
+        turntable_angular_velocity_view_mixin_required,
+        turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
         cal_mic_mixin,
@@ -369,7 +391,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
-        turntable_view_mixin_required,
+        turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
 )
@@ -387,7 +409,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
-        turntable_view_mixin_required,
+        turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
 )
@@ -404,7 +426,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
-        turntable_view_mixin_required,
+        turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
 )
@@ -421,7 +443,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
         {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
-        turntable_view_mixin_required,
+        turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
 )
