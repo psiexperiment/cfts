@@ -332,6 +332,7 @@ multi_microphone_mixin = {
 
 multi_microphone_fft_mixin = {
     'manifest': CORE_PATH + 'signal_mixins.MultiSignalFFTViewManifest',
+    'selected': True,
     'attrs': {
         'id': 'microphone_fft_view',
         'title': 'Microphone (PSD)',
@@ -343,6 +344,44 @@ multi_microphone_fft_mixin = {
             'right_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
         },
         'y_label': 'Microphone (dB)'
+    }
+}
+
+
+multi_memr_microphone_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.MultiSignalViewManifest',
+    'selected': True,
+    'attrs': {
+        'id': 'memr_microphone_signal_view',
+        'title': 'Microphone (time)',
+        'time_span': 4,
+        'time_delay': 0.125,
+        'sources': {
+            'elicitor_microphone': {'color': 'DarkCyan'},
+            'probe_microphone': {'color': 'DarkMagenta'}
+        },
+        'y_label': 'Microphone (V)'
+    },
+}
+
+
+multi_memr_microphone_fft_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.MultiSignalFFTViewManifest',
+    'attrs': {
+        'id': 'memr_microphone_signal_fft_view',
+        'title': 'Microphone (PSD)',
+        'fft_time_span': 0.25,
+        'fft_freq_lb': 500,
+        'fft_freq_ub': 50000,
+        'y_min': -10,
+        'y_max': 100,
+        'y_mode': 'mouse',
+        'save_limits': True,
+        'sources': {
+            'left_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
+            'right_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
+        },
+        'y_label': 'Signal (dB)'
     }
 }
 
@@ -389,8 +428,8 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        multi_memr_microphone_mixin,
+        multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
@@ -407,8 +446,8 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        multi_memr_microphone_mixin,
+        multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
@@ -424,8 +463,8 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        multi_memr_microphone_mixin,
+        multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
@@ -441,8 +480,8 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalViewManifest', 'selected': True},
-        {'manifest': CFTS_PATH + 'memr.MEMRSignalFFTViewManifest', 'selected': False},
+        multi_memr_microphone_mixin,
+        multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
     ]
