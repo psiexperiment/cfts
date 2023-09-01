@@ -1,6 +1,7 @@
 import logging
 log = logging.getLogger(__name__)
 
+from collections import Counter
 from functools import partial
 
 from atom.api import Dict, Float, Int, Typed, Value
@@ -125,6 +126,7 @@ def stack_repeats(repeat_period, target):
                 new_d = PipelineData(d, fs=data.fs, s0=0, channel=data.channel,
                                      metadata=data.metadata.copy())
                 new_d.add_metadata('repeat', i)
+                new_d.add_metadata('t0_actual', (i * s_repeat + data.s0) / data.fs)
                 new_data.append(new_d)
 
         new_data = concat(new_data, axis='epoch')
@@ -262,8 +264,9 @@ def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
 
 
 @coroutine
-def process_simultaneous_memr(fl, fh, probe_output, elicitor_output, fs,
-                              counter, calibration, status_cb, target):
+def process_simultaneous_memr(fl, fh, max_turntable_speed, probe_output,
+                              elicitor_output, turntable_sink, fs, counter,
+                              calibration, status_cb, target):
     '''
     Parameters
     ----------
@@ -271,30 +274,49 @@ def process_simultaneous_memr(fl, fh, probe_output, elicitor_output, fs,
         Lowest frequency in probe stim
     fh : float
         Highest frequency in probe stim
+    max_turntable_speed : float
+        Reject trial if turntable speed exceeds this value in cm/s.
     status_cb : callable
         Callable taking a single argument. True indicates trial was rejected.
         False indicates trial was accepted.
     '''
     while True:
         data = (yield)
-        target(data)
-        status_cb(False)
-        with probe_output.engine.lock, elicitor_output.engine.lock:
-            probe_uuid = data[0].metadata['key']
-            elicitor_uuid = data[0].metadata['elicitor_uuid']
-            try:
-                probe_output.queue.decrement_key(probe_uuid)
-                elicitor_output.queue.decrement_key(elicitor_uuid)
-            except Exception as e:
-                pass
 
-            current_n = probe_output.queue.count_requested_trials() \
-                - probe_output.queue.count_trials()
-            def update_counter():
-                nonlocal current_n
-                nonlocal counter
-                counter.current_n = current_n
-            deferred_call(update_counter)
+        times = np.array([m['t0_actual'] for m in data.metadata])
+        duration = np.mean(np.diff(times))
+        #speed = turntable_sink.get_segments(times, offset=0, duration=duration,
+        #                                    preload=False, allow_partial=True)
+        #keep_mask = list(speed.max(axis=1).values < max_turntable_speed)
+        #original_ranges = Counter([m['range'] for m in data.metadata])
+        #data = data[np.flatnonzero(keep_mask)]
+        #valid_ranges = Counter([m['range'] for m in data.metadata])
+        #log.info(len(data))
+        #log.info(len(data.metadata))
+        #log.info(valid_ranges)
+        #log.info(original_ranges)
+
+        if False:
+            pass
+        else:
+            target(data)
+            status_cb(False)
+            with probe_output.engine.lock, elicitor_output.engine.lock:
+                probe_uuid = data[0].metadata['key']
+                elicitor_uuid = data[0].metadata['elicitor_uuid']
+                try:
+                    probe_output.queue.decrement_key(probe_uuid)
+                    elicitor_output.queue.decrement_key(elicitor_uuid)
+                except Exception as e:
+                    pass
+
+                current_n = probe_output.queue.count_requested_trials() \
+                    - probe_output.queue.count_trials()
+                def update_counter():
+                    nonlocal current_n
+                    nonlocal counter
+                    counter.current_n = current_n
+                deferred_call(update_counter)
 
 
 class ProcessMEMR(EpochInput):
@@ -305,6 +327,7 @@ class ProcessMEMR(EpochInput):
     elicitor_output = d_(Value())
     counter = d_(Typed(SimpleCounter))
     turntable_sink = d_(Value())
+    max_turntable_speed = d_(Float())
 
     n_reject = d_(Int(0))
     n_trials = d_(Int(0))
@@ -320,7 +343,6 @@ class ProcessInterleavedMEMR(ProcessMEMR):
 
     reject_threshold = d_(Float())
     min_probe_corr = d_(Float(0.5))
-    max_turntable_speed = d_(Float())
 
     def configure_callback(self):
         cb = super().configure_callback()
@@ -346,8 +368,10 @@ class ProcessSimultaneousMEMR(ProcessMEMR):
         return process_simultaneous_memr(
             fl=self.fl,
             fh=self.fh,
+            max_turntable_speed=self.max_turntable_speed,
             probe_output=self.probe_output,
             elicitor_output=self.elicitor_output,
+            turntable_sink=self.turntable_sink,
             fs=self.fs,
             counter=self.counter,
             calibration=self.calibration,
@@ -1151,34 +1175,38 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
             name = 'memr_repeat'
             duration = 1 / C.probe_rate
 
-            ProcessSimultaneousMEMR: proc_memr:
-                name = 'memr_probe_valid'
-                force_active = True
-                fl = C.probe_fl
-                fh = C.probe_fh
-                probe_output = controller.get_output('probe')
-                elicitor_output = controller.get_output('elicitor')
-                counter = counter
+            ExtractStim:
+                # Add a bit of padding to capture the tail end of the
+                # probe due to acoustic delays
+                name = 'probe'
+                lb = 0.75e-3
+                ub = lb + C.probe_duration
 
-                ExtractStim:
-                    # Add a bit of padding to capture the tail end of the
-                    # probe due to acoustic delays
-                    name = 'probe'
-                    lb = 0.75e-3
-                    ub = lb + C.probe_duration
+                ExtractRepeats:
+                    name = 'probe_norm_raw'
+                    ranges = {
+                        'norm': (
+                            int(round((C.elicitor_onset - C.norm_window) * C.probe_rate)),
+                            int(round(C.elicitor_onset * C.probe_rate)),
+                        ),
+                        'elicitor': (
+                            int(round((C.elicitor_onset + C.elicitor_noise_rise_time) * C.probe_rate)),
+                            int(round((C.elicitor_onset + C.elicitor_noise_rise_time + C.norm_window) * C.probe_rate)),
+                        )
+                    }
 
-                    ExtractRepeats:
+                    ProcessSimultaneousMEMR: proc_memr:
                         name = 'probe_norm'
-                        ranges = {
-                            'norm': (
-                                int(round((C.elicitor_onset - C.norm_window) * C.probe_rate)),
-                                int(round(C.elicitor_onset * C.probe_rate)),
-                            ),
-                            'elicitor': (
-                                int(round((C.elicitor_onset + C.elicitor_noise_rise_time) * C.probe_rate)),
-                                int(round((C.elicitor_onset + C.elicitor_noise_rise_time + C.norm_window) * C.probe_rate)),
-                            )
-                        }
+                        force_active = True
+                        fl = C.probe_fl
+                        fh = C.probe_fh
+                        max_turntable_speed = C.max_turntable_speed
+                        probe_output = controller.get_output('probe')
+                        elicitor_output = controller.get_output('elicitor')
+                        counter = counter
+                        turntable_sink = data.find_sink('turntable_store') \
+                            .get_ai_signal('turntable_linear_velocity')
+
 
         ExtractStim:
             source_name = 'memr_elicitor'
@@ -1252,6 +1280,12 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
             name = 'norm_window'
             label = 'Normalization window'
             default = 1
+            group_name = 'memr'
+
+        Parameter:
+            name = 'max_turntable_speed'
+            label = 'Max. turntable speed (cm/s)'
+            default = 0.5
             group_name = 'memr'
 
         Expression:
