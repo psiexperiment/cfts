@@ -266,7 +266,7 @@ enamldef BaseDPOAEManifest(ControllerManifest): manifest:
 
             ContextRow:
                 name = 'primary_settings'
-                fmt = ['DPOAE', 'F2/F1 ratio', f2_f1_ratio, 'L2-L1 (dB)', l2_l1_diff, 'Noise floor (dB SPL)', nf]
+                fmt = ['DPOAE', 'F2/F1 ratio', f2_f1_ratio, 'L1-L2 (dB)', l2_l1_diff, 'Noise floor (dB SPL)', nf]
 
                 Parameter: f2_f1_ratio:
                     name = 'f2_f1_ratio'
