@@ -26,11 +26,51 @@ from cftscal.api import (
     microphone_manager, starship_manager
 )
 from cfts.paradigms import cfts
+from cftscal.plugins.widgets import AddItem
 
 
 DATA_ROOT = get_config('DATA_ROOT')
 PROC_ROOT = get_config('PROCESSED_ROOT')
 CFTS_ROOT = get_config('CFTS_ROOT')
+
+
+enamldef AddItem(PopupView): popup:
+
+    attr settings
+    window_type = 'popup'
+    arrow_size = 20
+    arrow_edge = 'top'
+    alias label: label.text
+
+    Container:
+        constraints = [
+            vbox(
+                hbox(label, field),
+                hbox(spacer(0), pb_ok, pb_cancel, spacing=0)
+            ),
+            align('v_center', label, field),
+            align('v_center', pb_ok, pb_cancel),
+            align('width', pb_ok, pb_cancel),
+        ]
+
+        Label: label:
+            pass
+        Field: field:
+            pass
+        PushButton: pb_ok:
+            text = 'OK'
+            enabled << bool(field.text)
+            clicked ::
+                items = settings.standard_notes[:]
+                items.append(field.text)
+                settings.standard_notes = items
+                settings.standard_note = field.text
+                popup.close()
+
+        PushButton: pb_cancel:
+            text = 'Cancel'
+            clicked ::
+                popup.close()
 
 
 class Experiment(Atom):
@@ -92,6 +132,8 @@ class Settings(Atom):
     ear = Enum('left', 'right')
     experimenter = Str()
     note = Str()
+    standard_notes = List(Str())
+    standard_note = Str()
 
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
@@ -103,6 +145,9 @@ class Settings(Atom):
     input_amp_config = Dict()
 
     duration = Int()
+
+    def _default_standard_notes(self):
+        return ['']
 
     def find_starship(self, ear, monaural=True):
         '''
@@ -155,7 +200,7 @@ class Settings(Atom):
             env['CFTS_LEFT_STARSHIP'] = self.find_starship('left', False)
             env['CFTS_RIGHT_STARSHIP'] = self.find_starship('right', False)
 
-        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.mode_notes[mode]} {experiment.paradigm}'
+        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {self.standard_note} {experiment.mode_notes[mode]} {experiment.paradigm}'
         filename = ' '.join(filename.split())
         args = ['psi', experiment.paradigm]
         if save:
@@ -199,6 +244,7 @@ class Settings(Atom):
                 'freq_lb': self.input_amp_config['freq_lb'],
                 'freq_ub': self.input_amp_config['freq_ub'],
             },
+            'standard_notes': self.standard_notes,
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
@@ -262,6 +308,7 @@ class Settings(Atom):
             self.input_amp_config['freq_lb'] = 10
         if 'freq_ub' not in self.input_amp_config:
             self.input_amp_config['freq_ub'] = 10e3
+
 
 enamldef PluginPopup(PopupView): popup:
     attr experiment
@@ -362,14 +409,18 @@ enamldef ExperimentInfo(GroupBox):
             hbox(experimenter_label, experimenter_field),
             hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
             hbox(note_label, note_field),
+            hbox(standard_note_label, standard_note_field, hbox(add_note, remove_note, spacing=0)),
             hbox(spacer(0), pb_raw, pb_proc),
         ),
-        align('right', experimenter_label, animal_label, note_label),
-        align('left', experimenter_label, animal_label, note_label),
+        align('right', experimenter_label, animal_label, note_label, standard_note_label),
+        align('left', experimenter_label, animal_label, note_label, standard_note_label),
         align('v_center', experimenter_label, experimenter_field),
         align('v_center', animal_label, animal_field, l_button, r_button),
         align('v_center', note_label, note_field),
+        align('v_center', standard_note_label, standard_note_field, add_note, remove_note),
         align('v_center', pb_raw, pb_proc),
+        add_note.width == 30,
+        remove_note.width == 30,
         l_button.width == 30,
         r_button.width == 30,
         pb_raw.width == 90,
@@ -396,6 +447,28 @@ enamldef ExperimentInfo(GroupBox):
 
     Field: note_field:
         text := settings.note
+
+    Label: standard_note_label:
+        text = 'Standard notes'
+
+    ObjectCombo: standard_note_field:
+        items << settings.standard_notes
+        selected := settings.standard_note
+
+    PushButton: add_note:
+        text = '+'
+        clicked ::
+            popup = AddItem(parent=self, settings=settings)
+            popup.show()
+
+    PushButton: remove_note:
+        enabled << bool(settings.standard_note)
+        text = '-'
+        clicked ::
+            items = settings.standard_notes[:]
+            items.remove(settings.standard_note)
+            settings.standard_note = ''
+            settings.standard_notes = items
 
     PushButton: l_button:
         text = 'L'
