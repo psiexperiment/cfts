@@ -90,6 +90,9 @@ def configure_memr(event, duration_attr, iti_attr=None):
             elicitor_sf = max(elicitor_sf, elicitor_factory.max_amplitude() * 1.1)
             probe_sf = max(probe_sf, probe_factory.max_amplitude() * 1.1)
 
+    probe_atten = util.db(probe_sf, probe.channel.max_range[1])
+    elicitor_atten = util.db(elicitor_sf, elicitor.channel.max_range[1])
+    log.info('Probe is set to %.2f dB of maximum and elicitor to %.2f dB of maximum', probe_atten, elicitor_atten)
     if len(bad_settings):
         levels = list(sorted(bad_settings.keys()))
         max_level = levels[0] - bad_settings[levels[0]]
