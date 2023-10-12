@@ -12,9 +12,9 @@ from enaml.core.api import Looper
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
-    Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx, GroupBox,
-    HGroup, Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView, PushButton,
-    VGroup,
+    Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx,
+    GroupBox, HGroup, Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView,
+    PushButton, VGroup,
 )
 
 from psi import get_config, get_config_folder
@@ -28,12 +28,9 @@ from cftscal.api import (
 from cfts.paradigms import cfts
 
 
-def get_config_folder():
-    return Path(r'C:\Users\mmm\projects\psi4\src\mmm-psi\config')
-
-
 DATA_ROOT = get_config('DATA_ROOT')
 PROC_ROOT = get_config('PROCESSED_ROOT')
+CFTS_ROOT = get_config('CFTS_ROOT')
 
 
 class Experiment(Atom):
@@ -423,7 +420,7 @@ enamldef Main(MainWindow):
             Action:
                 text = 'Load config\tCtrl+O'
                 triggered ::
-                    path = get_config_folder() / 'cfts-launcher'
+                    path = CFTS_ROOT / 'cfts-launcher'
                     path.mkdir(exist_ok=True)
                     filename = FileDialogEx.get_open_file_name(
                         current_path=str(path),
@@ -433,7 +430,7 @@ enamldef Main(MainWindow):
             Action:
                 text = 'Save config\tCtrl+O'
                 triggered ::
-                    path = get_config_folder() / 'cfts-launcher'
+                    path = CFTS_ROOT / 'cfts-launcher'
                     path.mkdir(exist_ok=True)
                     filename = FileDialogEx.get_save_file_name(
                         current_path=str(path),
