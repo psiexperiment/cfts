@@ -13,8 +13,8 @@ from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
     Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx,
-    GroupBox, HGroup, Label, MainWindow, Menu, MenuBar, ObjectCombo, PopupView,
-    PushButton, VGroup,
+    Form, GroupBox, HGroup, Label, MainWindow, Menu, MenuBar, ObjectCombo,
+    PopupView, PushButton, VGroup,
 )
 
 from psi import get_config, get_config_folder
@@ -40,6 +40,12 @@ class Experiment(Atom):
     preference = Str()
     plugins = List(Str())
     modes = List(Str())
+
+    #: Supplemental note to append based on the button clicked.
+    mode_notes = Dict()
+
+    def _default_mode_notes(self):
+        return {m: '' for m in self.modes}
 
     def _default_modes(self):
         return ['Run']
@@ -149,7 +155,7 @@ class Settings(Atom):
             env['CFTS_LEFT_STARSHIP'] = self.find_starship('left', False)
             env['CFTS_RIGHT_STARSHIP'] = self.find_starship('right', False)
 
-        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.paradigm}'
+        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {experiment.mode_notes[mode]} {experiment.paradigm}'
         filename = ' '.join(filename.split())
         args = ['psi', experiment.paradigm]
         if save:
@@ -262,6 +268,16 @@ enamldef PluginPopup(PopupView): popup:
     attr available_plugins
     arrow_size = 20
     VGroup:
+        Form:
+            padding = 0
+            Looper:
+                iterable = experiment.mode_notes.items()
+                Label:
+                    text = f'{loop_item[0].capitalize()} note'
+                Field:
+                    text = loop_item[1]
+                    text ::
+                        experiment.mode_notes[loop_item[0]] = text
         Looper:
             iterable = available_plugins
             CheckBox:
