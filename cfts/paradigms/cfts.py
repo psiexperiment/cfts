@@ -101,18 +101,6 @@ temperature_mixin = {
 }
 
 
-efr_microphone_fft_mixin = {
-    'manifest': CORE_PATH + 'signal_mixins.SignalFFTViewManifest',
-    'attrs': {
-        'id': 'microphone_fft_view',
-        'title': 'Microphone view (PSD)',
-        'fft_time_span': 5,
-        'source_name': 'system_microphone',
-        'y_label': 'Microphone (dB)'
-    }
-}
-
-
 turntable_mixin = {
     'manifest': CFTS_PATH + 'turntable.TurntableManifest',
     'required': True,
@@ -240,7 +228,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,
-        efr_microphone_fft_mixin,
+        microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
@@ -256,7 +244,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,
-        efr_microphone_fft_mixin,
+        microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
@@ -272,7 +260,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,
-        efr_microphone_fft_mixin,
+        microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
@@ -288,7 +276,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.RAMEFRInEarCalibrationMixinManifest', 'selected': True},
         temperature_mixin,
         microphone_mixin,
-        efr_microphone_fft_mixin,
+        microphone_fft_mixin,
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
