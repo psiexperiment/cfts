@@ -416,7 +416,7 @@ enamldef CalibrationMicrophone(ExperimentManifest): manifest:
 
         ContinuousInput:
             name = 'calibration_microphone'
-            source_name = 'hw_ai::calibration_microphone'
+            source_name = 'hw_ai::microphone_calibration'
 
     Extension:
         id = manifest.id + '.sinks'
