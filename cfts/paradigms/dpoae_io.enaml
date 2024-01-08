@@ -40,7 +40,7 @@ enamldef DPOAEPlotContainer(PlotContainer): pc:
             auto_select := pc.auto_select
             label = 'F2'
             y_column = 'f2_level'
-            pen_color = 'indianred'
+            color = 'indianred'
 
         ResultPlot:
             source_name << grp.source_name
@@ -51,7 +51,7 @@ enamldef DPOAEPlotContainer(PlotContainer): pc:
             auto_select << grp.auto_select
             label = 'F1'
             y_column = 'f1_level'
-            pen_color = 'lightsalmon'
+            color = 'lightsalmon'
 
         ResultPlot:
             source_name << grp.source_name
@@ -62,7 +62,7 @@ enamldef DPOAEPlotContainer(PlotContainer): pc:
             auto_select << grp.auto_select
             label = 'Noise Floor'
             y_column = 'dpoae_noise_floor'
-            pen_color = 'lightsteelblue'
+            color = 'lightsteelblue'
 
         ResultPlot:
             source_name << grp.source_name
@@ -73,7 +73,7 @@ enamldef DPOAEPlotContainer(PlotContainer): pc:
             auto_select << grp.auto_select
             label = 'DPOAE'
             y_column = 'dpoae_level'
-            pen_color = 'darkred'
+            color = 'darkred'
 
 
 enamldef DPOAEIOBaseManifest(ExperimentManifest): manifest:

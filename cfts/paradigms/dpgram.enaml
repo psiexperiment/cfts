@@ -36,7 +36,7 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             pen_width = 2
             label = 'F2'
             y_column = 'f2_level'
-            pen_color = 'indianred'
+            color = 'indianred'
             tab_keys >> pc.buttons
             tab_grouping = [f'secondary{suffix}_tone_level']
             selected_tab := pc.current_button
@@ -48,7 +48,7 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             pen_width << grp.pen_width
             label = 'F1'
             y_column = 'f1_level'
-            pen_color = 'lightsalmon'
+            color = 'lightsalmon'
             tab_grouping << grp.tab_grouping
             selected_tab << grp.selected_tab
             auto_select << grp.auto_select
@@ -59,7 +59,7 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             pen_width << grp.pen_width
             label = 'Noise Floor'
             y_column = 'dpoae_noise_floor'
-            pen_color = 'lightsteelblue'
+            color = 'lightsteelblue'
             tab_grouping << grp.tab_grouping
             selected_tab << grp.selected_tab
             auto_select << grp.auto_select
@@ -70,7 +70,7 @@ enamldef DPGramPlotContainer(FFTContainer): pc:
             pen_width << grp.pen_width
             label = 'DPOAE'
             y_column = 'dpoae_level'
-            pen_color = 'darkred'
+            color = 'darkred'
             tab_grouping << grp.tab_grouping
             selected_tab << grp.selected_tab
             auto_select << grp.auto_select
