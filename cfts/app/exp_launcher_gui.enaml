@@ -1,6 +1,7 @@
 import logging
 log = logging.getLogger(__name__)
 
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -13,8 +14,8 @@ from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
     Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx,
-    Form, GroupBox, HGroup, Label, MainWindow, Menu, MenuBar, ObjectCombo,
-    PopupView, PushButton, VGroup,
+    Form, GroupBox, HGroup, Label, MainWindow, Menu, MenuBar, Notebook,
+    ObjectCombo, Page, PopupView, PushButton, VGroup,
 )
 
 from psi import get_config, get_config_folder
@@ -137,6 +138,7 @@ class Settings(Atom):
 
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
+    current_queue = List(Experiment)
 
     starship_config = Dict()
     cal_mic_config = Dict()
@@ -338,13 +340,11 @@ enamldef PluginPopup(PopupView): popup:
                 text = loop_item.title
 
 
-enamldef ExperimentSequence(GroupBox): experiment_box:
+enamldef ExperimentSequence(Container): experiment_box:
 
-    title = 'Experiments (saved)'
     attr start_enabled = True
     attr save = True
     attr sequence
-    share_layout = True
 
     layout_constraints => ():
         # Align the subwidgets vertically
@@ -399,6 +399,16 @@ enamldef ExperimentSequence(GroupBox): experiment_box:
                 clicked ::
                     popup = PluginPopup(parent=self, experiment=loop_item, available_plugins=plugins)
                     popup.show()
+
+            PushButton:
+                constraints = [width == 30]
+                text = '+'
+                clicked ::
+                    new_item = deepcopy(loop_item)
+                    queue = main.settings.current_queue[:]
+                    queue.append(new_item)
+                    main.settings.current_queue = queue
+                    print(main.settings.current_queue)
 
 
 enamldef ExperimentInfo(GroupBox):
@@ -497,7 +507,7 @@ enamldef ExperimentInfo(GroupBox):
             os.startfile(PROC_ROOT)
 
 
-enamldef Main(MainWindow):
+enamldef Main(MainWindow): main:
 
     title = 'Cochlear Function Test Suite'
 
@@ -555,17 +565,17 @@ enamldef Main(MainWindow):
                 starship_info,
                 monitor_box,
                 experiment_info,
-                experiment_box,
+                experiment_nb,
                 experiment_stats,
             ),
             # Align the widths of the first three elements in the
             # experiment/monitor box. The first three elements represent the
             # first "row" of widgets in each box. Once we align those, the rest
             # fall into line.
-            align('width', monitor_box.children[0].children[0], experiment_box.children[0].children[0]),
-            align('width', monitor_box.children[0].children[1], experiment_box.children[0].children[1]),
-            align('width', monitor_box.children[0].children[2], experiment_box.children[0].children[2]),
-            align('width', monitor_box.children[0].children[3], experiment_box.children[0].children[3]),
+            #align('width', monitor_box.children[0].children[0], experiment_box.children[0].children[0]),
+            #align('width', monitor_box.children[0].children[1], experiment_box.children[0].children[1]),
+            #align('width', monitor_box.children[0].children[2], experiment_box.children[0].children[2]),
+            #align('width', monitor_box.children[0].children[3], experiment_box.children[0].children[3]),
         ]
 
         GroupBox: starship_info:
@@ -700,16 +710,33 @@ enamldef Main(MainWindow):
         ExperimentInfo: experiment_info:
             pass
 
-        ExperimentSequence: monitor_box:
-            share_layout = True
+        GroupBox: monitor_box:
             title = 'Experiment checks (not saved)'
-            sequence << settings.monitor_sequence
-            save = False
+            ExperimentSequence:
+                share_layout = True
+                sequence << settings.monitor_sequence
+                save = False
 
-        ExperimentSequence: experiment_box:
-            share_layout = True
-            start_enabled << (bool(settings.animal) and bool(settings.experimenter))
-            sequence << settings.experiment_sequence
+        Notebook: experiment_nb:
+            tab_style = 'preferences'
+            Page:
+                title = 'Experiments (saved)'
+                closable = False
+                Container:
+                    share_layout = True
+                    ExperimentSequence: experiment_box:
+                        share_layout = True
+                        start_enabled << (bool(settings.animal) and bool(settings.experimenter))
+                        sequence << settings.experiment_sequence
+            Page:
+                title = 'Experiment queues'
+                closable = False
+                Container:
+                    share_layout = True
+                    ObjectCombo:
+                        pass
+                    ExperimentSequence:
+                        sequence << settings.current_queue
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
