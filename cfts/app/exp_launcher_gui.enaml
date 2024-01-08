@@ -340,14 +340,14 @@ enamldef PluginPopup(PopupView): popup:
 
 enamldef ExperimentSequence(GroupBox): experiment_box:
 
-    title = 'Experiments (monaural)'
+    title = 'Experiments (saved)'
     attr start_enabled = True
     attr save = True
     attr sequence
     share_layout = True
 
     layout_constraints => ():
-        # Align the subwidgets verticalls
+        # Align the subwidgets vertically
         subwidgets = [w.children for w in self.visible_widgets()]
         constraints = [vbox(*self.visible_widgets())]
         constraints.extend([align('width', *c) for c in zip(*subwidgets)])
@@ -718,4 +718,3 @@ enamldef Main(MainWindow):
 
             Label:
                 text << f'Last run took {settings.duration//60} min and {settings.duration % 60} sec'
-
