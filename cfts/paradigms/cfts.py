@@ -156,6 +156,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
     ],
+    info={'modes': ['run']},
 )
 
 
@@ -170,6 +171,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
     ],
+    info={'modes': ['run']},
 )
 
 
@@ -184,7 +186,8 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest', 'selected': True},
         cal_mic_mixin,
         output_monitor_mixin,
-    ]
+    ],
+    info={'modes': ['run']},
 )
 
 
@@ -201,6 +204,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
     ],
+    info={'modes': ['run']},
 )
 
 
@@ -217,6 +221,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
     ],
+    info={'modes': ['run']},
 )
 
 
@@ -232,7 +237,8 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
-    ]
+    ],
+    info={'modes': ['run']},
 )
 
 
@@ -248,7 +254,8 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
-    ]
+    ],
+    info={'modes': ['run']},
 )
 
 
@@ -264,7 +271,8 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
-    ]
+    ],
+    info={'modes': ['run']},
 )
 
 
@@ -280,7 +288,8 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
-    ]
+    ],
+    info={'modes': ['run']},
 )
 
 
@@ -295,7 +304,8 @@ ParadigmDescription(
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
         cal_mic_mixin,
         output_monitor_mixin,
-    ]
+    ],
+    info={'modes': ['run']},
 )
 
 
@@ -389,6 +399,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
     ],
+    info={'modes': ['binaural']},
 )
 
 
@@ -420,7 +431,8 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-    ]
+    ],
+    info={'modes': ['ipsi', 'contra']},
 )
 
 
@@ -438,7 +450,8 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-    ]
+    ],
+    info={'modes': ['ipsi', 'contra']},
 )
 
 
@@ -455,7 +468,8 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-    ]
+    ],
+    info={'modes': ['ipsi', 'contra']},
 )
 
 
@@ -472,5 +486,6 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-    ]
+    ],
+    info={'modes': ['ipsi', 'contra']},
 )

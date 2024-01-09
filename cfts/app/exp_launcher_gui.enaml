@@ -8,8 +8,8 @@ from pathlib import Path
 import subprocess
 import time
 
-from atom.api import Atom, Bool, Dict, Enum, Int, List, Str
-from enaml.core.api import Looper
+from atom.api import Atom, Bool, Dict, Enum, Int, List, Property, Str
+from enaml.core.api import Conditional, Looper
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
@@ -41,16 +41,12 @@ class Experiment(Atom):
     paradigm = Str()
     preference = Str()
     plugins = List(Str())
-    modes = List(Str())
 
     #: Supplemental note to append based on the button clicked.
     mode_notes = Dict()
 
     def _default_mode_notes(self):
-        return {m: '' for m in self.modes}
-
-    def _default_modes(self):
-        return ['Run']
+        return {}
 
     def __init__(self, paradigm, plugins, preference, **kwargs):
         # Make sure the plugins saved to the config file are valid plugins (we
@@ -78,6 +74,11 @@ class Experiment(Atom):
         else:
             log.warning('Invalid preference requested for %s: %s', paradigm, preference)
             preference = ''
+
+        # Remove legacy modes since we changed how this is handled (it was
+        # always a hack to put in the file).
+        kwargs.pop('modes', None)
+
         super().__init__(paradigm=paradigm, plugins=plugins,
                          preference=preference, **kwargs)
 
@@ -85,6 +86,28 @@ class Experiment(Atom):
         state = super().__getstate__()
         state['preference'] = Path(state['preference']).name
         return state
+
+    def freeze(self, mode, ear='either'):
+        return FrozenExperiment(
+            label=self.label,
+            paradigm=self.paradigm,
+            preference=self.preference,
+            plugins=self.plugins,
+            modes=self.modes,
+            mode_notes=self.mode_notes,
+            mode=mode,
+            ear=ear,
+        )
+
+
+class FrozenExperiment(Experiment):
+    '''
+    Subclass of Experiment in which we have frozen the ear and mode (used for queues).
+    '''
+    mode = Str()
+
+    #: If either, then ear will be drawn from what is selected.
+    ear = Enum('selected', 'left', 'right')
 
 
 class Settings(Atom):
@@ -99,9 +122,30 @@ class Settings(Atom):
 
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
+
+    #: Dictionary of queue name to lists of FrozenExperiment
+    queues = Dict()
+
+    #: Currently selected queue
+    current_queue_name = Str()
+
+    #: Currently selected queue (this has to be broken out from queues to
+    #: enable proper change notifications, I think).
     current_queue = List(Experiment)
 
     starship_config = Dict()
+
+    #: String indicating starship configuration. Either mono (indicating that
+    #: we have a single starship that is used for either ear) or stereo (one
+    #: starship per ear).
+    audio_mode = Property()
+
+    def _get_audio_mode(self):
+        if self.find_starship('right', True) == self.find_starship('left', True):
+            return 'mono'
+        else:
+            return 'stereo'
+
     cal_mic_config = Dict()
     record_cal_mic = Bool(False)
     record_output_monitor = Bool(False)
@@ -163,7 +207,9 @@ class Settings(Atom):
             env['CFTS_LEFT_STARSHIP'] = self.find_starship('left', False)
             env['CFTS_RIGHT_STARSHIP'] = self.find_starship('right', False)
 
-        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {self.standard_note} {experiment.mode_notes[mode]} {experiment.paradigm}'
+
+        mode_note = experiment.mode_notes.get(mode, '')
+        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {self.standard_note} {mode_note} {experiment.paradigm}'
         filename = ' '.join(filename.split())
         args = ['psi', experiment.paradigm]
         if save:
@@ -276,18 +322,19 @@ class Settings(Atom):
 enamldef PluginPopup(PopupView): popup:
     attr experiment
     attr available_plugins
+    attr modes
     arrow_size = 20
     VGroup:
         Form:
             padding = 0
             Looper:
-                iterable = experiment.mode_notes.items()
+                iterable = modes
                 Label:
-                    text = f'{loop_item[0].capitalize()} note'
+                    text = f'{loop_item.capitalize()} note'
                 Field:
-                    text = loop_item[1]
+                    text = experiment.mode_notes.get(loop_item, '')
                     text ::
-                        experiment.mode_notes[loop_item[0]] = text
+                        experiment.mode_notes[loop_item] = text
         Looper:
             iterable = available_plugins
             CheckBox:
@@ -305,21 +352,31 @@ enamldef ExperimentSequence(Container): experiment_box:
 
     attr start_enabled = True
     attr save = True
+    attr mode = 'classic'
+
     attr sequence
+    attr edit_mode = False
 
     layout_constraints => ():
         # Align the subwidgets vertically
-        subwidgets = [w.children for w in self.visible_widgets()]
-        constraints = [vbox(*self.visible_widgets())]
-        constraints.extend([align('width', *c) for c in zip(*subwidgets)])
-        return constraints
+        widgets = self.visible_widgets()
+        subwidgets = [w.visible_widgets() for w in widgets]
+        return [
+            vbox(*widgets),
+            *[align('width', *c) for c in zip(*subwidgets)],
+        ]
 
-    Looper:
+    Looper: exp_loop:
         iterable << experiment_box.sequence
 
         Container:
+            attr paradigm = paradigm_manager.get_paradigm(loop_item.paradigm)
             share_layout = True
-            constraints = [hbox(*children), align('v_center', *self.visible_widgets())]
+            layout_constraints => ():
+                return [
+                    hbox(*self.visible_widgets()),
+                    align('v_center', *self.visible_widgets()),
+                ]
             padding = 0
 
             Label:
@@ -328,15 +385,19 @@ enamldef ExperimentSequence(Container): experiment_box:
             HGroup:
                 padding = 0
                 spacing = 0
-                enabled << experiment_box.start_enabled
+                enabled << experiment_box.start_enabled or edit_mode
 
                 Looper: mode_loop:
                     attr experiment = loop_item
-                    iterable << experiment.modes
+                    #attr paradigm = exp_loop.paradigm
+                    iterable << paradigm.info['modes']
 
                     PushButton:
                         text = loop_item.capitalize()
                         clicked ::
+                            # If we are runing in edit mode, we want to
+                            # just add this to the current queue.
+                            # Otherwise, we actually launch the experiment.
                             try:
                                 settings.run_experiment(mode_loop.experiment, loop_item,
                                                         save=experiment_box.save)
@@ -346,30 +407,62 @@ enamldef ExperimentSequence(Container): experiment_box:
                             # Update the preferences in case new ones were created
                             preferences.items = [str(p) for p in list_preferences(mode_loop.experiment.paradigm)]
 
+            #Conditional:
+            #    condition = experiment_box.mode == 'queue'
+            #    Label:
+            #        text = f'{loop_item.mode} {loop_item.ear} ear'
+
             ObjectCombo: preferences:
                 items = [str(p) for p in list_preferences(loop_item.paradigm)]
                 selected := loop_item.preference
                 to_string = lambda x: Path(x).stem
 
             PushButton:
-                attr plugins = [p for p in paradigm_manager.get_paradigm(loop_item.paradigm).plugins \
+                attr plugins = [p for p in paradigm.plugins \
                                 if not p.required and p.name != 'calibration_microphone']
                 constraints = [width == 30]
                 text = '⚙'
                 visible = bool(plugins)
                 clicked ::
-                    popup = PluginPopup(parent=self, experiment=loop_item, available_plugins=plugins)
+                    popup = PluginPopup(parent=self,
+                                        experiment=loop_item,
+                                        available_plugins=plugins,
+                                        modes=paradigm.info['modes'])
                     popup.show()
 
             PushButton:
+                visible << edit_mode
                 constraints = [width == 30]
-                text = '+'
+                text = '-'
                 clicked ::
-                    new_item = deepcopy(loop_item)
-                    queue = main.settings.current_queue[:]
-                    queue.append(new_item)
-                    main.settings.current_queue = queue
-                    print(main.settings.current_queue)
+                    seq = experiment_box.sequence[:]
+                    seq.remove(loop_item)
+                    experiment_box.sequence = seq
+
+    Container:
+        padding = 0
+        layout_constraints => ():
+            return [
+                hbox(*self.visible_widgets()),
+                align('v_center', *self.visible_widgets()),
+            ]
+        Label:
+            pass
+        Label:
+            pass
+        Label:
+            pass
+        Label:
+            pass
+        PushButton: pb_add_seq:
+            visible << edit_mode
+            constraints = [width == 30]
+            text = '+'
+            clicked ::
+                print(paradigm_manager.list_paradigms('ear'))
+
+
+
 enamldef AddRemoveCombo(Container):
 
     alias items: combo.items
@@ -485,6 +578,7 @@ enamldef Main(MainWindow): main:
     title = 'Cochlear Function Test Suite'
 
     attr settings = Settings()
+    attr edit_mode = False
 
     MenuBar:
         Menu:
@@ -509,6 +603,13 @@ enamldef Main(MainWindow): main:
                         name_filters=['Experiment Settings (*.json)'],
                     )
                     settings.save_config(filename)
+            Action:
+                separator = True
+            Action:
+                text = 'Edit config'
+                checkable = True
+                checked := main.edit_mode
+
         Menu:
             title = '&Debug'
             Menu:
@@ -536,19 +637,10 @@ enamldef Main(MainWindow): main:
         constraints = [
             vbox(
                 starship_info,
-                monitor_box,
                 experiment_info,
                 experiment_nb,
                 experiment_stats,
             ),
-            # Align the widths of the first three elements in the
-            # experiment/monitor box. The first three elements represent the
-            # first "row" of widgets in each box. Once we align those, the rest
-            # fall into line.
-            #align('width', monitor_box.children[0].children[0], experiment_box.children[0].children[0]),
-            #align('width', monitor_box.children[0].children[1], experiment_box.children[0].children[1]),
-            #align('width', monitor_box.children[0].children[2], experiment_box.children[0].children[2]),
-            #align('width', monitor_box.children[0].children[3], experiment_box.children[0].children[3]),
         ]
 
         GroupBox: starship_info:
@@ -683,33 +775,42 @@ enamldef Main(MainWindow): main:
         ExperimentInfo: experiment_info:
             pass
 
-        GroupBox: monitor_box:
-            title = 'Experiment checks (not saved)'
-            ExperimentSequence:
-                share_layout = True
-                sequence << settings.monitor_sequence
-                save = False
-
         Notebook: experiment_nb:
-            tab_style = 'preferences'
+            tab_style = 'document'
             Page:
-                title = 'Experiments (saved)'
+                title = 'Checks (not saved)'
                 closable = False
                 Container:
-                    share_layout = True
+                    padding = 0
+                    ExperimentSequence:
+                        sequence << main.settings.monitor_sequence
+                        save = False
+                        edit_mode << main.edit_mode
+            Page:
+                title = 'Experiments'
+                closable = False
+                Container:
+                    padding = 0
                     ExperimentSequence: experiment_box:
                         share_layout = True
-                        start_enabled << (bool(settings.animal) and bool(settings.experimenter))
-                        sequence << settings.experiment_sequence
+                        start_enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
+                        sequence << main.settings.experiment_sequence
+                        edit_mode << main.edit_mode
             Page:
-                title = 'Experiment queues'
+                title = 'Queues'
                 closable = False
                 Container:
-                    share_layout = True
-                    ObjectCombo:
-                        pass
+                    padding = 0
+                    HGroup:
+                        align_widths = False
+                        Label:
+                            text = 'Name'
+                        AddRemoveCombo:
+                            items << list(settings.queues.keys())
                     ExperimentSequence:
-                        sequence << settings.current_queue
+                        mode = 'queue'
+                        sequence << main.settings.current_queue
+                        edit_mode << main.edit_mode
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
