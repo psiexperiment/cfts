@@ -35,45 +35,6 @@ PROC_ROOT = get_config('PROCESSED_ROOT')
 CFTS_ROOT = get_config('CFTS_ROOT')
 
 
-enamldef AddItem(PopupView): popup:
-
-    attr settings
-    window_type = 'popup'
-    arrow_size = 20
-    arrow_edge = 'top'
-    alias label: label.text
-
-    Container:
-        constraints = [
-            vbox(
-                hbox(label, field),
-                hbox(spacer(0), pb_ok, pb_cancel, spacing=0)
-            ),
-            align('v_center', label, field),
-            align('v_center', pb_ok, pb_cancel),
-            align('width', pb_ok, pb_cancel),
-        ]
-
-        Label: label:
-            pass
-        Field: field:
-            pass
-        PushButton: pb_ok:
-            text = 'OK'
-            enabled << bool(field.text)
-            clicked ::
-                items = settings.standard_notes[:]
-                items.append(field.text)
-                settings.standard_notes = items
-                settings.standard_note = field.text
-                popup.close()
-
-        PushButton: pb_cancel:
-            text = 'Cancel'
-            clicked ::
-                popup.close()
-
-
 class Experiment(Atom):
 
     label = Str()
@@ -409,6 +370,34 @@ enamldef ExperimentSequence(Container): experiment_box:
                     queue.append(new_item)
                     main.settings.current_queue = queue
                     print(main.settings.current_queue)
+enamldef AddRemoveCombo(Container):
+
+    alias items: combo.items
+    alias selected: combo.selected
+    attr regex = '.*'
+
+    padding = 0
+
+    constraints = [hbox(combo, hbox(pb_add, pb_remove, spacing=0))]
+
+    ObjectCombo: combo:
+        pass
+
+    PushButton: pb_add:
+        text = '+'
+        constraints = [width == 30]
+        clicked ::
+            popup = AddItem(parent=self, combo=combo, regex=regex)
+            popup.show()
+
+    PushButton: pb_remove:
+        text = '-'
+        constraints = [width == 30]
+        enabled << bool(combo.items)
+        clicked ::
+            items = combo.items[:]
+            items.remove(combo.selected)
+            combo.items = items
 
 
 enamldef ExperimentInfo(GroupBox):
@@ -419,7 +408,7 @@ enamldef ExperimentInfo(GroupBox):
             hbox(experimenter_label, experimenter_field),
             hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
             hbox(note_label, note_field),
-            hbox(standard_note_label, standard_note_field, hbox(add_note, remove_note, spacing=0)),
+            hbox(standard_note_label, standard_note),
             hbox(spacer(0), pb_raw, pb_proc),
         ),
         align('right', experimenter_label, animal_label, note_label, standard_note_label),
@@ -427,10 +416,8 @@ enamldef ExperimentInfo(GroupBox):
         align('v_center', experimenter_label, experimenter_field),
         align('v_center', animal_label, animal_field, l_button, r_button),
         align('v_center', note_label, note_field),
-        align('v_center', standard_note_label, standard_note_field, add_note, remove_note),
+        align('v_center', standard_note_label, standard_note),
         align('v_center', pb_raw, pb_proc),
-        add_note.width == 30,
-        remove_note.width == 30,
         l_button.width == 30,
         r_button.width == 30,
         pb_raw.width == 90,
@@ -461,24 +448,10 @@ enamldef ExperimentInfo(GroupBox):
     Label: standard_note_label:
         text = 'Standard notes'
 
-    ObjectCombo: standard_note_field:
+    AddRemoveCombo: standard_note:
         items << settings.standard_notes
-        selected := settings.standard_note
-
-    PushButton: add_note:
-        text = '+'
-        clicked ::
-            popup = AddItem(parent=self, settings=settings)
-            popup.show()
-
-    PushButton: remove_note:
-        enabled << bool(settings.standard_note)
-        text = '-'
-        clicked ::
-            items = settings.standard_notes[:]
-            items.remove(settings.standard_note)
-            settings.standard_note = ''
-            settings.standard_notes = items
+        items ::
+            settings.standard_notes = items[:]
 
     PushButton: l_button:
         text = 'L'
