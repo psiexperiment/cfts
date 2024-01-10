@@ -7,6 +7,12 @@ CFTS_PATH = 'cfts.paradigms.'
 CORE_PATH = 'psi.paradigms.core.'
 
 
+websocket_mixin = {
+    'manifest': CORE_PATH + 'websocket_mixins.WebsocketClientManifest',
+    'required': True,
+}
+
+
 ################################################################################
 # Single-starship paradigms (ABR, EFR, DPOAE, IEC)
 ################################################################################
@@ -155,6 +161,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -170,6 +177,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -186,6 +194,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest', 'selected': True},
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -203,6 +212,7 @@ ParadigmDescription(
         microphone_fft_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -220,6 +230,7 @@ ParadigmDescription(
         microphone_fft_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -237,6 +248,7 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -254,6 +266,7 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -271,6 +284,7 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -288,6 +302,7 @@ ParadigmDescription(
         eeg_view_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -304,6 +319,7 @@ ParadigmDescription(
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['run']},
 )
@@ -398,6 +414,7 @@ ParadigmDescription(
         multi_microphone_fft_mixin,
         cal_mic_mixin,
         output_monitor_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['binaural']},
 )
@@ -431,6 +448,7 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['ipsi', 'contra']},
 )
@@ -450,6 +468,7 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['ipsi', 'contra']},
 )
@@ -468,6 +487,7 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['ipsi', 'contra']},
 )
@@ -486,6 +506,7 @@ ParadigmDescription(
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
+        websocket_mixin,
     ],
     info={'modes': ['ipsi', 'contra']},
 )

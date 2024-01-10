@@ -8,7 +8,10 @@ from pathlib import Path
 import subprocess
 import time
 
-from atom.api import Atom, Bool, Dict, Enum, Int, List, Property, Str
+from atom.api import (
+    Atom, Bool, Dict, Enum, Int, List, Property, Str, Typed, Value
+)
+from enaml.application import timed_call
 from enaml.core.api import Conditional, Looper
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
@@ -21,6 +24,7 @@ from enaml.widgets.api import (
 from psi import get_config, get_config_folder
 from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
+from psi.paradigms.core.websocket_mixins import WebsocketServerPlugin
 
 from cftscal.api import (
     list_input_amplifier_connections, list_starship_connections,
@@ -140,6 +144,12 @@ class Settings(Atom):
     #: starship per ear).
     audio_mode = Property()
 
+    #: Currently active subprocess
+    active_subprocess = Value()
+
+    #: Is an experiment currently running?
+    experiment_running = Bool(False)
+
     def _get_audio_mode(self):
         if self.find_starship('right', True) == self.find_starship('left', True):
             return 'mono'
@@ -152,6 +162,18 @@ class Settings(Atom):
     input_amp_config = Dict()
 
     duration = Int()
+    ws_server = Typed(WebsocketServerPlugin)
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.ws_server = WebsocketServerPlugin()
+        self.ws_server.start_thread(recv_cb=self.recv_msg)
+
+    def recv_msg(self, message):
+        if message['event'] == 'experiment_end':
+            self.experiment_complete()
+        elif message['event'] == 'window_closed':
+            self.experiment_complete()
 
     def _default_standard_notes(self):
         return ['']
@@ -179,7 +201,10 @@ class Settings(Atom):
             raise ValueError('Starships incorrectly configured')
         return next(iter(starship_to_use))
 
-    def run_experiment(self, experiment, mode, save=True):
+    def build_experiment(self, experiment, mode, save=True):
+        '''
+        Build the experiment arguments and environment for launching in subprocess
+        '''
         amp_input_name = self.input_amp_config['input_name']
         env = {
             'CFTS_INPUT_AMPLIFIER': amp_input_name,
@@ -230,11 +255,20 @@ class Settings(Atom):
         if self.record_output_monitor:
             args.extend(['--plugin', 'output_monitor'])
 
+        return args, env
+
+    def run_experiment(self, experiment, mode, save=True):
+        args, env = self.build_experiment(experiment, mode, save)
         print(env)
         print(' '.join(args))
-        start_time = time.time()
-        subprocess.check_output(args, env=dict(os.environ, **env))
-        self.duration = int(round(time.time() - start_time))
+
+        #start_time = time.time()
+        #self.duration = int(round(time.time() - start_time))
+        self.active_subprocess = subprocess.Popen(args, env=dict(os.environ, **env))
+        self.experiment_running = True
+
+    def experiment_complete(self):
+        self.experiment_running = False
 
     def save_config(self, filename):
         info = {
@@ -356,6 +390,7 @@ enamldef ExperimentSequence(Container): experiment_box:
 
     attr sequence
     attr edit_mode = False
+    attr settings
 
     layout_constraints => ():
         # Align the subwidgets vertically
@@ -385,11 +420,11 @@ enamldef ExperimentSequence(Container): experiment_box:
             HGroup:
                 padding = 0
                 spacing = 0
-                enabled << experiment_box.start_enabled or edit_mode
+                enabled << (experiment_box.start_enabled or edit_mode) and \
+                    not settings.experiment_running
 
                 Looper: mode_loop:
                     attr experiment = loop_item
-                    #attr paradigm = exp_loop.paradigm
                     iterable << paradigm.info['modes']
 
                     PushButton:
@@ -786,6 +821,7 @@ enamldef Main(MainWindow): main:
                         sequence << main.settings.monitor_sequence
                         save = False
                         edit_mode << main.edit_mode
+                        settings << main.settings
             Page:
                 title = 'Experiments'
                 closable = False
@@ -796,6 +832,7 @@ enamldef Main(MainWindow): main:
                         start_enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
                         sequence << main.settings.experiment_sequence
                         edit_mode << main.edit_mode
+                        settings << main.settings
             Page:
                 title = 'Queues'
                 closable = False
@@ -811,6 +848,7 @@ enamldef Main(MainWindow): main:
                         mode = 'queue'
                         sequence << main.settings.current_queue
                         edit_mode << main.edit_mode
+                        settings << main.settings
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
