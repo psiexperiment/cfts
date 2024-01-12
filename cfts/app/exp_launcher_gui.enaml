@@ -1,5 +1,6 @@
 import logging
 log = logging.getLogger(__name__)
+logging.basicConfig(level='DEBUG')
 
 from copy import deepcopy
 import json
@@ -22,7 +23,6 @@ from enaml.widgets.api import (
 )
 
 from psi import get_config, get_config_folder
-from psi.application import list_preferences
 from psi.experiment.api import paradigm_manager
 from psi.paradigms.core.websocket_mixins import WebsocketServerPlugin
 
@@ -42,9 +42,14 @@ CFTS_ROOT = get_config('CFTS_ROOT')
 class Experiment(Atom):
 
     label = Str()
-    paradigm = Str()
+    paradigm = Value()
     preference = Str()
+
+    #: Plugins selected for load
     plugins = List(Str())
+
+    #: All plugins
+    available_plugins = List(Str())
 
     #: Supplemental note to append based on the button clicked.
     mode_notes = Dict()
@@ -58,10 +63,10 @@ class Experiment(Atom):
         # valid, remove it. If the plugin is required, remove it as a plugin
         # that the user can select from in the GUI (since it automatically gets
         # loaded).
-        valid_plugins = paradigm_manager.get_paradigm(paradigm).plugins
+        paradigm = paradigm_manager.get_paradigm(paradigm)
         for plugin in plugins[:]:
-            for valid_plugin in valid_plugins:
-                if plugin == valid_plugin.name and not valid_plugin.required:
+            for valid_plugin in paradigm.plugins:
+                if plugin == valid_plugin.id and not valid_plugin.required:
                     break
             else:
                 plugins.remove(plugin)
@@ -71,12 +76,13 @@ class Experiment(Atom):
         # the list of avaialble preferences. This allows for portability across
         # systems.
         preference = Path(preference)
-        for valid_preference in list_preferences(paradigm):
+        for valid_preference in paradigm.list_preferences():
             if valid_preference.stem == preference.stem:
                 preference = str(valid_preference)
                 break
         else:
-            log.warning('Invalid preference requested for %s: %s', paradigm, preference)
+            log.warning('Invalid preference requested for %s: %s', paradigm,
+                        preference)
             preference = ''
 
         # Remove legacy modes since we changed how this is handled (it was
@@ -159,6 +165,10 @@ class Settings(Atom):
     cal_mic_config = Dict()
     record_cal_mic = Bool(False)
     record_output_monitor = Bool(False)
+    record_body_temperature = Bool(True)
+
+    #: If True, ensure inear calibration plugin is loaded if available.
+    run_inear_calibration = Bool(True)
     input_amp_config = Dict()
 
     duration = Int()
@@ -232,11 +242,10 @@ class Settings(Atom):
             env['CFTS_LEFT_STARSHIP'] = self.find_starship('left', False)
             env['CFTS_RIGHT_STARSHIP'] = self.find_starship('right', False)
 
-
         mode_note = experiment.mode_notes.get(mode, '')
         filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {self.standard_note} {mode_note} {experiment.paradigm}'
         filename = ' '.join(filename.split())
-        args = ['psi', experiment.paradigm]
+        args = ['psi', experiment.paradigm.name]
         if save:
             args.append(str(DATA_ROOT / filename))
         args.extend([
@@ -255,6 +264,25 @@ class Settings(Atom):
         if self.record_output_monitor:
             args.extend(['--plugin', 'output_monitor'])
 
+        if self.record_body_temperature:
+            for p in experiment.paradigm.plugins:
+                if p.id  == 'temperature':
+                    args.extend(['--plugin', 'temperature'])
+                    break
+            else:
+                log.warning('No temperature plugin available for %s',
+                            experiment.paradigm.name)
+
+        if self.run_inear_calibration:
+            for p in experiment.paradigm.plugins:
+                if p.id.endswith('_inear_calibration'):
+                    args.extend(['--plugin', p.id])
+                    break
+            else:
+                log.warning('No in-ear plugin available for %s',
+                            experiment.paradigm.name)
+
+
         return args, env
 
     def run_experiment(self, experiment, mode, save=True):
@@ -266,6 +294,13 @@ class Settings(Atom):
         #self.duration = int(round(time.time() - start_time))
         self.active_subprocess = subprocess.Popen(args, env=dict(os.environ, **env))
         self.experiment_running = True
+        timed_call(1000, self.check_experiment_status)
+
+    def check_experiment_status(self):
+        if self.experiment_running and self.active_subprocess.poll() is not None:
+            self.experiment_running = False
+        else:
+            timed_call(1000, self.check_experiment_status)
 
     def experiment_complete(self):
         self.experiment_running = False
@@ -372,13 +407,13 @@ enamldef PluginPopup(PopupView): popup:
         Looper:
             iterable = available_plugins
             CheckBox:
-                checked = bool(loop_item.name in experiment.plugins)
+                checked = bool(loop_item.id in experiment.plugins)
                 checked ::
                     if checked:
-                        if loop_item.name not in experiment.plugins:
-                            experiment.plugins.append(loop_item.name)
+                        if loop_item.id not in experiment.plugins:
+                            experiment.plugins.append(loop_item.id)
                     else:
-                        experiment.plugins.remove(loop_item.name)
+                        experiment.plugins.remove(loop_item.id)
                 text = loop_item.title
 
 
@@ -399,18 +434,20 @@ enamldef ExperimentSequence(Container): experiment_box:
         return [
             vbox(*widgets),
             *[align('width', *c) for c in zip(*subwidgets)],
+            *[align('left', *c) for c in zip(*subwidgets)],
         ]
 
     Looper: exp_loop:
         iterable << experiment_box.sequence
 
         Container:
-            attr paradigm = paradigm_manager.get_paradigm(loop_item.paradigm)
             share_layout = True
+
             layout_constraints => ():
+                widgets = self.visible_widgets()
                 return [
-                    hbox(*self.visible_widgets()),
-                    align('v_center', *self.visible_widgets()),
+                    hbox(*widgets),
+                    align('v_center', *widgets),
                 ]
             padding = 0
 
@@ -425,7 +462,7 @@ enamldef ExperimentSequence(Container): experiment_box:
 
                 Looper: mode_loop:
                     attr experiment = loop_item
-                    iterable << paradigm.info['modes']
+                    iterable << loop_item.paradigm.info['modes']
 
                     PushButton:
                         text = loop_item.capitalize()
@@ -440,7 +477,8 @@ enamldef ExperimentSequence(Container): experiment_box:
                                 log.exception(e)
                                 critical(experiment_box, 'Error starting experiment', str(e))
                             # Update the preferences in case new ones were created
-                            preferences.items = [str(p) for p in list_preferences(mode_loop.experiment.paradigm)]
+                            preferences.items = [str(p) for p in \
+                                                 mode_loop.experiment.paradigm.list_preferences()]
 
             #Conditional:
             #    condition = experiment_box.mode == 'queue'
@@ -448,13 +486,13 @@ enamldef ExperimentSequence(Container): experiment_box:
             #        text = f'{loop_item.mode} {loop_item.ear} ear'
 
             ObjectCombo: preferences:
-                items = [str(p) for p in list_preferences(loop_item.paradigm)]
+                items = [str(p) for p in loop_item.paradigm.list_preferences()]
                 selected := loop_item.preference
                 to_string = lambda x: Path(x).stem
 
             PushButton:
-                attr plugins = [p for p in paradigm.plugins \
-                                if not p.required and p.name != 'calibration_microphone']
+                attr plugins = [p for p in loop_item.paradigm.plugins \
+                                if not p.required and not p.info.get('hide', False)]
                 constraints = [width == 30]
                 text = '⚙'
                 visible = bool(plugins)
@@ -462,7 +500,7 @@ enamldef ExperimentSequence(Container): experiment_box:
                     popup = PluginPopup(parent=self,
                                         experiment=loop_item,
                                         available_plugins=plugins,
-                                        modes=paradigm.info['modes'])
+                                        modes=loop_item.paradigm.info['modes'])
                     popup.show()
 
             PushButton:
@@ -646,7 +684,7 @@ enamldef Main(MainWindow): main:
                 checked := main.edit_mode
 
         Menu:
-            title = '&Debug'
+            title = '&Options'
             Menu:
                 title = 'Logging Level'
                 ActionGroup:
@@ -659,6 +697,8 @@ enamldef Main(MainWindow): main:
                                 settings.logging_level = loop_item
                             checked << settings.logging_level == loop_item
             Action:
+                separator = True
+            Action:
                 text = '&Record calibration microphone'
                 checkable = True
                 checked := settings.record_cal_mic
@@ -666,6 +706,14 @@ enamldef Main(MainWindow): main:
                 text = '&Record output monitor signal'
                 checkable = True
                 checked := settings.record_output_monitor
+            Action:
+                text = '&Monitor body temperature'
+                checkable = True
+                checked := settings.record_body_temperature
+            Action:
+                text = '&Run in-ear calibration'
+                checkable = True
+                checked := settings.run_inear_calibration
 
     Container:
 
