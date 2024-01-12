@@ -889,7 +889,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
             name = 'click'
             hide = ['skip_n']
             BandlimitedClick:
-                hide = ['polarity']
+                pass
 
         Repeat: chirp:
             name = 'chirp'

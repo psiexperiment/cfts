@@ -299,7 +299,7 @@ enamldef SAMEFRManifest(BaseEFRManifest):
             label = 'SAM tone'
             hide = ['start_time']
             SAMTone:
-                hide = ['polarity', 'phase']
+                hide = ['polarity']
                 name = 'sam_tone'
 
     Extension:
