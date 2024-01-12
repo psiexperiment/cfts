@@ -158,8 +158,7 @@ class CFTSSequenceSelector(SequenceSelector):
 
 enamldef TemperatureMixinManifest(ExperimentManifest): manifest:
 
-    id = 'temperature_mixin'
-    name = 'temperature'
+    id = 'temperature'
     title = 'Temperature monitor'
 
     Extension:
@@ -209,8 +208,7 @@ enamldef InEarCalibrationMixinManifest(ExperimentManifest): manifest:
     attr get_values = lambda x: {si for i in x for si in i}
     attr microphone_channel = 'system_microphone'
 
-    id = f'{experiment}_inear_calibration_mixin'
-    name = f'{experiment}_inear_calibration'
+    id = f'{experiment}_inear_calibration'
     title = 'In-ear calibration'
 
     Extension:
@@ -263,8 +261,7 @@ enamldef DPOAEInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): mani
 
 enamldef BinauralDPOAEInEarCalibrationMixinManifest(ExperimentManifest): manifest:
 
-    id = f'binaural_inear_calibration_mixin'
-    name = f'binaural_inear_calibration'
+    id = f'binaural_inear_calibration'
     title = 'In-ear calibration'
 
     Extension:
@@ -336,8 +333,7 @@ enamldef RAMEFRInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): man
 
 enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
 
-    id = f'memr_inear_calibration_mixin'
-    name = f'memr_inear_calibration'
+    id = 'memr_inear_calibration'
     title = 'In-ear calibration'
 
     Extension:

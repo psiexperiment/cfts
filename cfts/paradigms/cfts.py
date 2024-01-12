@@ -88,8 +88,7 @@ microphone_fft_mixin = {
 eeg_view_mixin = {
     'manifest': CORE_PATH + 'signal_mixins.SignalViewManifest',
     'attrs': {
-        'id': 'eeg_view_mixin',
-        'name': 'eeg_view',
+        'id': 'eeg_view',
         'title': 'EEG display',
         'time_span': 2,
         'time_delay': 0.125,
