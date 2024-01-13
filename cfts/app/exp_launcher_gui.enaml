@@ -176,14 +176,26 @@ class Settings(Atom):
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
-        self.ws_server = WebsocketServerPlugin()
-        self.ws_server.start_thread(recv_cb=self.recv_msg)
+        self.ws_server = WebsocketServerPlugin(
+            recv_cb=self.recv_msg,
+            connect_cb=self.set_event_filter,
+        )
+        self.ws_server.start_thread()
+
+    def set_event_filter(self):
+        log.info('SETTING EVENT FILTER')
+        self.ws_server.send_message({
+            'command': 'websocket.set_event_filter',
+            'parameters': {'event_filter': 'experiment_end|window_closed|websocket_connected'},
+        })
 
     def recv_msg(self, message):
         if message['event'] == 'experiment_end':
             self.experiment_complete()
         elif message['event'] == 'window_closed':
             self.experiment_complete()
+        elif message['event'] == 'websocket_connected':
+            print('MESSAGE!!!!')
 
     def _default_standard_notes(self):
         return ['']
