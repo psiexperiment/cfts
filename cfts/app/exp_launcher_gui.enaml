@@ -10,7 +10,7 @@ import subprocess
 import time
 
 from atom.api import (
-    Atom, Bool, Dict, Enum, Int, List, Property, Str, Typed, Value
+    Atom, Bool, Dict, Enum, Float, Int, List, Property, Str, Typed, Value
 )
 from enaml.application import timed_call
 from enaml.core.api import Conditional, Looper
@@ -47,22 +47,24 @@ class Experiment(Atom):
     #: Plugins selected for load
     plugins = List(Str())
 
-    #: All plugins
-    available_plugins = List(Str())
-
     #: Supplemental note to append based on the button clicked.
     mode_notes = Dict()
 
     def _default_mode_notes(self):
         return {}
 
-    def __init__(self, paradigm, plugins, preference, **kwargs):
+    def __init__(self, paradigm, plugins=None, preference=None, **kwargs):
         # Make sure the plugins saved to the config file are valid plugins (we
         # sometimes remove or rename plugins). If the plugin is no longer
         # valid, remove it. If the plugin is required, remove it as a plugin
         # that the user can select from in the GUI (since it automatically gets
         # loaded).
-        paradigm = paradigm_manager.get_paradigm(paradigm)
+        if plugins is None:
+            plugins = []
+
+        if isinstance(paradigm, str):
+            paradigm = paradigm_manager.get_paradigm(paradigm)
+
         for plugin in plugins[:]:
             for valid_plugin in paradigm.plugins:
                 if plugin == valid_plugin.id and not valid_plugin.required:
@@ -74,29 +76,51 @@ class Experiment(Atom):
         # need to restore the full path to the preference by scanning through
         # the list of avaialble preferences. This allows for portability across
         # systems.
-        preference = Path(preference)
-        for valid_preference in paradigm.list_preferences():
-            if valid_preference.stem == preference.stem:
-                preference = str(valid_preference)
-                break
-        else:
-            log.warning('Invalid preference requested for %s: %s', paradigm,
-                        preference)
+        if preference is None:
             preference = ''
-
-        # Remove legacy modes since we changed how this is handled (it was
-        # always a hack to put in the file).
-        kwargs.pop('modes', None)
+        else:
+            preference = Path(preference)
+            for valid_preference in paradigm.list_preferences():
+                if valid_preference.stem == preference.stem:
+                    preference = str(valid_preference)
+                    break
+            else:
+                log.warning('Invalid preference requested for %s: %s', paradigm,
+                            preference)
+                preference = ''
 
         super().__init__(paradigm=paradigm, plugins=plugins,
                          preference=preference, **kwargs)
 
     def __getstate__(self):
         state = super().__getstate__()
+        # Convert some keys to things that can be JSON-serialized. Don't save
+        # the full path to the preference because we want this to be portable
+        # across environments and installs.
         state['preference'] = Path(state['preference']).name
+        state['paradigm'] = state['paradigm'].name
         return state
 
-    def freeze(self, mode, ear='either'):
+    def freeze(self, mode, ear='selected'):
+        '''
+        Return experiment in which mode and ear are fixed.
+
+        Parameters
+        ----------
+        mode : str
+            One of the modes the paradigm can be run under (e.g., 'run',
+            'ipsi', 'contra').
+        ear : {'selected', 'left', 'right'}
+            Ear to run experiment on. When set to a specific ear, the
+            configuration must have two starships (one for each ear). When set
+            to 'selected', the ear currently selected in the GUI will be used.
+
+        This is used for queue subclasses where we may need to specify run mode
+        (i.e., ipsi vs. contra) as well as ear (e.g. in assays where we have a
+        separate starship for each ear such as the MEMR).
+        '''
+        if mode is None:
+            mode = self.modes[0]
         return FrozenExperiment(
             paradigm=self.paradigm,
             preference=self.preference,
@@ -151,8 +175,27 @@ class Settings(Atom):
     #: Currently active subprocess
     active_subprocess = Value()
 
+    #: List of subprocesses waiting their turn
+    subprocesses = List()
+
+    #: Currently active subprocess
+    current_subprocess_i = Int()
+
     #: Is an experiment currently running?
     experiment_running = Bool(False)
+
+    def _observe_current_queue_name(self, event):
+        # This is needed to sync up changes where we select the queue from the
+        # GUI
+        if self.current_queue_name != '':
+            self.current_queue = self.queues.setdefault(self.current_queue_name, [])
+        else:
+            self.current_queue = []
+
+    def _observe_current_queue(self, event):
+        # This is needed to sync back changes from the experiment display in the GUI
+        if self.current_queue_name != '':
+            self.queues[self.current_queue_name] = self.current_queue
 
     def _get_audio_mode(self):
         if self.find_starship('right', True) == self.find_starship('left', True):
@@ -169,31 +212,56 @@ class Settings(Atom):
     run_inear_calibration = Bool(True)
     input_amp_config = Dict()
 
-    duration = Int()
+    #: Used to track runtime of individual experiments.
+    exp_start_time = Float()
+
+    #: Duration of last experiment from experiment_start to experiment_end event.
+    duration = Float()
+
+    #: Used for communicating with experiments invoked by `psi`.
     ws_server = Typed(WebsocketServerPlugin)
+
+    autostart_client_id = Value()
 
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
+        # Set up a websocket server. Whenever clients (i.e., programs invoked
+        # by `psi`) connect they will be instructed to relay only a handful of
+        # events to keep load on the websocket low.
         self.ws_server = WebsocketServerPlugin(
             recv_cb=self.recv_msg,
             connect_cb=self.set_event_filter,
         )
         self.ws_server.start_thread()
 
+    def start_process(self):
+        process = self.subprocesses[self.current_subprocess_i]['process']
+        self.ws_server.send_message({'command': 'psi.controller.start'}, process.pid)
+
     def set_event_filter(self):
-        log.info('SETTING EVENT FILTER')
         self.ws_server.send_message({
             'command': 'websocket.set_event_filter',
-            'parameters': {'event_filter': 'experiment_end|window_closed|websocket_connected'},
+            'parameters': {'event_filter': 'plugins_started|experiment_start|experiment_end|window_closed'},
         })
 
     def recv_msg(self, message):
-        if message['event'] == 'experiment_end':
+        if message['event'] == 'plugins_started':
+            if message['client_id'] == self.autostart_client_id:
+                self.start_process()
+        elif message['event'] == 'experiment_start':
+            self.exp_start_time = time.time()
+        elif message['event'] == 'experiment_end':
             self.experiment_complete()
+            self.duration = round(time.time() - self.exp_start_time)
         elif message['event'] == 'window_closed':
             self.experiment_complete()
-        elif message['event'] == 'websocket_connected':
-            print('MESSAGE!!!!')
+
+    def experiment_complete(self):
+        self.current_subprocess_i += 1
+        if self.current_subprocess_i >= len(self.subprocesses):
+            self.experiment_running = False
+        else:
+            self.start_process()
 
     def _default_standard_notes(self):
         return ['']
@@ -221,7 +289,7 @@ class Settings(Atom):
             raise ValueError('Starships incorrectly configured')
         return next(iter(starship_to_use))
 
-    def build_experiment(self, experiment, mode, save=True):
+    def build_experiment(self, experiment, mode, ear, save=True):
         '''
         Build the experiment arguments and environment for launching in subprocess
         '''
@@ -237,14 +305,14 @@ class Settings(Atom):
             env[f'CFTS_STARSHIP_{k.upper()}'] = cal_string
             env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
 
-        env['CFTS_TEST_STARSHIP'] = self.find_starship(self.ear, True)
+        env['CFTS_TEST_STARSHIP'] = self.find_starship(ear, True)
         if mode.lower() == 'run':
             pass
         elif mode.lower() == 'ipsi':
             env['CFTS_NONTEST_STARSHIP'] = env['CFTS_TEST_STARSHIP']
         elif mode.lower() == 'contra':
             try:
-                nontest_ear = 'right' if self.ear == 'left' else 'left'
+                nontest_ear = 'right' if ear == 'left' else 'left'
                 env['CFTS_NONTEST_STARSHIP'] = self.find_starship(nontest_ear, False)
             except ValueError:
                 pass
@@ -253,7 +321,7 @@ class Settings(Atom):
             env['CFTS_RIGHT_STARSHIP'] = self.find_starship('right', False)
 
         mode_note = experiment.mode_notes.get(mode, '')
-        filename = f'{{date_time}} {self.experimenter} {self.animal} {self.ear} {self.note} {self.standard_note} {mode_note} {experiment.paradigm}'
+        filename = f'{{date_time}} {self.experimenter} {self.animal} {ear} {self.note} {self.standard_note} {mode_note} {experiment.paradigm.name}'
         filename = ' '.join(filename.split())
         args = ['psi', experiment.paradigm.name]
         if save:
@@ -292,28 +360,43 @@ class Settings(Atom):
                 log.warning('No in-ear plugin available for %s',
                             experiment.paradigm.name)
 
-
         return args, env
 
-    def run_experiment(self, experiment, mode, save=True):
-        args, env = self.build_experiment(experiment, mode, save)
+    def run_experiment(self, experiment, mode, save=True, autostart=True):
+        args, env = self.build_experiment(experiment, mode, self.ear, save)
         print(env)
         print(' '.join(args))
-
-        #start_time = time.time()
-        #self.duration = int(round(time.time() - start_time))
-        self.active_subprocess = subprocess.Popen(args, env=dict(os.environ, **env))
+        self.subprocesses = [{
+            'args': args,
+            'env': env,
+            'process': subprocess.Popen(args, env=dict(os.environ, **env))
+        }]
+        self.current_subprocess_i = 0
         self.experiment_running = True
+        if autostart:
+            self.autostart_client_id = self.subprocesses[0]['process'].pid
         timed_call(1000, self.check_experiment_status)
 
+    def run_sequence(self, sequence_name):
+        self.subprocesses = []
+        for experiment in self.queues[sequence_name]:
+            ear = self.ear if experiment.ear == 'selected' else experiment.ear
+            args, env = self.build_experiment(experiment, experiment.mode, ear, True)
+            self.subprocesses.append({
+                'args': args,
+                'env': env,
+                'process': subprocess.Popen(args, env=dict(os.environ, **env)),
+            })
+        self.current_subprocess_i = 0
+        self.autostart_client_id = self.subprocesses[0]['process'].pid
+        self.experiment_running = True
+
     def check_experiment_status(self):
-        if self.experiment_running and self.active_subprocess.poll() is not None:
+        if self.experiment_running and \
+                self.subprocesses[self.current_subprocess_i]['process'].poll() is not None:
             self.experiment_running = False
         else:
             timed_call(1000, self.check_experiment_status)
-
-    def experiment_complete(self):
-        self.experiment_running = False
 
     def save_config(self, filename):
         info = {
@@ -333,9 +416,11 @@ class Settings(Atom):
                 'freq_ub': self.input_amp_config['freq_ub'],
             },
             'standard_notes': self.standard_notes,
+            'current_queue_name': self.current_queue_name,
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
+        info['queues'] = {n: [e.__getstate__() for e in s] for n, s in self.queues.items()}
         info['starship_config'] = {}
         for k, v in self.starship_config.items():
             info['starship_config'][k] = {
@@ -352,57 +437,104 @@ class Settings(Atom):
         info = json.loads(filename.read_text())
         info.pop('experimenter', None)
 
-        # Remove obsolete label argument from saved paradigms
-        sequences = [info['experiment_sequence'], info['monitor_sequence']]
-        for seq in sequences:
-            for exp in seq:
-                exp.pop('label', None)
+        def load_seq(seq, mode='classic'):
+            experiments = []
+            for s in seq:
+                # Remove obsolete label argument from saved paradigms and
+                # legacy modes since we changed how this is handled (it was
+                # always a hack to put in the file).
+                s.pop('label', None)
+                s.pop('modes', None)
+                s['mode_notes'] = {k.lower(): v for k, v in s['mode_notes'].items()}
+                if mode == 'classic':
+                    exp = Experiment(**s)
+                else:
+                    exp = FrozenExperiment(**s)
+                experiments.append(exp)
+            return experiments
 
-        info['experiment_sequence'] = [Experiment(**s) for s in info['experiment_sequence']]
-        info['monitor_sequence'] = [Experiment(**s) for s in info['monitor_sequence']]
-        for k, v in info.items():
-            setattr(self, k, v)
+        # Load and resurrect the experiment sequences 
+        self.experiment_sequence = load_seq(info.pop('experiment_sequence', []))
+        self.monitor_sequence = load_seq(info.pop('monitor_sequence', []))
+        self.queues = {n: load_seq(s, 'queue') for n, s in info.pop('queues', {}).items()}
 
         # Update the starship config list to reflect current starship connections
+        starship_config = info.pop('starship_config', {})
         starships = list_starship_connections()
         for starship in starships:
-            if starship not in self.starship_config:
-                self.starship_config[starship] = {
+            if starship not in starship_config:
+                starship_config[starship] = {
                     'ear': 'not used',
                     'calibration': None,
                     'gain': 40,
                 }
-        for starship in list(self.starship_config.keys()):
+        # Make sure all configs are present
+        for starship in list(starship_config.keys()):
             if starship not in starships:
-                self.starship_config.pop(starship)
+                starship_config.pop(starship)
             else:
-                s = self.starship_config[starship]
+                s = starship_config[starship]
                 s.setdefault('gain', 40)
                 s.setdefault('calibration', None)
                 s.setdefault('ear', 'not used')
                 if s['calibration'] is not None:
                     s['calibration'] = starship_manager.get_object(s['calibration'])
+        self.starship_config = starship_config
 
         # Add microphone in if it was not in a previously-saved config.
-        if 'microphone' not in self.cal_mic_config:
-            self.cal_mic_config['microphone'] = None
-        if 'gain' not in self.cal_mic_config:
-            self.cal_mic_config['gain'] = 20
-        if 'starship' not in self.cal_mic_config:
-            self.cal_mic_config['starship'] = next(iter(starships))
+        cal_mic_config = info.pop('cal_mic_config', {})
+        if 'microphone' not in cal_mic_config:
+            cal_mic_config['microphone'] = None
+        if 'gain' not in cal_mic_config:
+            cal_mic_config['gain'] = 20
+        if 'starship' not in cal_mic_config:
+            cal_mic_config['starship'] = next(iter(starships))
+        if cal_mic_config['microphone'] is not None:
+            cal_mic_config['microphone'] = \
+                microphone_manager.get_object(cal_mic_config['microphone'])
+        self.cal_mic_config = cal_mic_config
 
-        if self.cal_mic_config['microphone'] is not None:
-            self.cal_mic_config['microphone'] = \
-                microphone_manager.get_object(self.cal_mic_config['microphone'])
+        input_amp_config = info.pop('input_amp_config', {})
+        if 'input_name' not in input_amp_config:
+            input_amp_config['input_name'] = None
+        if 'gain' not in input_amp_config:
+            input_amp_config['gain'] = 50e3
+        if 'freq_lb' not in input_amp_config:
+            input_amp_config['freq_lb'] = 10
+        if 'freq_ub' not in input_amp_config:
+            input_amp_config['freq_ub'] = 10e3
+        self.input_amp_config = input_amp_config
 
-        if 'input_name' not in self.input_amp_config:
-            self.input_amp_config['input_name'] = None
-        if 'gain' not in self.input_amp_config:
-            self.input_amp_config['gain'] = 50e3
-        if 'freq_lb' not in self.input_amp_config:
-            self.input_amp_config['freq_lb'] = 10
-        if 'freq_ub' not in self.input_amp_config:
-            self.input_amp_config['freq_ub'] = 10e3
+        # Setting all remaining items
+        for k, v in info.items():
+            try:
+                setattr(self, k, v)
+            except AttributeError:
+                log.error('Unable to set attribute %s with value %r', k, v)
+                raise
+
+
+enamldef AddParadigmPopup(PopupView): popup:
+
+    attr experiment_box
+    attr mode = 'classic'
+    arrow_size = 20
+
+    Container:
+        constraints = [vbox(combo, hbox(spacer(0), pb_add))]
+        ObjectCombo: combo:
+            items = paradigm_manager.list_paradigms('ear')
+            to_string = lambda x: x.title
+        PushButton: pb_add:
+            text = 'OK'
+            clicked ::
+                exp = Experiment(paradigm=combo.selected)
+                if queue:
+                    exp = exp.freeze(exp.modes[0], 'selected')
+                seq = experiment_box.sequence[:]
+                seq.append(exp)
+                experiment_box.sequence = seq
+                popup.close()
 
 
 enamldef PluginPopup(PopupView): popup:
@@ -443,6 +575,7 @@ enamldef ExperimentSequence(Container): experiment_box:
     attr sequence
     attr edit_mode = False
     attr settings
+    attr autostart = False
 
     layout_constraints => ():
         # Align the subwidgets vertically
@@ -468,39 +601,71 @@ enamldef ExperimentSequence(Container): experiment_box:
                 ]
             padding = 0
 
+            PushButton:
+                name = 'remove_paradigm'
+                visible << edit_mode
+                constraints = [width == 30]
+                text = '-'
+                clicked ::
+                    seq = experiment_box.sequence[:]
+                    seq.remove(loop_item)
+                    experiment_box.sequence = seq
+
             Label:
                 text = loop_item.paradigm.title
 
-            HGroup:
-                padding = 0
-                spacing = 0
-                enabled << (experiment_box.start_enabled or edit_mode) and \
-                    not settings.experiment_running
+            Conditional:
+                condition = experiment_box.mode == 'classic'
 
-                Looper: mode_loop:
-                    attr experiment = loop_item
-                    iterable << loop_item.paradigm.info['modes']
+                HGroup:
+                    padding = 0
+                    spacing = 0
+                    enabled << (experiment_box.start_enabled or edit_mode) and \
+                        not settings.experiment_running
 
-                    PushButton:
-                        text = loop_item.capitalize()
-                        clicked ::
-                            # If we are runing in edit mode, we want to
-                            # just add this to the current queue.
-                            # Otherwise, we actually launch the experiment.
-                            try:
-                                settings.run_experiment(mode_loop.experiment, loop_item,
-                                                        save=experiment_box.save)
-                            except Exception as e:
-                                log.exception(e)
-                                critical(experiment_box, 'Error starting experiment', str(e))
-                            # Update the preferences in case new ones were created
-                            preferences.items = [str(p) for p in \
-                                                 mode_loop.experiment.paradigm.list_preferences()]
+                    Looper: mode_loop:
+                        attr experiment = loop_item
+                        iterable << loop_item.paradigm.info['modes']
 
-            #Conditional:
-            #    condition = experiment_box.mode == 'queue'
-            #    Label:
-            #        text = f'{loop_item.mode} {loop_item.ear} ear'
+                        PushButton:
+                            text = loop_item.capitalize()
+                            clicked ::
+                                # If we are runing in edit mode, we want to
+                                # just add this to the current queue.
+                                # Otherwise, we actually launch the experiment.
+                                try:
+                                    settings.run_experiment(mode_loop.experiment,
+                                                            loop_item,
+                                                            save=save,
+                                                            autostart=autostart)
+                                except Exception as e:
+                                    log.exception(e)
+                                    critical(experiment_box, 'Error starting experiment', str(e))
+                                # Update the preferences in case new ones were created
+                                preferences.items = [str(p) for p in \
+                                                    mode_loop.experiment.paradigm.list_preferences()]
+
+            Conditional:
+                condition << (mode == 'queue' and edit_mode)
+
+                ObjectCombo:
+                    items = loop_item.paradigm.info['modes']
+                    selected := loop_item.mode
+                    editable << edit_mode
+
+                ObjectCombo:
+                    items = ['selected', 'left', 'right']
+                    selected := loop_item.ear
+                    editable << edit_mode
+
+                Label:
+                    text = f'ear'
+
+            Conditional:
+                condition << (mode == 'queue' and not edit_mode)
+
+                Label:
+                    text = f'{loop_item.mode} {loop_item.ear} ear'
 
             ObjectCombo: preferences:
                 items = [str(p) for p in loop_item.paradigm.list_preferences()]
@@ -520,16 +685,6 @@ enamldef ExperimentSequence(Container): experiment_box:
                                         modes=loop_item.paradigm.info['modes'])
                     popup.show()
 
-            PushButton:
-                name = 'edit_config'
-                visible << edit_mode
-                constraints = [width == 30]
-                text = '-'
-                clicked ::
-                    seq = experiment_box.sequence[:]
-                    seq.remove(loop_item)
-                    experiment_box.sequence = seq
-
     Container:
         padding = 0
         layout_constraints => ():
@@ -537,32 +692,43 @@ enamldef ExperimentSequence(Container): experiment_box:
                 hbox(*self.visible_widgets()),
                 align('v_center', *self.visible_widgets()),
             ]
-        Label:
-            pass
-        Label:
-            pass
-        Label:
-            pass
-        Label:
-            pass
         PushButton: pb_add_seq:
             visible << edit_mode
             constraints = [width == 30]
             text = '+'
             clicked ::
-                print(paradigm_manager.list_paradigms('ear'))
+                paradigms = paradigm_manager.list_paradigms('ear')
+                popup = AddParadigmPopup(parent=self,
+                                         experiment_box=experiment_box,
+                                         mode=experiment_box.mode)
+                popup.show()
+
+        # A bit of a hack but enables us to ensure all columns lined up properly
+        Label:
+            pass
+        Label:
+            pass
+        Label:
+            pass
+        Label:
+            pass
+        Label:
+            pass
 
 
-
-enamldef AddRemoveCombo(Container):
+enamldef AddRemoveCombo(Container): container:
 
     alias items: combo.items
     alias selected: combo.selected
+    alias remove_clicked: pb_remove.clicked
+
     attr regex = '.*'
+    attr editable = True
+    attr removed
 
     padding = 0
 
-    constraints = [hbox(combo, hbox(pb_add, pb_remove, spacing=0))]
+    constraints << [hbox(combo, hbox(pb_add, pb_remove, spacing=0))] if editable else [hbox(combo)]
 
     ObjectCombo: combo:
         pass
@@ -570,6 +736,7 @@ enamldef AddRemoveCombo(Container):
     PushButton: pb_add:
         text = '+'
         constraints = [width == 30]
+        visible << editable
         clicked ::
             popup = AddItem(parent=self, combo=combo, regex=regex)
             popup.show()
@@ -577,6 +744,7 @@ enamldef AddRemoveCombo(Container):
     PushButton: pb_remove:
         text = '-'
         constraints = [width == 30]
+        visible << editable
         enabled << bool(combo.items)
         clicked ::
             items = combo.items[:]
@@ -882,23 +1050,30 @@ enamldef Main(MainWindow): main:
                 title = 'Checks (not saved)'
                 closable = False
                 Container:
-                    padding = 0
+                    CheckBox: check_autostart:
+                        text = 'Autostart?'
+                        checked = True
                     ExperimentSequence:
-                        sequence << main.settings.monitor_sequence
+                        padding = 0
+                        sequence := main.settings.monitor_sequence
                         save = False
                         edit_mode << main.edit_mode
                         settings << main.settings
+                        autostart << check_autostart.checked
             Page:
                 title = 'Experiments'
                 closable = False
                 Container:
-                    padding = 0
+                    CheckBox: exp_autostart:
+                        text = 'Autostart?'
+                        checked = True
                     ExperimentSequence: experiment_box:
-                        share_layout = True
+                        padding = 0
                         start_enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
-                        sequence << main.settings.experiment_sequence
+                        sequence := main.settings.experiment_sequence
                         edit_mode << main.edit_mode
                         settings << main.settings
+                        autostart << exp_autostart.checked
             Page:
                 title = 'Queues'
                 closable = False
@@ -910,11 +1085,24 @@ enamldef Main(MainWindow): main:
                             text = 'Name'
                         AddRemoveCombo:
                             items << list(settings.queues.keys())
-                    ExperimentSequence:
-                        mode = 'queue'
-                        sequence << main.settings.current_queue
-                        edit_mode << main.edit_mode
-                        settings << main.settings
+                            selected := settings.current_queue_name
+                            remove_clicked ::
+                                del settings.queues[settings.current_queue_name]
+                                settings.current_queue_name = ''
+                            editable << main.edit_mode
+                        PushButton:
+                            enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
+                            text = 'Run'
+                            clicked ::
+                                main.settings.run_sequence(settings.current_queue_name)
+
+                    Conditional:
+                        condition << bool(main.settings.current_queue_name)
+                        ExperimentSequence:
+                            mode = 'queue'
+                            sequence := main.settings.current_queue
+                            edit_mode << main.edit_mode
+                            settings << main.settings
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
@@ -922,4 +1110,4 @@ enamldef Main(MainWindow): main:
             share_layout = True
 
             Label:
-                text << f'Last run took {settings.duration//60} min and {settings.duration % 60} sec'
+                text << f'Last run took {int(settings.duration//60)} min and {int(settings.duration % 60)} sec'
