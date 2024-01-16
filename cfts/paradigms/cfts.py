@@ -156,7 +156,7 @@ turntable_linear_velocity_view_mixin_required['required'] = True
 ################################################################################
 ParadigmDescription(
     # This is for monitoring the incoming EEG trace
-    'monitor', 'Monitor', 'ear', [
+    'monitor', 'EEG Monitor', 'ear', [
         temperature_mixin,
         eeg_dec_mixin,
         eeg_view_mixin_required,
@@ -187,7 +187,7 @@ ParadigmDescription(
 
 ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
-    'abr_io', 'ABR (input-output)', 'ear', [
+    'abr_io', 'ABR', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOSimpleManifest'},
@@ -205,7 +205,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'dpoae_io', 'DPOAE (input-output)', 'ear', [
+    'dpoae_io', 'DPOAE', 'ear', [
         dual_starship_mixin,
         {'manifest': CFTS_PATH + 'dpoae_base.SingleDPOAEManifest'},
         {'manifest': CFTS_PATH + 'dpoae_io.DPOAEIOSimpleManifest', 'required': True},
@@ -224,7 +224,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'dpgram', 'DP-Gram', 'ear', [
+    'dpgram', 'DPgram', 'ear', [
         dual_starship_mixin,
         {'manifest': CFTS_PATH + 'dpoae_base.SingleDPOAEManifest'},
         {'manifest': CFTS_PATH + 'dpgram.DPGramSimpleManifest', 'required': True},
@@ -319,7 +319,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'inear_speaker_calibration_chirp', 'In-ear speaker calibration (chirp)', 'ear', [
+    'inear_speaker_calibration_chirp', 'IEC (chirp)', 'ear', [
         selectable_starship_mixin,
         {
             'manifest': CAL_PATH + 'speaker_calibration.BaseSpeakerCalibrationManifest',
@@ -446,7 +446,7 @@ probe_starship_mixin = {
 
 
 ParadigmDescription(
-    'memr_interleaved_click', 'MEMR (interleaved click)', 'ear', [
+    'memr_interleaved_click', 'MEMR (Keefe, click)', 'ear', [
         elicitor_starship_mixin,
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.InterleavedClickMEMRManifest'},
@@ -467,7 +467,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'memr_interleaved_chirp', 'MEMR (interleaved chirp)', 'ear', [
+    'memr_interleaved_chirp', 'MEMR (Keefe, chirp)', 'ear', [
         elicitor_starship_mixin,
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpMEMRManifest'},
@@ -488,7 +488,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'memr_simultaneous_click', 'MEMR (simultaneous click)', 'ear', [
+    'memr_simultaneous_click', 'MEMR (Valero, click)', 'ear', [
         elicitor_starship_mixin,
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'click'}},
@@ -508,7 +508,7 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'memr_simultaneous_chirp', 'MEMR (simultaneous chirp)', 'ear', [
+    'memr_simultaneous_chirp', 'MEMR (Valero, chirp)', 'ear', [
         elicitor_starship_mixin,
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
