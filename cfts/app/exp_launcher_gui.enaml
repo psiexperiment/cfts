@@ -41,7 +41,6 @@ CFTS_ROOT = get_config('CFTS_ROOT')
 
 class Experiment(Atom):
 
-    label = Str()
     paradigm = Value()
     preference = Str()
 
@@ -99,7 +98,6 @@ class Experiment(Atom):
 
     def freeze(self, mode, ear='either'):
         return FrozenExperiment(
-            label=self.label,
             paradigm=self.paradigm,
             preference=self.preference,
             plugins=self.plugins,
@@ -353,6 +351,13 @@ class Settings(Atom):
         filename = Path(filename)
         info = json.loads(filename.read_text())
         info.pop('experimenter', None)
+
+        # Remove obsolete label argument from saved paradigms
+        sequences = [info['experiment_sequence'], info['monitor_sequence']]
+        for seq in sequences:
+            for exp in seq:
+                exp.pop('label', None)
+
         info['experiment_sequence'] = [Experiment(**s) for s in info['experiment_sequence']]
         info['monitor_sequence'] = [Experiment(**s) for s in info['monitor_sequence']]
         for k, v in info.items():
@@ -464,7 +469,7 @@ enamldef ExperimentSequence(Container): experiment_box:
             padding = 0
 
             Label:
-                text = loop_item.label
+                text = loop_item.paradigm.title
 
             HGroup:
                 padding = 0
@@ -516,6 +521,7 @@ enamldef ExperimentSequence(Container): experiment_box:
                     popup.show()
 
             PushButton:
+                name = 'edit_config'
                 visible << edit_mode
                 constraints = [width == 30]
                 text = '-'
