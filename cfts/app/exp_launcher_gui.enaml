@@ -33,9 +33,7 @@ from cftscal.api import (
 from cfts.paradigms import cfts
 from cftscal.plugins.widgets import AddItem
 
-
 DATA_ROOT = get_config('DATA_ROOT')
-PROC_ROOT = get_config('PROCESSED_ROOT')
 CFTS_ROOT = get_config('CFTS_ROOT')
 
 
@@ -761,7 +759,7 @@ enamldef ExperimentInfo(GroupBox):
             hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
             hbox(note_label, note_field),
             hbox(standard_note_label, standard_note),
-            hbox(spacer(0), pb_raw, pb_proc),
+            hbox(spacer(0), pb_raw),
         ),
         align('right', experimenter_label, animal_label, note_label, standard_note_label),
         align('left', experimenter_label, animal_label, note_label, standard_note_label),
@@ -769,11 +767,9 @@ enamldef ExperimentInfo(GroupBox):
         align('v_center', animal_label, animal_field, l_button, r_button),
         align('v_center', note_label, note_field),
         align('v_center', standard_note_label, standard_note),
-        align('v_center', pb_raw, pb_proc),
         l_button.width == 30,
         r_button.width == 30,
         pb_raw.width == 90,
-        pb_proc.width == 90,
     ]
 
     ButtonGroup: ear_group:
@@ -825,11 +821,6 @@ enamldef ExperimentInfo(GroupBox):
         text = '📂 Raw'
         clicked ::
             os.startfile(DATA_ROOT)
-
-    PushButton: pb_proc:
-        text = '📂 Processed'
-        clicked ::
-            os.startfile(PROC_ROOT)
 
 
 enamldef Main(MainWindow): main:
