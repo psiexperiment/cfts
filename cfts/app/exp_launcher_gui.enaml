@@ -1043,7 +1043,7 @@ enamldef Main(MainWindow): main:
                 Container:
                     CheckBox: check_autostart:
                         text = 'Autostart?'
-                        checked = True
+                        checked = False
                     ExperimentSequence:
                         padding = 0
                         sequence := main.settings.monitor_sequence
@@ -1057,7 +1057,7 @@ enamldef Main(MainWindow): main:
                 Container:
                     CheckBox: exp_autostart:
                         text = 'Autostart?'
-                        checked = True
+                        checked = False
                     ExperimentSequence: experiment_box:
                         padding = 0
                         start_enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
