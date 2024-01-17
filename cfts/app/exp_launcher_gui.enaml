@@ -649,12 +649,10 @@ enamldef ExperimentSequence(Container): experiment_box:
                 ObjectCombo:
                     items = loop_item.paradigm.info['modes']
                     selected := loop_item.mode
-                    editable << edit_mode
 
                 ObjectCombo:
                     items = ['selected', 'left', 'right']
                     selected := loop_item.ear
-                    editable << edit_mode
 
                 Label:
                     text = f'ear'
