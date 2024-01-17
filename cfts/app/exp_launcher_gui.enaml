@@ -851,7 +851,8 @@ enamldef Main(MainWindow): main:
                         current_path=str(path),
                         name_filters=['Experiment Settings (*.json)'],
                     )
-                    settings.load_config(filename)
+                    if filename:
+                        settings.load_config(filename)
             Action:
                 text = 'Save config\tCtrl+O'
                 triggered ::
@@ -861,7 +862,8 @@ enamldef Main(MainWindow): main:
                         current_path=str(path),
                         name_filters=['Experiment Settings (*.json)'],
                     )
-                    settings.save_config(filename)
+                    if filename:
+                        settings.save_config(filename)
             Action:
                 separator = True
             Action:
