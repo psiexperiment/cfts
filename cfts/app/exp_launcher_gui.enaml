@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import threading
 import time
 
 from atom.api import (
@@ -32,6 +33,7 @@ from cftscal.api import (
 )
 from cfts.paradigms import cfts
 from cftscal.plugins.widgets import AddItem
+
 
 DATA_ROOT = get_config('DATA_ROOT')
 CFTS_ROOT = get_config('CFTS_ROOT')
@@ -123,7 +125,6 @@ class Experiment(Atom):
             paradigm=self.paradigm,
             preference=self.preference,
             plugins=self.plugins,
-            modes=self.modes,
             mode_notes=self.mode_notes,
             mode=mode,
             ear=ear,
@@ -138,6 +139,119 @@ class FrozenExperiment(Experiment):
 
     #: If either, then ear will be drawn from what is selected.
     ear = Enum('selected', 'left', 'right')
+
+
+def synchronized(fn):
+    def wrapped(self, *args, **kw):
+        with self.lock:
+            return fn(self, *args, **kw)
+    return wrapped
+
+
+class ProcessManager(Atom):
+
+    #: Dictionary of active subprocesses
+    subprocesses = Dict()
+
+    #: Order in which subprocesses should be executed.
+    subprocess_order = List()
+
+    #: Should experiments be auto-started?
+    autostart = Bool(False)
+
+    #: Is an experiment currently running?
+    experiment_running = Bool(False)
+
+    #: Used for communicating with experiments invoked by `psi`.
+    ws_server = Typed(WebsocketServerPlugin)
+
+    #: Used to track runtime of individual experiments.
+    exp_start_time = Float()
+
+    #: Duration of last experiment from experiment_start to experiment_end event.
+    duration = Float()
+
+    lock = Value()
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        # Set up a websocket server. Whenever clients (i.e., programs invoked
+        # by `psi`) connect they will be instructed to relay only a handful of
+        # events to keep load on the websocket low.
+        self.ws_server = WebsocketServerPlugin(
+            recv_cb=self.recv_cb,
+            connect_cb=self.connect_cb,
+        )
+        self.ws_server.start_thread()
+        self.lock = threading.Lock()
+        timed_call(1000, self.check_status)
+
+    def connect_cb(self):
+        events = ['plugins_started', 'experiment_start', 'experiment_end',
+                  'window_closed']
+        self.ws_server.send_message({
+            'command': 'websocket.set_event_filter',
+            'parameters': {'event_filter': '|'.join(events)},
+        })
+
+    def start_process(self, client_id):
+        mesg = {'command': 'psi.show_window'}
+        self.ws_server.send_message(mesg, client_id)
+        mesg = {'command': 'psi.controller.start'}
+        self.ws_server.send_message(mesg, client_id)
+
+    @synchronized
+    def recv_cb(self, message):
+        client_id = message['client_id']
+        process = self.subprocesses[client_id]
+        if message['event'] == 'plugins_started':
+            log.info('Process %r connected', client_id)
+            process['connected'] = True
+            # Start the subprocess if it is the first one in the list to run.
+            if self.autostart and self.subprocess_order[0] == client_id:
+                self.start_process(self.subprocess_order.pop(0))
+        elif message['event'] == 'experiment_start':
+            process['running'] = True
+            self.exp_start_time = time.time()
+            self.experiment_running = True
+        elif message['event'] == 'experiment_end':
+            self.duration = round(time.time() - self.exp_start_time)
+            self.experiment_running = False
+            # Now, start the next one if one exists.
+            if self.autostart and len(self.subprocess_order) != 0:
+                self.start_process(self.subprocess_order.pop(0))
+        elif message['event'] == 'window_closed':
+            # Window closed. Remove from the list of subprocesses.
+            self.subprocesses.pop(client_id, None)
+            self.subprocess_order.remove(client_id)
+
+    @synchronized
+    def add_process(self, args, env):
+        self.autostart = False
+        process = subprocess.Popen(args, env=dict(os.environ, **env))
+        self.subprocesses[process.pid] = {
+            'args': args,
+            'env': env,
+            'process': process,
+            'connected': False,
+            'running': False,
+        }
+        self.subprocess_order.append(process.pid)
+
+    @synchronized
+    def start_first_process(self):
+        self.autostart = True
+        client_id = self.subprocess_order[0]
+        if self.subprocesses[client_id]['connected']:
+            self.start_process(self.subprocess_order.pop(0))
+
+    @synchronized
+    def check_status(self):
+        for pid, process in list(self.subprocesses.items()):
+            if process['process'].poll() is not None:
+                del self.subprocesses[pid]
+                self.subprocess_order.remove(pid)
+        timed_call(1000, self.check_status)
 
 
 class Settings(Atom):
@@ -170,17 +284,9 @@ class Settings(Atom):
     #: starship per ear).
     audio_mode = Property()
 
-    #: Currently active subprocess
-    active_subprocess = Value()
-
-    #: List of subprocesses waiting their turn
-    subprocesses = List()
-
-    #: Currently active subprocess
-    current_subprocess_i = Int()
-
-    #: Is an experiment currently running?
-    experiment_running = Bool(False)
+    #: Create a process manager that will handle communication with experiment
+    #: subprocesses.
+    process_manager = Typed(ProcessManager, ())
 
     def _observe_current_queue_name(self, event):
         # This is needed to sync up changes where we select the queue from the
@@ -210,57 +316,6 @@ class Settings(Atom):
     run_inear_calibration = Bool(True)
     input_amp_config = Dict()
 
-    #: Used to track runtime of individual experiments.
-    exp_start_time = Float()
-
-    #: Duration of last experiment from experiment_start to experiment_end event.
-    duration = Float()
-
-    #: Used for communicating with experiments invoked by `psi`.
-    ws_server = Typed(WebsocketServerPlugin)
-
-    autostart_client_id = Value()
-
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
-        # Set up a websocket server. Whenever clients (i.e., programs invoked
-        # by `psi`) connect they will be instructed to relay only a handful of
-        # events to keep load on the websocket low.
-        self.ws_server = WebsocketServerPlugin(
-            recv_cb=self.recv_msg,
-            connect_cb=self.set_event_filter,
-        )
-        self.ws_server.start_thread()
-
-    def start_process(self):
-        process = self.subprocesses[self.current_subprocess_i]['process']
-        self.ws_server.send_message({'command': 'psi.controller.start'}, process.pid)
-
-    def set_event_filter(self):
-        self.ws_server.send_message({
-            'command': 'websocket.set_event_filter',
-            'parameters': {'event_filter': 'plugins_started|experiment_start|experiment_end|window_closed'},
-        })
-
-    def recv_msg(self, message):
-        if message['event'] == 'plugins_started':
-            if message['client_id'] == self.autostart_client_id:
-                self.start_process()
-        elif message['event'] == 'experiment_start':
-            self.exp_start_time = time.time()
-        elif message['event'] == 'experiment_end':
-            self.experiment_complete()
-            self.duration = round(time.time() - self.exp_start_time)
-        elif message['event'] == 'window_closed':
-            self.experiment_complete()
-
-    def experiment_complete(self):
-        self.current_subprocess_i += 1
-        if self.current_subprocess_i >= len(self.subprocesses):
-            self.experiment_running = False
-        else:
-            self.start_process()
-
     def _default_standard_notes(self):
         return ['']
 
@@ -287,9 +342,27 @@ class Settings(Atom):
             raise ValueError('Starships incorrectly configured')
         return next(iter(starship_to_use))
 
-    def build_experiment(self, experiment, mode, ear, save=True):
+    def build_experiment(self, experiment, mode, ear, save=True,
+                         open_minimized=False):
         '''
         Build the experiment arguments and environment for launching in subprocess
+
+        Parameters
+        ----------
+        experiment : instance of `Experiment`
+            Experiment to run.
+        mode : str
+            Mode experiment will be run in. This mainly affects the calibration
+            configuration to ensure the appropriate calibrations are loaded
+            into environment variables to be passed to the subprocess.
+        ear : str
+            Ear being tested. This mainly affects the calibration configuration
+            as well as the filename.
+        save : bool
+            If True, generates a filename to save the data to.
+        open_minimized : bool
+            If True, sends a command indicating the application should open the
+            window minimized to the task tray.
         '''
         amp_input_name = self.input_amp_config['input_name']
         env = {
@@ -357,44 +430,29 @@ class Settings(Atom):
             else:
                 log.warning('No in-ear plugin available for %s',
                             experiment.paradigm.name)
+        if open_minimized:
+            args.extend(['-c', 'psi.minimize_window'])
 
         return args, env
 
-    def run_experiment(self, experiment, mode, save=True, autostart=True):
-        args, env = self.build_experiment(experiment, mode, self.ear, save)
-        print(env)
-        print(' '.join(args))
-        self.subprocesses = [{
-            'args': args,
-            'env': env,
-            'process': subprocess.Popen(args, env=dict(os.environ, **env))
-        }]
-        self.current_subprocess_i = 0
-        self.experiment_running = True
+    def run_experiment(self, experiment, mode, save=True, autostart=False):
+        frozen_experiment = experiment.freeze(mode, self.ear)
+        self.prepare_sequence([frozen_experiment], save=save)
         if autostart:
-            self.autostart_client_id = self.subprocesses[0]['process'].pid
-        timed_call(1000, self.check_experiment_status)
+            self.process_manager.start_first_process()
 
-    def run_sequence(self, sequence_name):
-        self.subprocesses = []
-        for experiment in self.queues[sequence_name]:
+    def prepare_sequence(self, sequence, save=True):
+        for i, experiment in enumerate(sequence):
             ear = self.ear if experiment.ear == 'selected' else experiment.ear
-            args, env = self.build_experiment(experiment, experiment.mode, ear, True)
-            self.subprocesses.append({
-                'args': args,
-                'env': env,
-                'process': subprocess.Popen(args, env=dict(os.environ, **env)),
-            })
-        self.current_subprocess_i = 0
-        self.autostart_client_id = self.subprocesses[0]['process'].pid
-        self.experiment_running = True
-
-    def check_experiment_status(self):
-        if self.experiment_running and \
-                self.subprocesses[self.current_subprocess_i]['process'].poll() is not None:
-            self.experiment_running = False
-        else:
-            timed_call(1000, self.check_experiment_status)
+            open_minimized = i != 0
+            if open_minimized:
+                log.info('Starting next process with window minimized')
+            args, env = self.build_experiment(experiment,
+                                              experiment.mode,
+                                              ear,
+                                              save=save,
+                                              open_minimized=open_minimized)
+            self.process_manager.add_process(args, env)
 
     def save_config(self, filename):
         info = {
@@ -527,8 +585,8 @@ enamldef AddParadigmPopup(PopupView): popup:
             text = 'OK'
             clicked ::
                 exp = Experiment(paradigm=combo.selected)
-                if queue:
-                    exp = exp.freeze(exp.modes[0], 'selected')
+                if mode == 'queue':
+                    exp = exp.freeze(exp.paradigm.info['modes'][0], 'selected')
                 seq = experiment_box.sequence[:]
                 seq.append(exp)
                 experiment_box.sequence = seq
@@ -619,7 +677,7 @@ enamldef ExperimentSequence(Container): experiment_box:
                     padding = 0
                     spacing = 0
                     enabled << (experiment_box.start_enabled or edit_mode) and \
-                        not settings.experiment_running
+                        not settings.process_manager.experiment_running
 
                     Looper: mode_loop:
                         attr experiment = loop_item
@@ -628,9 +686,6 @@ enamldef ExperimentSequence(Container): experiment_box:
                         PushButton:
                             text = loop_item.capitalize()
                             clicked ::
-                                # If we are runing in edit mode, we want to
-                                # just add this to the current queue.
-                                # Otherwise, we actually launch the experiment.
                                 try:
                                     settings.run_experiment(mode_loop.experiment,
                                                             loop_item,
@@ -1083,9 +1138,15 @@ enamldef Main(MainWindow): main:
                             editable << main.edit_mode
                         PushButton:
                             enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
-                            text = 'Run'
+                            text = 'Open'
                             clicked ::
-                                main.settings.run_sequence(settings.current_queue_name)
+                                sequence = settings.current_queue[:]
+                                main.settings.prepare_sequence(sequence)
+                        PushButton:
+                            text = 'Run'
+                            enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
+                            clicked ::
+                                main.settings.process_manager.start_first_process()
 
                     Conditional:
                         condition << bool(main.settings.current_queue_name)
@@ -1101,4 +1162,4 @@ enamldef Main(MainWindow): main:
             share_layout = True
 
             Label:
-                text << f'Last run took {int(settings.duration//60)} min and {int(settings.duration % 60)} sec'
+                text << f'Last run took {int(settings.process_manager.duration//60)} min and {int(settings.process_manager.duration % 60)} sec'
