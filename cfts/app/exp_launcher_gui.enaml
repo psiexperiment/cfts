@@ -103,7 +103,8 @@ class Experiment(Atom):
 
     def freeze(self, mode, ear='selected'):
         '''
-        Return experiment in which mode and ear are fixed.
+        Return experiment in which mode and ear are fixed. Used in running
+        sequences.
 
         Parameters
         ----------
@@ -153,6 +154,11 @@ class ProcessManager(Atom):
     #: Dictionary of active subprocesses
     subprocesses = Dict()
 
+    #: Number of active subprocesses (this is mainly facilitate GUI
+    #: interaction since Atom notifications cannot detect when an in-place
+    #: update has been made to a dictionary.
+    n_subprocesses = Int(0)
+
     #: Order in which subprocesses should be executed.
     subprocess_order = List()
 
@@ -195,8 +201,10 @@ class ProcessManager(Atom):
         })
 
     def start_process(self, client_id):
+        # Make sure the window is visible first.
         mesg = {'command': 'psi.show_window'}
         self.ws_server.send_message(mesg, client_id)
+        # Now, start running.
         mesg = {'command': 'psi.controller.start'}
         self.ws_server.send_message(mesg, client_id)
 
@@ -217,13 +225,20 @@ class ProcessManager(Atom):
         elif message['event'] == 'experiment_end':
             self.duration = round(time.time() - self.exp_start_time)
             self.experiment_running = False
+            if message['info'].get('stop_reason') != '':
+                self.autostart = False
+            # Remove from the subprocess order queue
+            if client_id in self.subprocess_order:
+                self.subprocess_order.remove(client_id)
             # Now, start the next one if one exists.
             if self.autostart and len(self.subprocess_order) != 0:
                 self.start_process(self.subprocess_order.pop(0))
         elif message['event'] == 'window_closed':
             # Window closed. Remove from the list of subprocesses.
             self.subprocesses.pop(client_id, None)
-            self.subprocess_order.remove(client_id)
+            if client_id in self.subprocess_order:
+                self.subprocess_order.remove(client_id)
+            self.n_subprocesses = len(self.subprocesses)
 
     @synchronized
     def add_process(self, args, env):
@@ -237,20 +252,29 @@ class ProcessManager(Atom):
             'running': False,
         }
         self.subprocess_order.append(process.pid)
+        self.n_subprocesses = len(self.subprocesses)
 
     @synchronized
-    def start_first_process(self):
+    def start_sequence(self):
         self.autostart = True
         client_id = self.subprocess_order[0]
         if self.subprocesses[client_id]['connected']:
             self.start_process(self.subprocess_order.pop(0))
 
     @synchronized
+    def pause_sequence(self):
+        # TODO: What to do if we need to re-queue an experiment?
+        self.autostart = False
+
+    @synchronized
     def check_status(self):
+        #log.info('Checking status for %r', list(self.subprocesses.keys()))
         for pid, process in list(self.subprocesses.items()):
             if process['process'].poll() is not None:
                 del self.subprocesses[pid]
-                self.subprocess_order.remove(pid)
+                if pid in self.subprocess_order:
+                    self.subprocess_order.remove(pid)
+                self.n_subprocesses = len(self.subprocesses)
         timed_call(1000, self.check_status)
 
 
@@ -439,7 +463,7 @@ class Settings(Atom):
         frozen_experiment = experiment.freeze(mode, self.ear)
         self.prepare_sequence([frozen_experiment], save=save)
         if autostart:
-            self.process_manager.start_first_process()
+            self.process_manager.start_sequence()
 
     def prepare_sequence(self, sequence, save=True):
         for i, experiment in enumerate(sequence):
@@ -953,6 +977,7 @@ enamldef Main(MainWindow): main:
             vbox(
                 starship_info,
                 experiment_info,
+                play_buttons,
                 experiment_nb,
                 experiment_stats,
             ),
@@ -1090,6 +1115,23 @@ enamldef Main(MainWindow): main:
         ExperimentInfo: experiment_info:
             pass
 
+        HGroup: play_buttons:
+            leading_spacer = spacer(0)
+            padding = 0
+            spacing = 0
+            PushButton:
+                text = 'Start'
+                enabled << main.settings.process_manager.n_subprocesses != 0 and \
+                    not main.settings.process_manager.experiment_running
+                clicked ::
+                    main.settings.process_manager.start_sequence()
+            PushButton:
+                text = 'Stop'
+                enabled << main.settings.process_manager.n_subprocesses != 0 and \
+                    main.settings.process_manager.experiment_running
+                clicked ::
+                    main.settings.process_manager.pause_sequence()
+
         Notebook: experiment_nb:
             tab_style = 'document'
             Page:
@@ -1142,11 +1184,6 @@ enamldef Main(MainWindow): main:
                             clicked ::
                                 sequence = settings.current_queue[:]
                                 main.settings.prepare_sequence(sequence)
-                        PushButton:
-                            text = 'Run'
-                            enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
-                            clicked ::
-                                main.settings.process_manager.start_first_process()
 
                     Conditional:
                         condition << bool(main.settings.current_queue_name)
