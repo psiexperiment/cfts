@@ -106,7 +106,7 @@ def configure_experiment(event):
     # carrier frequency. This will allow us to scan for potential harmonics or
     # other artifacts in the microphone spectrum that may affect EEG.
     freq_range = context.unique_values(fc_name)
-    mic_fft = data.find_plot_container('signal_fft_view_container')
+    mic_fft = data.find_plot_container('microphone_fft_view_container')
     mic_fft.freq_lb = min(fm_range) / 1.2
     mic_fft.freq_ub = max(freq_range) * 1.2
 
