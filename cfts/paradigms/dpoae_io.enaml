@@ -308,7 +308,7 @@ def configure_dpoaeio_experiment(event):
 
     # Now that we have some of our information regarding the available
     # frequencies and levels, we can go ahead and adjust the FFT plot limits.
-    container = data.find_plot_container('signal_fft_view_container')
+    container = data.find_plot_container('microphone_fft_view_container')
     container.freq_lb = min(freqs) / 1.2
     container.freq_ub = max(freqs) * 1.2
 
@@ -466,7 +466,7 @@ def configure_dual_dpoaeio_experiment(event):
 
     # Now that we have some of our information regarding the available
     # frequencies and levels, we can go ahead and adjust the FFT plot limits.
-    container = data.find_plot_container('signal_fft_view_container')
+    container = data.find_plot_container('microphone_fft_view_container')
     container.freq_lb = min(freqs) / 1.2
     container.freq_ub = max(freqs) * 1.2
 
