@@ -42,6 +42,7 @@ CFTS_ROOT = get_config('CFTS_ROOT')
 class Experiment(Atom):
 
     paradigm = Value()
+
     preference = Str()
 
     #: Plugins selected for load
@@ -50,27 +51,30 @@ class Experiment(Atom):
     #: Supplemental note to append based on the button clicked.
     mode_notes = Dict()
 
+    def iter_selectable_plugins(self):
+        for plugin in self.paradigm.plugins:
+            if plugin.required:
+                continue
+            if plugin.info.get('hide', False):
+                continue
+            yield plugin
+
     def _default_mode_notes(self):
         return {}
 
     def __init__(self, paradigm, plugins=None, preference=None, **kwargs):
+        if isinstance(paradigm, str):
+            paradigm = paradigm_manager.get_paradigm(paradigm)
+        self.paradigm = paradigm
+
         # Make sure the plugins saved to the config file are valid plugins (we
         # sometimes remove or rename plugins). If the plugin is no longer
         # valid, remove it. If the plugin is required, remove it as a plugin
         # that the user can select from in the GUI (since it automatically gets
         # loaded).
-        if plugins is None:
-            plugins = []
-
-        if isinstance(paradigm, str):
-            paradigm = paradigm_manager.get_paradigm(paradigm)
-
-        for plugin in plugins[:]:
-            for valid_plugin in paradigm.plugins:
-                if plugin == valid_plugin.id and not valid_plugin.required:
-                    break
-            else:
-                plugins.remove(plugin)
+        plugins = set() if plugins is None else set(plugins)
+        valid_plugins = set(p.id for p in self.iter_selectable_plugins())
+        plugins = list(plugins & valid_plugins)
 
         # We only save preference name, not the full path to the preference. We
         # need to restore the full path to the preference by scanning through
@@ -477,6 +481,7 @@ class Settings(Atom):
                                               ear,
                                               save=save,
                                               open_minimized=open_minimized)
+            log.info('Queueing command: %s', ' '.join(args))
             self.process_manager.add_process(args, env)
 
     def save_config(self, filename):
@@ -538,6 +543,7 @@ class Settings(Atom):
         self.experiment_sequence = load_seq(info.pop('experiment_sequence', []))
         self.monitor_sequence = load_seq(info.pop('monitor_sequence', []))
         self.sequences = {n: load_seq(s, 'sequence') for n, s in info.pop('sequences', {}).items()}
+        self.current_sequence_name = info.pop('current_sequence_name', '')
 
         # Update the starship config list to reflect current starship connections
         starship_config = info.pop('starship_config', {})
