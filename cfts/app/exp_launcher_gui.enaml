@@ -116,8 +116,8 @@ class Experiment(Atom):
             configuration must have two starships (one for each ear). When set
             to 'selected', the ear currently selected in the GUI will be used.
 
-        This is used for queue subclasses where we may need to specify run mode
-        (i.e., ipsi vs. contra) as well as ear (e.g. in assays where we have a
+        This is used for sequences where we may need to specify run mode (i.e.,
+        ipsi vs. contra) as well as ear (e.g. in assays where we have a
         separate starship for each ear such as the MEMR).
         '''
         if mode is None:
@@ -134,7 +134,8 @@ class Experiment(Atom):
 
 class FrozenExperiment(Experiment):
     '''
-    Subclass of Experiment in which we have frozen the ear and mode (used for queues).
+    Subclass of Experiment in which we have frozen the ear and mode (used for
+    sequences).
     '''
     mode = Str()
 
@@ -227,7 +228,7 @@ class ProcessManager(Atom):
             self.experiment_running = False
             if message['info'].get('stop_reason') != '':
                 self.autostart = False
-            # Remove from the subprocess order queue
+            # Remove from the subprocess order sequence
             if client_id in self.subprocess_order:
                 self.subprocess_order.remove(client_id)
             # Now, start the next one if one exists.
@@ -263,7 +264,7 @@ class ProcessManager(Atom):
 
     @synchronized
     def pause_sequence(self):
-        # TODO: What to do if we need to re-queue an experiment?
+        # TODO: What to do if we need to re-sequence an experiment?
         self.autostart = False
 
     @synchronized
@@ -291,15 +292,15 @@ class Settings(Atom):
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
 
-    #: Dictionary of queue name to lists of FrozenExperiment
-    queues = Dict()
+    #: Dictionary of sequence names to lists of FrozenExperiment
+    sequences = Dict()
 
-    #: Currently selected queue
-    current_queue_name = Str()
+    #: Currently selected sequences
+    current_sequence_name = Str()
 
-    #: Currently selected queue (this has to be broken out from queues to
+    #: Currently selected sequence (this has to be broken out from sequences to
     #: enable proper change notifications, I think).
-    current_queue = List(Experiment)
+    current_sequence = List(Experiment)
 
     starship_config = Dict()
 
@@ -312,18 +313,18 @@ class Settings(Atom):
     #: subprocesses.
     process_manager = Typed(ProcessManager, ())
 
-    def _observe_current_queue_name(self, event):
-        # This is needed to sync up changes where we select the queue from the
+    def _observe_current_sequence_name(self, event):
+        # This is needed to sync up changes where we select the sequence from the
         # GUI
-        if self.current_queue_name != '':
-            self.current_queue = self.queues.setdefault(self.current_queue_name, [])
+        if self.current_sequence_name != '':
+            self.current_sequence = self.sequences.setdefault(self.current_sequence_name, [])
         else:
-            self.current_queue = []
+            self.current_sequence = []
 
-    def _observe_current_queue(self, event):
+    def _observe_current_sequence(self, event):
         # This is needed to sync back changes from the experiment display in the GUI
-        if self.current_queue_name != '':
-            self.queues[self.current_queue_name] = self.current_queue
+        if self.current_sequence_name != '':
+            self.sequences[self.current_sequence_name] = self.current_sequence
 
     def _get_audio_mode(self):
         if self.find_starship('right', True) == self.find_starship('left', True):
@@ -496,11 +497,11 @@ class Settings(Atom):
                 'freq_ub': self.input_amp_config['freq_ub'],
             },
             'standard_notes': self.standard_notes,
-            'current_queue_name': self.current_queue_name,
+            'current_sequence_name': self.current_sequence_name,
         }
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
-        info['queues'] = {n: [e.__getstate__() for e in s] for n, s in self.queues.items()}
+        info['sequences'] = {n: [e.__getstate__() for e in s] for n, s in self.sequences.items()}
         info['starship_config'] = {}
         for k, v in self.starship_config.items():
             info['starship_config'][k] = {
@@ -536,7 +537,7 @@ class Settings(Atom):
         # Load and resurrect the experiment sequences 
         self.experiment_sequence = load_seq(info.pop('experiment_sequence', []))
         self.monitor_sequence = load_seq(info.pop('monitor_sequence', []))
-        self.queues = {n: load_seq(s, 'queue') for n, s in info.pop('queues', {}).items()}
+        self.sequences = {n: load_seq(s, 'sequence') for n, s in info.pop('sequences', {}).items()}
 
         # Update the starship config list to reflect current starship connections
         starship_config = info.pop('starship_config', {})
@@ -609,7 +610,7 @@ enamldef AddParadigmPopup(PopupView): popup:
             text = 'OK'
             clicked ::
                 exp = Experiment(paradigm=combo.selected)
-                if mode == 'queue':
+                if mode == 'sequence':
                     exp = exp.freeze(exp.paradigm.info['modes'][0], 'selected')
                 seq = experiment_box.sequence[:]
                 seq.append(exp)
@@ -723,7 +724,7 @@ enamldef ExperimentSequence(Container): experiment_box:
                                                     mode_loop.experiment.paradigm.list_preferences()]
 
             Conditional:
-                condition << (mode == 'queue' and edit_mode)
+                condition << (mode == 'sequence' and edit_mode)
 
                 ObjectCombo:
                     items = loop_item.paradigm.info['modes']
@@ -737,7 +738,7 @@ enamldef ExperimentSequence(Container): experiment_box:
                     text = f'ear'
 
             Conditional:
-                condition << (mode == 'queue' and not edit_mode)
+                condition << (mode == 'sequence' and not edit_mode)
 
                 Label:
                     text = f'{loop_item.mode} {loop_item.ear} ear'
@@ -1163,7 +1164,7 @@ enamldef Main(MainWindow): main:
                         settings << main.settings
                         autostart << exp_autostart.checked
             Page:
-                title = 'Queues'
+                title = 'Sequences'
                 closable = False
                 Container:
                     padding = 0
@@ -1172,24 +1173,24 @@ enamldef Main(MainWindow): main:
                         Label:
                             text = 'Name'
                         AddRemoveCombo:
-                            items << list(settings.queues.keys())
-                            selected := settings.current_queue_name
+                            items << list(settings.sequences.keys())
+                            selected := settings.current_sequence_name
                             remove_clicked ::
-                                del settings.queues[settings.current_queue_name]
-                                settings.current_queue_name = ''
+                                del settings.sequences[settings.current_sequence_name]
+                                settings.current_sequence_name = ''
                             editable << main.edit_mode
                         PushButton:
                             enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
                             text = 'Open'
                             clicked ::
-                                sequence = settings.current_queue[:]
+                                sequence = settings.current_sequence[:]
                                 main.settings.prepare_sequence(sequence)
 
                     Conditional:
-                        condition << bool(main.settings.current_queue_name)
+                        condition << bool(main.settings.current_sequence_name)
                         ExperimentSequence:
-                            mode = 'queue'
-                            sequence := main.settings.current_queue
+                            mode = 'sequence'
+                            sequence := main.settings.current_sequence
                             edit_mode << main.edit_mode
                             settings << main.settings
 
