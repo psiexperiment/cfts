@@ -32,6 +32,19 @@ from cftscal.api import microphone_manager
 # Utility function
 ################################################################################
 def check_range(outputs, settings):
+    '''
+    Verify that expected range for channel does not exceed maximum range
+
+    Parameters
+    ----------
+    outputs : dict
+        Dictionary mapping output instance to output information. Output
+        information should be a dictionary containing `level` and `frequency`
+        keys. These keys should map to the variable names in the context.
+    settings : list
+        List of settings that will be used for each trial during the
+        experiment.
+    '''
     max_sf = {}
     bad_settings = []
     good_settings = settings[:]
@@ -355,14 +368,14 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
         point = 'psi.controller.calibration.channels'
 
         ChirpCalibrate: probe_calibrate:
-            name = f'memr_probe_calibration'
+            name = 'memr_probe_calibration'
             label = 'Calibration'
             input_name = 'probe_microphone'
             outputs = {'probe': []}
             gain << C.calibration_gain
 
         ChirpCalibrate: elicitor_calibrate:
-            name = f'memr_elicitor_calibration'
+            name = 'memr_elicitor_calibration'
             input_name = 'elicitor_microphone'
             outputs = {'elicitor': []}
             gain << C.calibration_gain
@@ -370,6 +383,48 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             # comparision).
             show_widget = False
             viewbox_name << probe_calibrate.viewbox_name
+
+
+def set_debug_calibration(event):
+    '''
+    Set Starship speakers to a calibration that returns scaling factors that
+    will work with the
+    '''
+    from psiaudio.calibration import FlatCalibration
+    controller = event.workbench.get_plugin('psi.controller')
+    for channel in controller.get_channels('analog', 'output', 'hardware', False):
+        log.info(channel)
+        if channel.name.startswith('starship_'):
+            pass
+        elif channel.name.startswith('speaker_'):
+            pass
+        else:
+            continue
+        log.info('Channel %r old calibration %r', channel, channel.calibration)
+        channel.calibration = FlatCalibration.from_db(130)
+        log.info(' -> set to %r', channel.calibration)
+
+
+enamldef DebugCalibration(ExperimentManifest): manifest:
+
+    id = 'debug_calibration'
+    title = 'Calibration for debugging'
+
+    Extension:
+        id = manifest.id + '.commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = manifest.id + '.set_debug_calibration'
+            handler = set_debug_calibration
+
+    Extension:
+        id = manifest.id + '.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            event = 'plugins_started'
+            command = manifest.id + '.set_debug_calibration'
 
 
 def initialize_cal_mic(event):

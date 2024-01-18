@@ -13,6 +13,13 @@ websocket_mixin = {
 }
 
 
+debug_calibration = {
+    'manifest': CFTS_PATH + 'cfts_mixins.DebugCalibration',
+    'required': False,
+    'info': {'hide': True},
+}
+
+
 ################################################################################
 # Single-starship paradigms (ABR, EFR, DPOAE, IEC)
 ################################################################################
@@ -164,6 +171,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -180,6 +188,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -199,6 +208,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -218,6 +228,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -237,6 +248,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -256,6 +268,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -275,6 +288,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -294,6 +308,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -313,6 +328,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -330,6 +346,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['run']},
 )
@@ -426,6 +443,7 @@ ParadigmDescription(
         cal_mic_mixin,
         output_monitor_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['binaural']},
 )
@@ -461,6 +479,7 @@ ParadigmDescription(
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['ipsi', 'contra']},
 )
@@ -482,6 +501,7 @@ ParadigmDescription(
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['ipsi', 'contra']},
 )
@@ -502,6 +522,7 @@ ParadigmDescription(
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['ipsi', 'contra']},
 )
@@ -522,6 +543,7 @@ ParadigmDescription(
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
         websocket_mixin,
+        debug_calibration,
     ],
     info={'modes': ['ipsi', 'contra']},
 )

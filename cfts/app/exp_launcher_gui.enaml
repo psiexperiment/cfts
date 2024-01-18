@@ -341,8 +341,14 @@ class Settings(Atom):
     record_output_monitor = Bool(False)
     record_body_temperature = Bool(True)
 
-    #: If True, ensure inear calibration plugin is loaded if available.
-    run_inear_calibration = Bool(True)
+    #: How should speakers be configured?
+    #: * in-ear - Perform in-ear calibration before starting experiment. Specify
+    #:   stimulus levels in dB SPL.
+    #: * attenuation - Specify stimulus levels in dB attenuation.
+    #: * debug - Set the calibration such that it assumes 1 Vrms = 130 dB SPL.
+    #:   Allows for testing of existing experiments without having to update
+    #:   the stimulus levels from dB SPL to dB attenuation.
+    calibration_mode = Enum('in-ear', 'attenuation', 'debug')
     input_amp_config = Dict()
 
     def _default_standard_notes(self):
@@ -451,14 +457,16 @@ class Settings(Atom):
                 log.warning('No temperature plugin available for %s',
                             experiment.paradigm.name)
 
-        if self.run_inear_calibration:
+        if self.calibration_mode == 'in-ear':
             for p in experiment.paradigm.plugins:
                 if p.id.endswith('_inear_calibration'):
                     args.extend(['--plugin', p.id])
                     break
             else:
-                log.warning('No in-ear plugin available for %s',
-                            experiment.paradigm.name)
+                log.warning('No in-ear plugin available for %s', experiment.paradigm.name)
+        elif self.calibration_mode == 'debug':
+            args.extend(['--plugin', 'debug_calibration'])
+
         if open_minimized:
             args.extend(['-c', 'psi.minimize_window'])
 
@@ -518,9 +526,13 @@ class Settings(Atom):
         filename = Path(filename)
         filename.write_text(json.dumps(info, indent=2))
 
-    def load_config(self, filename):
-        filename = Path(filename)
-        info = json.loads(filename.read_text())
+    def load_config(self, filename=None):
+        if filename is not None:
+            filename = Path(filename)
+            info = json.loads(filename.read_text())
+        else:
+            info = {}
+
         info.pop('experimenter', None)
 
         def load_seq(seq, mode='classic'):
@@ -974,9 +986,18 @@ enamldef Main(MainWindow): main:
                 checkable = True
                 checked := settings.record_body_temperature
             Action:
-                text = '&Run in-ear calibration'
-                checkable = True
-                checked := settings.run_inear_calibration
+                separator = True
+            Menu:
+                title = 'Calibration method'
+                ActionGroup:
+                    Looper:
+                        iterable = settings.get_member('calibration_mode').items
+                        Action:
+                            text = loop_item.capitalize()
+                            checkable = True
+                            checked << loop_item == settings.calibration_mode
+                            checked ::
+                                settings.calibration_mode = loop_item
 
     Container:
 
