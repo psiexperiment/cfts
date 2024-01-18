@@ -93,18 +93,10 @@ def configure_experiment(event):
     max_sf = max(max_sf.values()) * np.sqrt(2) * 1.01 * 2
     output.channel.expected_range = (-max_sf, max_sf)
 
-    # Set the EEG FFT to show only the modulation frequency
-    fm_range = context.unique_values('fm')
-    eeg_fft = data.find_plot_container('eeg_fft_container')
-    eeg_fft.freq_lb = min(fm_range) / 2
-    eeg_fft.freq_ub = min(fm_range) * 2
-    mic_segment_fft = data.find_plot_container('mic_segment_fft_container')
-    mic_segment_fft.freq_lb = min(fm_range) / 2
-    mic_segment_fft.freq_ub = min(fm_range) * 2
-
     # Set the microphone FFT to show the modulation frequency plus the upper
     # carrier frequency. This will allow us to scan for potential harmonics or
     # other artifacts in the microphone spectrum that may affect EEG.
+    fm_range = context.unique_values('fm')
     freq_range = context.unique_values(fc_name)
     mic_fft = data.find_plot_container('microphone_fft_view_container')
     mic_fft.freq_lb = min(fm_range) / 1.2
@@ -231,56 +223,6 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.workspace'
         point = 'psi.experiment.status'
         rank = 10
-
-    Extension:
-        id = EXPERIMENT + '.plots'
-        point = 'psi.data.plots'
-
-        FFTContainer: fft_container:
-            label = 'EEG FFT'
-            name = 'eeg_fft_container'
-
-            auto_select = False
-            max_buttons = 4
-            fmt_button_cb << \
-                C.get_selector().get_formatter(fft_plot.tab_grouping)
-
-            ViewBox:
-                name = 'eeg_fft_viewbox'
-
-                GroupedEpochFFTPlot: fft_plot:
-                    name = 'eeg_fft_plot'
-                    source_name = 'erp'
-                    waveform_averages << max(1, int(duration / 1))
-
-                    # TODO: This is pretty hackish ...
-                    tab_grouping << C.get_names()
-                    tab_keys >> fft_container.buttons
-                    selected_tab := fft_container.current_button
-                    auto_select := fft_container.auto_select
-
-        FFTContainer: mic_segment_fft_container:
-            label = 'Microphone segment FFT'
-            name = 'mic_segment_fft_container'
-
-            auto_select = False
-            max_buttons = 4
-            fmt_button_cb << \
-                C.get_selector().get_formatter(fft_plot.tab_grouping)
-
-            ViewBox:
-                name = 'mic_segment_fft_viewbox'
-
-                GroupedEpochFFTPlot: mic_segment_fft_plot:
-                    name = 'mic_segment_fft_plot'
-                    source_name = 'mic_segment'
-                    waveform_averages << max(1, int(duration / 1))
-
-                    # TODO: This is pretty hackish ...
-                    tab_grouping << C.get_names()
-                    tab_keys >> mic_segment_fft_container.buttons
-                    selected_tab := mic_segment_fft_container.current_button
-                    auto_select := mic_segment_fft_container.auto_select
 
 
 enamldef SAMEFRManifest(BaseEFRManifest):
