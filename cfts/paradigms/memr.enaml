@@ -1230,7 +1230,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
             name = 'click'
             hide = ['skip_n', 'delay']
             BandlimitedClick:
-                hide = ['polarity']
+                pass
 
         Repeat: chirp:
             name = 'chirp'
