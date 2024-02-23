@@ -361,8 +361,8 @@ multi_memr_microphone_fft_mixin = {
         'y_mode': 'mouse',
         'save_limits': True,
         'sources': {
-            'left_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
-            'right_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
+            'elictor_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
+            'probe_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
         },
         'y_label': 'Signal (dB)'
     }
@@ -457,6 +457,22 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
         {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
+        multi_memr_microphone_mixin,
+        multi_memr_microphone_fft_mixin,
+        turntable_linear_velocity_view_mixin_required,
+        turntable_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['contra']},
+)
+
+
+ParadigmDescription(
+    'memr_sweep_click', 'MEMR (sweep, click)', 'ear', [
+        elicitor_starship_mixin,
+        probe_starship_mixin,
+        {'manifest': CFTS_PATH + 'memr.SweptMEMRManifest'},
+        #{'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
+        #{'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
         multi_memr_microphone_mixin,
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,

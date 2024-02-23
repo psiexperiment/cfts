@@ -28,7 +28,8 @@ from psi.controller.api import (
 from psi.core.enaml.api import ExperimentManifest
 from psi.experiment.api import StatusItem
 from psi.token.primitives import (
-    BandlimitedClick, BandlimitedFIRNoise, Chirp, Cos2Envelope, Repeat
+    BandlimitedClick, BandlimitedFIRNoise, Chirp, Cos2Envelope, Envelope,
+    Repeat
 )
 from psi.data.api import (
     ChannelPlot, FFTChannelPlot, FFTContainer, TimeContainer, ViewBox
@@ -44,7 +45,7 @@ from .cfts_mixins import CFTSSelector
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
-def configure_memr(event, duration_attr, iti_attr=None):
+def configure_memr(event, duration_attr, iti_attr=None, selector='default'):
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
     data = event.workbench.get_plugin('psi.data')
@@ -59,7 +60,15 @@ def configure_memr(event, duration_attr, iti_attr=None):
     probe_sf = 0
 
     bad_settings = {}
-    for setting in context.iter_settings('default', 1):
+
+    # Special case for handling the swept MEMR which does not use a selector.
+    # All stimuli are included in a single "sweep".
+    if selector is not None:
+        settings = context.iter_settings('default', 1)
+    else:
+        settings = [context.get_values()]
+
+    for setting in settings:
         for polarity in (1, -1):
             averages = max(1, int(round(setting['trial_n'] / 2)))
             if iti_attr is None:
@@ -223,6 +232,8 @@ def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
 
         silence_psd = calibration.get_db(util.psd_df(silence, fs))
         probe_psd = calibration.get_db(util.psd_df(probe, fs))
+        log.error(silence_psd.loc[:, fl:fh])
+        log.error(probe_psd.loc[:, fl:fh])
         silence_rms = silence_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1).max()
         probe_rms = probe_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1)
 
@@ -364,6 +375,7 @@ class ProcessInterleavedMEMR(ProcessMEMR):
             status_cb=self.status_cb,
             target=cb).send
 
+
 class ProcessSimultaneousMEMR(ProcessMEMR):
 
     def configure_callback(self):
@@ -415,6 +427,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
     attr configure_experiment_cb
     attr analyze_memr_cb
     attr probe
+    attr selector = 'default'
 
     attr plot_keys
 
@@ -456,15 +469,6 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
                 token = workbench.get_plugin('psi.token').get_token('noise')
                 queue ::
                     extract_elicitor.subscribe_to_queue(self.queue)
-
-    Extension:
-        id = EXPERIMENT + '.selectors'
-        point = 'psi.context.selectors'
-
-        CFTSSelector:
-            label = 'MEMR stimuli'
-            can_manage = ['elicitor_bandlimited_noise_level']
-            user_managed = False
 
     Extension:
         id = EXPERIMENT + '.context'
@@ -545,7 +549,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_initialize'
             command = 'psi.context.initialize'
-            kwargs = {'selector': 'default', 'cycles': 1}
+            kwargs = {'selector': selector, 'cycles': 1}
 
         ExperimentAction:
             event = 'engines_configured'
@@ -858,11 +862,13 @@ enamldef InterleavedChirpProbeMixin(ExperimentManifest):
             expression = 'None'
 
 
-enamldef InterleavedMEMRManifest(BaseMEMRManifest):
+enamldef InterleavedMEMRManifest(BaseMEMRManifest): manifest:
 
     # Implements the classic wideband acoustic reflex as described by Keefe.
     configure_experiment_cb = partial(configure_memr,
-                                      duration_attr='trial_period', iti_attr=None)
+                                      duration_attr='trial_period',
+                                      iti_attr=None,
+                                      selector=manifest.selector)
 
     Extension:
         id = EXPERIMENT + '.interleaved_memr.'
@@ -873,6 +879,15 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest):
             label = 'MEMRs rejected'
             Label:
                 text << f'{proc_memr.n_reject} of {proc_memr.n_trials}'
+
+    Extension:
+        id = EXPERIMENT + '.selectors'
+        point = 'psi.context.selectors'
+
+        CFTSSelector:
+            label = 'MEMR stimuli'
+            can_manage = ['elicitor_bandlimited_noise_level']
+            user_managed = False
 
     Extension:
         id = EXPERIMENT + '.interleaved_elicitor.tokens'
@@ -1153,13 +1168,13 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
             expression = 'None'
 
 
-enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
+enamldef SimultaneousMEMRManifest(BaseMEMRManifest): manfiest:
 
     # Implements the wideband acoustic reflex as described by Valero and Liberman.
     configure_experiment_cb = partial(configure_memr,
                                       duration_attr='trial_duration',
-                                      iti_attr='trial_iti')
-    attr probe
+                                      iti_attr='trial_iti',
+                                      selector=manifest.selector)
 
     Extension:
         id = EXPERIMENT + '.simultaneous_memr.sinks'
@@ -1168,6 +1183,15 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
         SimpleCounter: counter:
             name = 'memr_counter'
             label = 'MEMRs acquired'
+
+    Extension:
+        id = EXPERIMENT + '.selectors'
+        point = 'psi.context.selectors'
+
+        CFTSSelector:
+            label = 'MEMR stimuli'
+            can_manage = ['elicitor_bandlimited_noise_level']
+            user_managed = False
 
     Extension:
         id = EXPERIMENT + '.simultaneous_memr.io'
@@ -1209,7 +1233,6 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                         counter = counter
                         turntable_sink = data.find_sink('turntable_store') \
                             .get_ai_signal('turntable_linear_velocity')
-
 
         ExtractStim:
             source_name = 'memr_elicitor'
@@ -1404,3 +1427,291 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest):
                     plot_grouping << C.get_names()
                     pen_width = 2
                     pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'
+
+
+################################################################################
+# Swept MEMR
+################################################################################
+enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
+
+    attr probe = 'click'
+    attr selector = None
+
+    configure_experiment_cb = partial(configure_memr,
+                                      duration_attr='trial_duration',
+                                      iti_attr='trial_iti',
+                                      selector=manifest.selector)
+
+    Extension:
+        id = EXPERIMENT + '.swept_memr.tokens'
+        point = 'psi.token.tokens'
+
+        Envelope:
+            name = 'noise'
+            values = {
+                'start_time': 0,
+                'envelope': 'bartlett',
+                'transform': lambda x: x ** 10,
+                'rise_time': None,
+            }
+            BandlimitedFIRNoise:
+                values = {
+                    'polarity': 1,
+                    'seed': 1,
+                }
+
+        Repeat: probe:
+            name = 'click'
+            values = {
+                'skip_n': 0,
+                'delay': 0,
+            }
+            BandlimitedClick:
+                values = {
+                    'audiogram_weighting': None,
+                }
+
+    Extension:
+        id = EXPERIMENT + '.swept_memr.items'
+        point = 'psi.context.items'
+
+        Expression:
+            parameter = f'probe_click_n'
+            expression = 'probe_n'
+
+        Expression:
+            parameter = 'probe_click_rate'
+            expression = 'probe_rate'
+
+        Expression:
+            parameter = 'probe_duration'
+            expression = 'probe_bandlimited_click_window'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_flb'
+            expression = 'probe_fl'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_fub'
+            expression = 'probe_fh'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_level'
+            expression = 'probe_level'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_window'
+            expression = '5e-3'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_equalize'
+            expression = 'probe_max_equalize != 0'
+
+        Expression:
+            parameter = 'probe_bandlimited_click_max_correction'
+            expression = 'probe_max_equalize'
+
+        ContextRow:
+            group_name = 'memr'
+
+            fmt = ['Ramp to', max_level, 'db SPL at', ramp_rate,
+                   'dB/s, repeat', trial_n, 'times every', trial_iti, 's']
+
+            Parameter: ramp_rate:
+                name = 'ramp_rate'
+                default = 17.5
+
+            Parameter: max_level:
+                name = 'max_level'
+                default = 80
+
+            Parameter: trial_n:
+                name = 'trial_n'
+                default = 2
+
+            Parameter: trial_iti:
+                name = 'trial_iti'
+                default = 1
+
+        Parameter:
+            name = 'trial_duration'
+            label = 'Trial duration'
+            group_name = 'memr'
+
+        Parameter:
+            name = 'probe_rate'
+            label = 'Probe rate'
+            default = 20
+            group_name = 'memr'
+
+        Parameter:
+            name = 'max_turntable_speed'
+            label = 'Max. turntable speed (cm/s)'
+            default = 0.5
+            group_name = 'memr'
+
+        Expression:
+            parameter = 'elicitor_noise_duration'
+            expression = 'trial_duration'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_level'
+            expression = 'max_level'
+
+        Expression:
+            parameter = 'trial_duration'
+            expression = '2 * max_level / ramp_rate'
+
+        Expression:
+            parameter = 'probe_n'
+            expression = 'int(trial_duration * probe_rate)'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fl'
+            expression = 'elicitor_fl'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fh'
+            expression = 'elicitor_fh'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_equalize'
+            expression = 'elicitor_max_equalize != 0'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_max_correction'
+            expression = 'elicitor_max_equalize'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_audiogram_weighting'
+            expression = 'elicitor_audiogram_weighting'
+
+    Extension:
+        id = EXPERIMENT + '.swept_memr.sinks'
+        point = 'psi.data.sinks'
+
+        SimpleCounter: counter:
+            name = 'memr_counter'
+            label = 'MEMRs acquired'
+
+    #Extension:
+    #    id = EXPERIMENT + '.simultaneous_memr.io'
+    #    point = 'psi.controller.io'
+
+    #    StackRepeats:
+    #        source_name = 'memr_probe'
+    #        name = 'memr_repeat'
+    #        duration = 1 / C.probe_rate
+
+    #        ExtractStim:
+    #            # Add a bit of padding to capture the tail end of the
+    #            # probe due to acoustic delays
+    #            name = 'probe'
+    #            lb = 0.75e-3
+    #            ub = lb + C.probe_duration
+
+    #            ExtractRepeats:
+    #                name = 'probe_norm_raw'
+    #                ranges = {
+    #                    'norm': (
+    #                        int(round((C.elicitor_onset - C.norm_window) * C.probe_rate)),
+    #                        int(round(C.elicitor_onset * C.probe_rate)),
+    #                    ),
+    #                    'elicitor': (
+    #                        int(round((C.elicitor_onset + C.elicitor_noise_rise_time) * C.probe_rate)),
+    #                        int(round((C.elicitor_onset + C.elicitor_noise_rise_time + C.norm_window) * C.probe_rate)),
+    #                    )
+    #                }
+
+    #                ProcessSimultaneousMEMR: proc_memr:
+    #                    name = 'probe_norm'
+    #                    force_active = True
+    #                    fl = C.probe_fl
+    #                    fh = C.probe_fh
+    #                    max_turntable_speed = C.max_turntable_speed
+    #                    probe_output = controller.get_output('probe')
+    #                    elicitor_output = controller.get_output('elicitor')
+    #                    counter = counter
+    #                    turntable_sink = data.find_sink('turntable_store') \
+    #                        .get_ai_signal('turntable_linear_velocity')
+
+
+    #    ExtractStim:
+    #        source_name = 'memr_elicitor'
+    #        name = 'elicitor'
+    #        lb = C.elicitor_onset + C.elicitor_noise_rise_time
+    #        ub = C.elicitor_onset + C.elicitor_noise_rise_time + C.elicitor_duration - C.elicitor_noise_rise_time
+
+    #Extension:
+    #    id = EXPERIMENT + '.simultaneous_memr.plots'
+    #    point = 'psi.data.plots'
+
+    #    EpochTimeContainer: probe_time_container:
+    #        name = 'probe_time_container'
+    #        label = 'Probe waveform'
+
+    #        max_buttons = 4
+    #        fmt_button_cb << \
+    #            C.get_selector().get_formatter(probe_plot.tab_grouping)
+
+    #        ViewBox: probe_time_vb:
+    #            name = 'probe_time_vb'
+    #            y_mode = 'mouse'
+    #            save_limits = True
+
+    #            GroupedEpochAveragePlot: probe_plot:
+    #                source_name = 'probe_norm'
+    #                plot_grouping = ['range']
+    #                plot_keys = [('norm',), ('elicitor',)]
+    #                autogenerate_keys = 'tab'
+    #                tab_grouping << C.get_names()
+
+    #    FFTContainer: probe_fft_container:
+    #        name = 'probe_fft_container'
+    #        label = 'Probe and Elicitor PSD'
+    #        freq_lb = 0.5e3
+    #        freq_ub = 50e3
+
+    #        max_buttons = 4
+    #        fmt_button_cb << \
+    #            C.get_selector().get_formatter(probe_fft_plot.tab_grouping)
+
+    #        ViewBox:
+    #            name = 'probe_fft_vb'
+    #            y_mode = 'mouse'
+    #            save_limits = True
+
+    #            GroupedEpochFFTPlot: probe_fft_plot:
+    #                source_name = 'probe_norm'
+    #                plot_grouping = ['range']
+    #                plot_keys = [('norm',), ('elicitor',)]
+    #                autogenerate_keys = 'tab'
+    #                tab_grouping << C.get_names()
+    #                apply_calibration = True
+    #                average_mode = 'time'
+
+    #            GroupedEpochFFTPlot: elicitor_fft_plot:
+    #                source_name = 'elicitor'
+    #                tab_grouping << C.get_names()
+    #                apply_calibration = True
+    #                pen_color_cycle = ['k']
+    #                waveform_averages = 10
+
+    #    FFTContainer:
+    #        name = 'memr_fft_container'
+    #        label = 'MEMR'
+    #        freq_lb = 4e3
+    #        freq_ub = 32e3
+
+    #        ViewBox:
+    #            name = 'memr_fft_vb'
+    #            y_mode = 'mouse'
+    #            y_min = -3
+    #            y_max = 3
+
+    #            GroupedSimultaneousMEMRPlot:
+    #                name = 'memr_fft_plot'
+    #                source_name = 'probe_norm'
+    #                plot_grouping << C.get_names()
+    #                pen_width = 2
+    #                pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'
