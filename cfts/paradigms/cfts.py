@@ -524,7 +524,7 @@ ParadigmDescription(
         websocket_mixin,
         debug_calibration,
     ],
-    info={'modes': ['ipsi', 'contra']},
+    info={'modes': ['contra']},
 )
 
 
@@ -545,5 +545,5 @@ ParadigmDescription(
         websocket_mixin,
         debug_calibration,
     ],
-    info={'modes': ['ipsi', 'contra']},
+    info={'modes': ['contra']},
 )
