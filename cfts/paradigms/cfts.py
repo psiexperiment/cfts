@@ -7,36 +7,17 @@ CFTS_PATH = 'cfts.paradigms.'
 CORE_PATH = 'psi.paradigms.core.'
 
 
-websocket_mixin = {
-    'manifest': CORE_PATH + 'websocket_mixins.WebsocketClientManifest',
-    'required': True,
-}
-
-
-debug_calibration = {
-    'manifest': CFTS_PATH + 'cfts_mixins.DebugCalibration',
-    'required': False,
-    'info': {'hide': True},
-}
+COMMON_PLUGINS = [
+    {'manifest': CORE_PATH + 'websocket_mixins.WebsocketClientManifest', 'required': True},
+    {'manifest': CFTS_PATH + 'cfts_mixins.DebugCalibration', 'required': False, 'info': {'hide': True}},
+    {'manifest': CFTS_PATH + 'cfts_mixins.CalibrationMicrophone', 'required': False, 'info': {'hide': True}},
+    {'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitor', 'required': False, 'info': {'hide': True}},
+]
 
 
 ################################################################################
 # Single-starship paradigms (ABR, EFR, DPOAE, IEC)
 ################################################################################
-cal_mic_mixin = {
-    'manifest': CFTS_PATH + 'cfts_mixins.CalibrationMicrophone',
-    'required': False,
-    'info': {'hide': True},
-}
-
-
-output_monitor_mixin = {
-    'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitor',
-    'required': False,
-    'info': {'hide': True},
-}
-
-
 eeg_dec_mixin = {
     'manifest': CAL_PATH + 'objects.InputAmplifier',
     'required': True,
@@ -168,11 +149,7 @@ ParadigmDescription(
         eeg_dec_mixin,
         eeg_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -185,11 +162,7 @@ ParadigmDescription(
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -205,11 +178,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
          'info': {'hide': True}
          },
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -225,11 +194,7 @@ ParadigmDescription(
         temperature_mixin,
         microphone_mixin,
         microphone_fft_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -245,11 +210,7 @@ ParadigmDescription(
         temperature_mixin,
         microphone_mixin,
         microphone_fft_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -265,11 +226,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -285,11 +242,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -305,11 +258,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -325,11 +274,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -343,11 +288,7 @@ ParadigmDescription(
         },
         {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
 
@@ -435,16 +376,11 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'dpoae_base.DualDPOAEManifest'},
         {'manifest': CFTS_PATH + 'dpoae_io.DualDPOAEIOSimpleManifest', 'required': True},
         {'manifest': CFTS_PATH + 'dpoae_io.DualDPOAEIO'},
-        {'manifest': CFTS_PATH + 'cfts_mixins.BinauralDPOAEInEarCalibrationMixinManifest',
-         'info': {'hide': True}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.BinauralDPOAEInEarCalibrationMixinManifest', 'info': {'hide': True}},
         temperature_mixin,
         multi_microphone_mixin,
         multi_microphone_fft_mixin,
-        cal_mic_mixin,
-        output_monitor_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['binaural']},
 )
 
@@ -470,17 +406,12 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.InterleavedClickMEMRManifest'},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedClickProbeMixin', 'required': True},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest',
-         'info': {'hide': True}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
         multi_memr_microphone_mixin,
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['ipsi', 'contra']},
 )
 
@@ -492,17 +423,12 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpMEMRManifest'},
         {'manifest': CFTS_PATH + 'memr.InterleavedElicitorMixin', 'required': True},
         {'manifest': CFTS_PATH + 'memr.InterleavedChirpProbeMixin', 'required': True},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest',
-         'info': {'hide': True}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
         multi_memr_microphone_mixin,
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['ipsi', 'contra']},
 )
 
@@ -513,17 +439,12 @@ ParadigmDescription(
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'click'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousClickProbeMixin', 'required': True},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest',
-         'info': {'hide': True}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
         multi_memr_microphone_mixin,
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['contra']},
 )
 
@@ -534,16 +455,11 @@ ParadigmDescription(
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SimultaneousMEMRManifest', 'attrs': {'probe': 'chirp'}},
         {'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
-        cal_mic_mixin,
-        output_monitor_mixin,
-        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest',
-         'info': {'hide': True}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
         multi_memr_microphone_mixin,
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,
         turntable_mixin,
-        websocket_mixin,
-        debug_calibration,
-    ],
+    ] + COMMON_PLUGINS,
     info={'modes': ['contra']},
 )
