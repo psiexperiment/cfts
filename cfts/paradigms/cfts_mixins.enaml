@@ -23,6 +23,7 @@ from psi.data.sinks.api import BinaryStore
 from psi.experiment.api import StatusItem
 
 from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
+from psi.paradigms.core.signal_mixins import MultiSignalViewExtension, MultiSignalViewFFTExtension
 
 
 from cftscal.api import microphone_manager
@@ -516,3 +517,36 @@ enamldef OutputMonitor(ExperimentManifest): manifest:
         BinaryStore:
             name = manifest.id + '.output_monitor_store'
             continuous_inputs = ['output_monitor']
+
+
+enamldef OutputMonitorView(ExperimentManifest): manifest:
+    '''
+    Displays the output monitor.
+
+    This is typically used in testing and debugging. Requires that an input
+    channel called `output_monitor` be available in the IOManifest.
+    '''
+    id = 'output_monitor_view'
+    title = manifest.id.capitalize().replace('_', ' ')
+
+    Extension:
+        id = manifest.id + '.output_monitor_io'
+        point = 'psi.controller.io'
+
+        ContinuousInput:
+            name = 'output_monitor_view'
+            source_name = 'hw_ai::output_monitor'
+
+    MultiSignalViewExtension:
+        id = manifest.id + '_time_plot'
+        title = manifest.title + ' (time)'
+        sources = {
+            'output_monitor_view': {'color': 'k'},
+        }
+
+    MultiSignalViewFFTExtension:
+        id = manifest.id + '_fft_plot'
+        title = manifest.title + ' (PSD)'
+        sources = {
+            'output_monitor_view': {'color': 'k'},
+        }

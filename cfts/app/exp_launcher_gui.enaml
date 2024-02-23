@@ -348,6 +348,7 @@ class Settings(Atom):
     cal_mic_config = Dict()
     record_cal_mic = Bool(False)
     record_output_monitor = Bool(False)
+    show_output_monitor = Bool(False)
     record_body_temperature = Bool(True)
 
     #: How should speakers be configured?
@@ -456,6 +457,9 @@ class Settings(Atom):
 
         if self.record_output_monitor:
             args.extend(['--plugin', 'output_monitor'])
+
+        if self.show_output_monitor:
+            args.extend(['--plugin', 'output_monitor_view'])
 
         if self.record_body_temperature:
             for p in experiment.paradigm.plugins:
@@ -990,6 +994,10 @@ enamldef Main(MainWindow): main:
                 text = '&Record output monitor signal'
                 checkable = True
                 checked := settings.record_output_monitor
+            Action:
+                text = '&Show output monitor signal'
+                checkable = True
+                checked := settings.show_output_monitor
             Action:
                 text = '&Monitor body temperature'
                 checkable = True
