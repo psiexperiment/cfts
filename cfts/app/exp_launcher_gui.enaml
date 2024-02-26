@@ -156,20 +156,18 @@ def synchronized(fn):
 
 class ProcessManager(Atom):
 
-    #: List of active subprocesses in the order they have been opened and
-    #: should be executed.
+    #: List of commands the order they should be executed.
+    commands = List()
+
+    #: List of subprocesses that are currently open.
     subprocesses = List()
 
-    #: Number of active subprocesses (this is mainly facilitate GUI
-    #: interaction since Atom notifications cannot detect when an in-place
-    #: update has been made to a dictionary.
-    n_subprocesses = Int(0)
+    #: Current active subprocess (we retain references to all subprocesses that
+    #: are currently open since we do not auto-close the GUI).
+    current_subprocess = Value()
 
     #: Should experiments be auto-started?
     autostart = Bool(False)
-
-    #: Is an experiment currently running?
-    experiment_running = Bool(False)
 
     #: Used for communicating with experiments invoked by `psi`.
     ws_server = Typed(WebsocketServerPlugin)
@@ -203,82 +201,67 @@ class ProcessManager(Atom):
             'parameters': {'event_filter': '|'.join(events)},
         })
 
-    def start_process(self, process=None):
-        if process is None:
-            for process in self.subprocesses:
-                if process['state'] != 'complete':
-                    break
-            else:
-                raise ValueError('No process to start')
-        if process['state'] != 'connected':
-            return False
-
-        # Make sure the window is visible first.
-        mesg = {'command': 'psi.show_window'}
-        self.ws_server.send_message(mesg, process['client_id'])
-        # Now, start running.
-        mesg = {'command': 'psi.controller.start'}
-        self.ws_server.send_message(mesg, process['client_id'])
-        return True
-
-    def get_process(self, client_id):
-        for process in self.subprocesses:
-            if process['client_id'] == client_id:
-                break
-        else:
-            raise ValueError(f'No process with client ID {client_id}')
-        return process
-
-    @synchronized
-    def recv_cb(self, message):
-        process = self.get_process(message['client_id'])
-
-        if message['event'] == 'plugins_started':
-            process['state'] = 'connected'
-            # Start the subprocess if it is the first one in the list to run.
-            if self.autostart and not self.experiment_running:
-                if not self.start_process(process):
-                    raise ValueError('Cannot start process')
-        elif message['event'] == 'experiment_start':
-            process['state'] = 'running'
-            self.exp_start_time = time.time()
-            self.experiment_running = True
-        elif message['event'] == 'experiment_end':
-            process['state'] = 'complete'
-            self.duration = round(time.time() - self.exp_start_time)
-            self.experiment_running = False
-            if message['info'].get('stop_reason') != '':
-                self.autostart = False
-            # Now, start the next one if one exists.
-            if self.autostart:
-                self.start_process()
-        elif message['event'] == 'window_closed':
-            # Window closed. Remove from the list of subprocesses.
-            subprocesses = self.subprocesses[:]
-            subprocesses.remove(process)
-            self.subprocesses = subprocesses
-            self.n_subprocesses = len(self.subprocesses)
-
-    @synchronized
-    def add_process(self, args, env):
-        self.autostart = False
-        process = subprocess.Popen(args, env=dict(os.environ, **env))
-        subprocesses = self.subprocesses[:]
-        subprocesses.append({
-            'args': args,
+    def open_next_subprocess(self):
+        try:
+            cmd, env = self.commands.pop(0)
+        except IndexError:
+            log.info('No more commands queued')
+            return
+        process = subprocess.Popen(cmd, env=dict(os.environ, **env))
+        self.current_subprocess = {
+            'cmd': cmd,
             'env': env,
             'process': process,
             'running': False,
             'client_id': process.pid,
             'state': None,
-        })
-        self.subprocesses = subprocesses
-        self.n_subprocesses = len(self.subprocesses)
+        }
+        self.subprocesses.append(self.current_subprocess)
+
+    @synchronized
+    def recv_cb(self, message):
+        # Find which process the message is from.
+        for process in self.subprocesses:
+            if process['client_id'] == message['client_id']:
+                break
+        else:
+            raise ValueError(f'No process with client ID {client_id}')
+
+        if message['event'] == 'plugins_started':
+            process['state'] = 'connected'
+            # Start the subprocess if it is the first one in the list to run.
+            if self.autostart:
+                mesg = {'command': 'psi.controller.start'}
+                self.ws_server.send_message(mesg, process['client_id'])
+        elif message['event'] == 'experiment_start':
+            process['state'] = 'running'
+            self.exp_start_time = time.time()
+        elif message['event'] == 'experiment_end':
+            if process == self.current_subprocess:
+                self.current_subprocess = None
+            process['state'] = 'complete'
+            self.duration = round(time.time() - self.exp_start_time)
+            if message['info'].get('stop_reason') != '':
+                self.autostart = False
+                self.commands = []
+            # Now, start the next one if one exists.
+            if self.autostart:
+                self.open_next_subprocess()
+        elif message['event'] == 'window_closed':
+            # Window closed. Remove from the list of subprocesses.
+            if process == self.current_subprocess:
+                self.current_subprocess = None
+            self.subprocesses.remove(process)
+
+    @synchronized
+    def add_command(self, cmd, env):
+        log.info('Queueing command: %s', ' '.join(cmd))
+        self.commands.append((cmd, env))
 
     @synchronized
     def start_sequence(self):
         self.autostart = True
-        self.start_process()
+        self.open_next_subprocess()
 
     @synchronized
     def pause_sequence(self):
@@ -288,7 +271,10 @@ class ProcessManager(Atom):
     @synchronized
     def check_status(self):
         self.subprocesses = [p for p in self.subprocesses if p['process'].poll() is None]
-        self.n_subprocesses = len(self.subprocesses)
+        # This means the current subprocess has been closed.
+        if self.current_subprocess is not None:
+            if self.current_subprocess['process'].poll() is not None:
+                self.current_subprocess = None
         timed_call(1000, self.check_status)
 
 
@@ -490,20 +476,18 @@ class Settings(Atom):
         self.prepare_sequence([frozen_experiment], save=save)
         if autostart:
             self.process_manager.start_sequence()
+        else:
+            self.process_manager.open_next_subprocess()
 
     def prepare_sequence(self, sequence, save=True):
         for i, experiment in enumerate(sequence):
             ear = self.ear if experiment.ear == 'selected' else experiment.ear
-            open_minimized = i != 0
-            if open_minimized:
-                log.info('Starting next process with window minimized')
-            args, env = self.build_experiment(experiment,
-                                              experiment.mode,
-                                              ear,
-                                              save=save,
-                                              open_minimized=open_minimized)
-            log.info('Queueing command: %s', ' '.join(args))
-            self.process_manager.add_process(args, env)
+            cmd, env = self.build_experiment(experiment,
+                                             experiment.mode,
+                                             ear,
+                                             save=save,
+                                             )
+            self.process_manager.add_command(cmd, env)
 
     def save_config(self, filename):
         info = {
@@ -733,7 +717,7 @@ enamldef ExperimentSequence(Container): experiment_box:
                     padding = 0
                     spacing = 0
                     enabled << (experiment_box.start_enabled or edit_mode) and \
-                        not settings.process_manager.experiment_running
+                        settings.process_manager.current_subprocess is None
 
                     Looper: mode_loop:
                         attr experiment = loop_item
@@ -1022,7 +1006,6 @@ enamldef Main(MainWindow): main:
             vbox(
                 starship_info,
                 experiment_info,
-                play_buttons,
                 experiment_nb,
                 experiment_stats,
             ),
@@ -1160,23 +1143,6 @@ enamldef Main(MainWindow): main:
         ExperimentInfo: experiment_info:
             pass
 
-        HGroup: play_buttons:
-            leading_spacer = spacer(0)
-            padding = 0
-            spacing = 0
-            PushButton:
-                text = 'Start'
-                enabled << main.settings.process_manager.n_subprocesses != 0 and \
-                    not main.settings.process_manager.experiment_running
-                clicked ::
-                    main.settings.process_manager.start_sequence()
-            PushButton:
-                text = 'Stop'
-                enabled << main.settings.process_manager.n_subprocesses != 0 and \
-                    main.settings.process_manager.experiment_running
-                clicked ::
-                    main.settings.process_manager.pause_sequence()
-
         Notebook: experiment_nb:
             tab_style = 'document'
             Page:
@@ -1225,11 +1191,13 @@ enamldef Main(MainWindow): main:
                                 settings.current_sequence_name = ''
                             editable << main.edit_mode
                         PushButton:
-                            enabled << (bool(main.settings.animal) and bool(main.settings.experimenter))
-                            text = 'Open'
+                            enabled << (bool(main.settings.animal) and bool(main.settings.experimenter) and
+                                        main.settings.process_manager.current_subprocess is None)
+                            text = 'Run'
                             clicked ::
                                 sequence = settings.current_sequence[:]
                                 main.settings.prepare_sequence(sequence)
+                                main.settings.process_manager.start_sequence()
 
                     Conditional:
                         condition << bool(main.settings.current_sequence_name)
@@ -1238,12 +1206,6 @@ enamldef Main(MainWindow): main:
                             sequence := main.settings.current_sequence
                             edit_mode << main.edit_mode
                             settings << main.settings
-
-            Page:
-                title = 'Processes'
-                closable = False
-                Container:
-                    padding = 0
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
