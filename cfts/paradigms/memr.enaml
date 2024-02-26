@@ -232,8 +232,6 @@ def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
 
         silence_psd = calibration.get_db(util.psd_df(silence, fs))
         probe_psd = calibration.get_db(util.psd_df(probe, fs))
-        log.error(silence_psd.loc[:, fl:fh])
-        log.error(probe_psd.loc[:, fl:fh])
         silence_rms = silence_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1).max()
         probe_rms = probe_psd.loc[:, fl:fh].apply(util.rms_rfft_db, axis=1)
 
