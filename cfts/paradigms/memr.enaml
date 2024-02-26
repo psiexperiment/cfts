@@ -488,8 +488,6 @@ class GroupedSimultaneousMEMRPlot(GroupedEpochFFTPlot):
     def _y(self, epoch):
         n = [e for e in epoch if e.metadata['range'] == 'norm']
         e = [e for e in epoch if e.metadata['range'] == 'elicitor']
-        log.error(n)
-        log.error(e)
         n = np.array(concat(n, axis='epoch'))[:, self.channel]
         e = np.array(concat(e, axis='epoch'))[:, self.channel]
 
@@ -1540,7 +1538,6 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
             name = 'click'
             values = {
                 'skip_n': 0,
-                'delay': 0,
             }
             BandlimitedClick:
                 values = {
@@ -1562,6 +1559,10 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
         Expression:
             parameter = 'probe_duration'
             expression = 'probe_bandlimited_click_window'
+
+        Expression:
+            parameter = 'probe_click_delay'
+            expression = '((trial_duration / 2 * probe_rate) % 1) / probe_rate - probe_bandlimited_click_window / 2'
 
         Expression:
             parameter = 'probe_bandlimited_click_flb'
@@ -1683,7 +1684,7 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
                 # Add a bit of padding to capture the tail end of the
                 # probe due to acoustic delays
                 name = 'probe'
-                lb = 0.75e-3
+                lb = 0.75e-3 + C.probe_click_delay
                 ub = lb + C.probe_duration
 
                 ExtractRepeats:
