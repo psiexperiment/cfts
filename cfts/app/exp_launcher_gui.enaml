@@ -259,11 +259,6 @@ class ProcessManager(Atom):
         self.commands.append((cmd, env))
 
     @synchronized
-    def start_sequence(self):
-        self.autostart = True
-        self.open_next_subprocess()
-
-    @synchronized
     def pause_sequence(self):
         # TODO: What to do if we need to re-sequence an experiment?
         self.autostart = False
@@ -474,10 +469,8 @@ class Settings(Atom):
     def run_experiment(self, experiment, mode, save=True, autostart=False):
         frozen_experiment = experiment.freeze(mode, self.ear)
         self.prepare_sequence([frozen_experiment], save=save)
-        if autostart:
-            self.process_manager.start_sequence()
-        else:
-            self.process_manager.open_next_subprocess()
+        self.process_manager.autostart = autostart
+        self.process_manager.open_next_subprocess()
 
     def prepare_sequence(self, sequence, save=True):
         for i, experiment in enumerate(sequence):
@@ -1197,7 +1190,8 @@ enamldef Main(MainWindow): main:
                             clicked ::
                                 sequence = settings.current_sequence[:]
                                 main.settings.prepare_sequence(sequence)
-                                main.settings.process_manager.start_sequence()
+                                main.settings.process_manager.autostart = True
+                                main.settings.process_manager.open_next_subprocess()
 
                     Conditional:
                         condition << bool(main.settings.current_sequence_name)
