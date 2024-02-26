@@ -1166,7 +1166,7 @@ enamldef SimultaneousChirpProbeMixin(ExperimentManifest):
             expression = 'None'
 
 
-enamldef SimultaneousMEMRManifest(BaseMEMRManifest): manfiest:
+enamldef SimultaneousMEMRManifest(BaseMEMRManifest): manifest:
 
     # Implements the wideband acoustic reflex as described by Valero and Liberman.
     configure_experiment_cb = partial(configure_memr,
