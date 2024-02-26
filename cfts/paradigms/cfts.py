@@ -361,8 +361,8 @@ multi_memr_microphone_fft_mixin = {
         'y_mode': 'mouse',
         'save_limits': True,
         'sources': {
-            'elictor_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
-            'probe_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
+            'probe_microphone': {'color': 'DarkMagenta', 'apply_calibration': True},
+            'elicitor_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
         },
         'y_label': 'Signal (dB)'
     }
@@ -471,8 +471,7 @@ ParadigmDescription(
         elicitor_starship_mixin,
         probe_starship_mixin,
         {'manifest': CFTS_PATH + 'memr.SweptMEMRManifest'},
-        #{'manifest': CFTS_PATH + 'memr.SimultaneousChirpProbeMixin', 'required': True},
-        #{'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
+        {'manifest': CFTS_PATH + 'cfts_mixins.MEMRInEarCalibrationMixinManifest', 'info': {'hide': True}},
         multi_memr_microphone_mixin,
         multi_memr_microphone_fft_mixin,
         turntable_linear_velocity_view_mixin_required,

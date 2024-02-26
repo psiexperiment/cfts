@@ -156,6 +156,7 @@ class StackRepeats(EpochInput):
 
 @coroutine
 def extract_repeats(repeats, target):
+    log.info('Configured extract_repeats with %r', repeats)
     while True:
         data = (yield)
         subsets = []
@@ -331,6 +332,63 @@ def process_simultaneous_memr(fl, fh, max_turntable_speed, probe_output,
                 deferred_call(update_counter)
 
 
+@coroutine
+def process_swept_memr(fl, fh, max_turntable_speed, probe_output,
+                       elicitor_output, turntable_sink, fs, counter,
+                       calibration, status_cb, target):
+    '''
+    Parameters
+    ----------
+    fl : float
+        Lowest frequency in probe stim
+    fh : float
+        Highest frequency in probe stim
+    max_turntable_speed : float
+        Reject trial if turntable speed exceeds this value in cm/s.
+    status_cb : callable
+        Callable taking a single argument. True indicates trial was rejected.
+        False indicates trial was accepted.
+    '''
+    while True:
+        data = (yield)
+
+        times = np.array([m['t0_actual'] for m in data.metadata])
+        duration = np.mean(np.diff(times))
+        #speed = turntable_sink.get_segments(times, offset=0, duration=duration,
+        #                                    preload=False, allow_partial=True)
+        #keep_mask = list(speed.max(axis=1).values < max_turntable_speed)
+        #original_ranges = Counter([m['range'] for m in data.metadata])
+        #data = data[np.flatnonzero(keep_mask)]
+        #valid_ranges = Counter([m['range'] for m in data.metadata])
+        #log.info(len(data))
+        #log.info(len(data.metadata))
+        #log.info(valid_ranges)
+        #log.info(original_ranges)
+
+        if False:
+            pass
+        else:
+            target(data)
+            status_cb(False)
+            with probe_output.engine.lock, elicitor_output.engine.lock:
+                probe_uuid = data[0].metadata['key']
+                elicitor_uuid = data[0].metadata['elicitor_uuid']
+                try:
+                    probe_output.queue.decrement_key(probe_uuid)
+                    elicitor_output.queue.decrement_key(elicitor_uuid)
+                except Exception as e:
+                    pass
+
+                current_n = probe_output.queue.count_requested_trials() \
+                    - probe_output.queue.count_trials()
+                def update_counter():
+                    nonlocal current_n
+                    nonlocal counter
+                    counter.current_n = current_n
+                deferred_call(update_counter)
+
+
+
 class ProcessMEMR(EpochInput):
 
     fl = d_(Float())
@@ -392,6 +450,24 @@ class ProcessSimultaneousMEMR(ProcessMEMR):
             target=cb).send
 
 
+class ProcessSweptMEMR(ProcessMEMR):
+
+    def configure_callback(self):
+        cb = super().configure_callback()
+        return process_swept_memr(
+            fl=self.fl,
+            fh=self.fh,
+            max_turntable_speed=self.max_turntable_speed,
+            probe_output=self.probe_output,
+            elicitor_output=self.elicitor_output,
+            turntable_sink=self.turntable_sink,
+            fs=self.fs,
+            counter=self.counter,
+            calibration=self.calibration,
+            status_cb=self.status_cb,
+            target=cb).send
+
+
 class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
 
     final_probe = d_(Int())
@@ -412,6 +488,8 @@ class GroupedSimultaneousMEMRPlot(GroupedEpochFFTPlot):
     def _y(self, epoch):
         n = [e for e in epoch if e.metadata['range'] == 'norm']
         e = [e for e in epoch if e.metadata['range'] == 'elicitor']
+        log.error(n)
+        log.error(e)
         n = np.array(concat(n, axis='epoch'))[:, self.channel]
         e = np.array(concat(e, axis='epoch'))[:, self.channel]
 
@@ -1592,124 +1670,120 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
             name = 'memr_counter'
             label = 'MEMRs acquired'
 
-    #Extension:
-    #    id = EXPERIMENT + '.simultaneous_memr.io'
-    #    point = 'psi.controller.io'
+    Extension:
+        id = EXPERIMENT + '.simultaneous_memr.io'
+        point = 'psi.controller.io'
 
-    #    StackRepeats:
-    #        source_name = 'memr_probe'
-    #        name = 'memr_repeat'
-    #        duration = 1 / C.probe_rate
+        StackRepeats:
+            source_name = 'memr_probe'
+            name = 'memr_repeat'
+            duration = 1 / C.probe_rate
 
-    #        ExtractStim:
-    #            # Add a bit of padding to capture the tail end of the
-    #            # probe due to acoustic delays
-    #            name = 'probe'
-    #            lb = 0.75e-3
-    #            ub = lb + C.probe_duration
+            ExtractStim:
+                # Add a bit of padding to capture the tail end of the
+                # probe due to acoustic delays
+                name = 'probe'
+                lb = 0.75e-3
+                ub = lb + C.probe_duration
 
-    #            ExtractRepeats:
-    #                name = 'probe_norm_raw'
-    #                ranges = {
-    #                    'norm': (
-    #                        int(round((C.elicitor_onset - C.norm_window) * C.probe_rate)),
-    #                        int(round(C.elicitor_onset * C.probe_rate)),
-    #                    ),
-    #                    'elicitor': (
-    #                        int(round((C.elicitor_onset + C.elicitor_noise_rise_time) * C.probe_rate)),
-    #                        int(round((C.elicitor_onset + C.elicitor_noise_rise_time + C.norm_window) * C.probe_rate)),
-    #                    )
-    #                }
+                ExtractRepeats:
+                    name = 'probe_norm_raw'
+                    ranges = {
+                        'norm': (
+                            int(round(0 * C.probe_rate)),
+                            int(round(1 * C.probe_rate)),
+                        ),
+                        'elicitor': (
+                            int(round((C.trial_duration / 2 - 0.5) * C.probe_rate)),
+                            int(round((C.trial_duration / 2 + 0.5) * C.probe_rate)),
+                        )
+                    }
 
-    #                ProcessSimultaneousMEMR: proc_memr:
-    #                    name = 'probe_norm'
-    #                    force_active = True
-    #                    fl = C.probe_fl
-    #                    fh = C.probe_fh
-    #                    max_turntable_speed = C.max_turntable_speed
-    #                    probe_output = controller.get_output('probe')
-    #                    elicitor_output = controller.get_output('elicitor')
-    #                    counter = counter
-    #                    turntable_sink = data.find_sink('turntable_store') \
-    #                        .get_ai_signal('turntable_linear_velocity')
+                    ProcessSweptMEMR: proc_memr:
+                        name = 'probe_norm'
+                        force_active = True
+                        fl = C.probe_fl
+                        fh = C.probe_fh
+                        max_turntable_speed = C.max_turntable_speed
+                        probe_output = controller.get_output('probe')
+                        elicitor_output = controller.get_output('elicitor')
+                        counter = counter
+                        turntable_sink = data.find_sink('turntable_store') \
+                            .get_ai_signal('turntable_linear_velocity')
 
+        ExtractStim:
+            source_name = 'memr_elicitor'
+            name = 'elicitor'
+            lb = 0
+            ub = C.trial_duration
 
-    #    ExtractStim:
-    #        source_name = 'memr_elicitor'
-    #        name = 'elicitor'
-    #        lb = C.elicitor_onset + C.elicitor_noise_rise_time
-    #        ub = C.elicitor_onset + C.elicitor_noise_rise_time + C.elicitor_duration - C.elicitor_noise_rise_time
+    Extension:
+        id = EXPERIMENT + '.simultaneous_memr.plots'
+        point = 'psi.data.plots'
 
-    #Extension:
-    #    id = EXPERIMENT + '.simultaneous_memr.plots'
-    #    point = 'psi.data.plots'
+        EpochTimeContainer: probe_time_container:
+            name = 'probe_time_container'
+            label = 'Probe waveform'
 
-    #    EpochTimeContainer: probe_time_container:
-    #        name = 'probe_time_container'
-    #        label = 'Probe waveform'
+            max_buttons = 4
+            fmt_button_cb << \
+                C.get_selector().get_formatter(probe_plot.tab_grouping)
 
-    #        max_buttons = 4
-    #        fmt_button_cb << \
-    #            C.get_selector().get_formatter(probe_plot.tab_grouping)
+            ViewBox: probe_time_vb:
+                name = 'probe_time_vb'
+                y_mode = 'mouse'
+                save_limits = True
 
-    #        ViewBox: probe_time_vb:
-    #            name = 'probe_time_vb'
-    #            y_mode = 'mouse'
-    #            save_limits = True
+                GroupedEpochAveragePlot: probe_plot:
+                    source_name = 'probe_norm'
+                    plot_grouping = ['range']
+                    plot_keys = [('norm',), ('elicitor',)]
+                    autogenerate_keys = 'neither'
 
-    #            GroupedEpochAveragePlot: probe_plot:
-    #                source_name = 'probe_norm'
-    #                plot_grouping = ['range']
-    #                plot_keys = [('norm',), ('elicitor',)]
-    #                autogenerate_keys = 'tab'
-    #                tab_grouping << C.get_names()
+        FFTContainer: probe_fft_container:
+            name = 'probe_fft_container'
+            label = 'Probe and Elicitor PSD'
+            freq_lb = 0.5e3
+            freq_ub = 50e3
 
-    #    FFTContainer: probe_fft_container:
-    #        name = 'probe_fft_container'
-    #        label = 'Probe and Elicitor PSD'
-    #        freq_lb = 0.5e3
-    #        freq_ub = 50e3
+            max_buttons = 4
+            fmt_button_cb << \
+                C.get_selector().get_formatter(probe_fft_plot.tab_grouping)
 
-    #        max_buttons = 4
-    #        fmt_button_cb << \
-    #            C.get_selector().get_formatter(probe_fft_plot.tab_grouping)
+            ViewBox:
+                name = 'probe_fft_vb'
+                y_mode = 'mouse'
+                save_limits = True
 
-    #        ViewBox:
-    #            name = 'probe_fft_vb'
-    #            y_mode = 'mouse'
-    #            save_limits = True
+                GroupedEpochFFTPlot: probe_fft_plot:
+                    source_name = 'probe_norm'
+                    plot_grouping = ['range']
+                    plot_keys = [('norm',), ('elicitor',)]
+                    autogenerate_keys = 'neither'
+                    apply_calibration = True
+                    average_mode = 'time'
 
-    #            GroupedEpochFFTPlot: probe_fft_plot:
-    #                source_name = 'probe_norm'
-    #                plot_grouping = ['range']
-    #                plot_keys = [('norm',), ('elicitor',)]
-    #                autogenerate_keys = 'tab'
-    #                tab_grouping << C.get_names()
-    #                apply_calibration = True
-    #                average_mode = 'time'
+                GroupedEpochFFTPlot: elicitor_fft_plot:
+                    source_name = 'elicitor'
+                    apply_calibration = True
+                    autogenerate_keys = 'neither'
+                    pen_color_cycle = ['k']
+                    waveform_averages = 10
 
-    #            GroupedEpochFFTPlot: elicitor_fft_plot:
-    #                source_name = 'elicitor'
-    #                tab_grouping << C.get_names()
-    #                apply_calibration = True
-    #                pen_color_cycle = ['k']
-    #                waveform_averages = 10
+        FFTContainer:
+            name = 'memr_fft_container'
+            label = 'MEMR'
+            freq_lb = 4e3
+            freq_ub = 32e3
 
-    #    FFTContainer:
-    #        name = 'memr_fft_container'
-    #        label = 'MEMR'
-    #        freq_lb = 4e3
-    #        freq_ub = 32e3
+            ViewBox:
+                name = 'memr_fft_vb'
+                y_mode = 'mouse'
+                y_min = -3
+                y_max = 3
 
-    #        ViewBox:
-    #            name = 'memr_fft_vb'
-    #            y_mode = 'mouse'
-    #            y_min = -3
-    #            y_max = 3
-
-    #            GroupedSimultaneousMEMRPlot:
-    #                name = 'memr_fft_plot'
-    #                source_name = 'probe_norm'
-    #                plot_grouping << C.get_names()
-    #                pen_width = 2
-    #                pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'
+                GroupedSimultaneousMEMRPlot:
+                    name = 'memr_fft_plot'
+                    source_name = 'probe_norm'
+                    pen_width = 2
+                    pen_color_cycle = 'palettable.scientific.sequential.LaJolla_3'
