@@ -231,6 +231,8 @@ class ProcessManager(Atom):
             process['state'] = 'connected'
             # Start the subprocess if it is the first one in the list to run.
             if self.autostart:
+                mesg = {'command': 'psi.show_window'}
+                self.ws_server.send_message(mesg, process['client_id'])
                 mesg = {'command': 'psi.controller.start'}
                 self.ws_server.send_message(mesg, process['client_id'])
         elif message['event'] == 'experiment_start':
