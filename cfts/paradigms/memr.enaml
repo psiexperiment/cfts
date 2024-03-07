@@ -199,7 +199,7 @@ class ExtractStim(EpochInput):
 
 
 @coroutine
-def process_interleaved_memr(fl, fh, reject_threshold, 
+def process_interleaved_memr(fl, fh, reject_threshold, min_probe_corr,
                              max_turntable_speed, probe_output,
                              elicitor_output, turntable_sink, fs, counter,
                              calibration, status_cb, target):
@@ -215,6 +215,9 @@ def process_interleaved_memr(fl, fh, reject_threshold,
         (remember to factor in noise floor of microphone). The noise level of
         the silent segment is calculated only over the frequency range spanning
         fl to fh.
+    min_probe_corr : float
+        Reject trial if correlation between probe segments is less than this
+        threshold.
     max_turntable_speed : float
         Reject trial if turntable speed exceeds this value in cm/s.
     status_cb : callable
@@ -248,6 +251,9 @@ def process_interleaved_memr(fl, fh, reject_threshold,
             status_cb(True)
         elif (silence_rms > reject_threshold):
             log.info('Rejecting trial since silent period RMS is %.2f', silence_rms)
+            status_cb(True)
+        elif (probe_corr < min_probe_corr):
+            log.info('Rejecting trial since probe corr is %.2f', probe_corr)
             status_cb(True)
         else:
             target(data)
@@ -406,6 +412,7 @@ class ProcessMEMR(EpochInput):
 class ProcessInterleavedMEMR(ProcessMEMR):
 
     reject_threshold = d_(Float())
+    min_probe_corr = d_(Float(0.5))
 
     def configure_callback(self):
         cb = super().configure_callback()
@@ -413,6 +420,7 @@ class ProcessInterleavedMEMR(ProcessMEMR):
             fl=self.fl,
             fh=self.fh,
             reject_threshold=self.reject_threshold,
+            min_probe_corr=self.min_probe_corr,
             max_turntable_speed=self.max_turntable_speed,
             probe_output=self.probe_output,
             elicitor_output=self.elicitor_output,
@@ -696,11 +704,16 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
         ContextRow:
             name = 'artifact_reject'
             group_name = 'memr'
-            fmt = ['Reject if silent interval level >', max_silence_db]
+            fmt = ['Reject if probe. corr <', min_probe_corr,
+                   'or silent interval level >', max_silence_db]
 
             Parameter: max_silence_db:
                 name = 'max_silence_db'
                 default = 50
+
+            Parameter: min_probe_corr:
+                name = 'min_probe_corr'
+                default = 0.5
 
         Parameter:
             name = 'max_turntable_speed'
@@ -994,6 +1007,7 @@ enamldef InterleavedMEMRManifest(BaseMEMRManifest): manifest:
                     fl = C.probe_fl
                     fh = C.probe_fh
                     reject_threshold = C.max_silence_db
+                    min_probe_corr = C.min_probe_corr
                     max_turntable_speed = C.max_turntable_speed
                     probe_output = controller.get_output('probe')
                     elicitor_output = controller.get_output('elicitor')
