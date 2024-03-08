@@ -19,7 +19,7 @@ from psiaudio.queue import InterleavedFIFOSignalQueue
 from psiaudio import util
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
-                             EnumParameter, Expression, Parameter)
+                             EnumParameter, Expression, ImportedSymbol, Parameter)
 from psi.controller.api import (
     Blocked, ChannelOutOfRange, ContinuousInput, ControllerManifest, Coroutine,
     EpochInput, ExperimentAction, ExtractEpochs, Synchronized,
@@ -1591,12 +1591,16 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
         ContextRow:
             group_name = 'memr'
 
-            fmt = ['Ramp to', max_level, 'db SPL at', ramp_rate,
+            fmt = ['Ramp from', min_level, 'to', max_level, 'db SPL at', ramp_rate,
                    'dB/s, repeat', trial_n, 'times every', trial_iti, 's']
 
             Parameter: ramp_rate:
                 name = 'ramp_rate'
                 default = 17.5
+
+            Parameter: min_level:
+                name = 'min_level'
+                default = 10
 
             Parameter: max_level:
                 name = 'max_level'
@@ -1628,6 +1632,10 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
             group_name = 'memr'
 
         Expression:
+            parameter = 'probe_n'
+            expression = 'int(trial_duration * probe_rate)'
+
+        Expression:
             parameter = 'elicitor_noise_duration'
             expression = 'trial_duration'
 
@@ -1638,10 +1646,6 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
         Expression:
             parameter = 'trial_duration'
             expression = '2 * max_level / ramp_rate'
-
-        Expression:
-            parameter = 'probe_n'
-            expression = 'int(trial_duration * probe_rate)'
 
         Expression:
             parameter = 'elicitor_bandlimited_noise_fl'
@@ -1662,6 +1666,10 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
         Expression:
             parameter = 'elicitor_bandlimited_noise_audiogram_weighting'
             expression = 'elicitor_audiogram_weighting'
+
+        Expression:
+            parameter = 'elicitor_noise_transform'
+            expression = 'lambda x: dbi((max_level - min_level) * (x - 1))'
 
     Extension:
         id = EXPERIMENT + '.swept_memr.sinks'
