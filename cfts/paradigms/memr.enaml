@@ -717,7 +717,7 @@ enamldef InterleavedElicitorMixin(ExperimentManifest):
 
         Parameter:
             name = 'max_turntable_speed'
-            label = 'Max. turntable speed (cm/s)'
+            label = 'Max speed (cm/s)'
             default = 0.5
             group_name = 'memr'
 
@@ -1384,7 +1384,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest): manifest:
 
         Parameter:
             name = 'max_turntable_speed'
-            label = 'Max. turntable speed (cm/s)'
+            label = 'Max speed (cm/s)'
             default = 0.5
             group_name = 'memr'
 
@@ -1623,7 +1623,7 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
 
         Parameter:
             name = 'max_turntable_speed'
-            label = 'Max. turntable speed (cm/s)'
+            label = 'Max speed (cm/s)'
             default = 0.5
             group_name = 'memr'
 
