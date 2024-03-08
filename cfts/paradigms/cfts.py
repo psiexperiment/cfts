@@ -8,6 +8,7 @@ CORE_PATH = 'psi.paradigms.core.'
 
 
 COMMON_PLUGINS = [
+    {'manifest': CFTS_PATH + 'metadata_mixins.MetadataManifest', 'required': True},
     {'manifest': CORE_PATH + 'websocket_mixins.WebsocketClientManifest', 'required': True},
     {'manifest': CFTS_PATH + 'cfts_mixins.DebugCalibration', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'cfts_mixins.CalibrationMicrophone', 'required': False, 'info': {'hide': True}},

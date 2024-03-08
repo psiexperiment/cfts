@@ -1,0 +1,29 @@
+from enaml.workbench.api import Extension
+
+from psi.core.enaml.api import ExperimentManifest
+from psi.experiment.api import MetadataItem
+
+import cfts.version
+import cftscal.version
+import cftsdata.version
+
+
+enamldef MetadataManifest(ExperimentManifest):
+
+    id = 'cfts.metadata'
+
+    Extension:
+        id = 'cfts.metadata'
+        point = 'psi.experiment.metadata'
+
+        MetadataItem:
+            name = 'version.cfts'
+            value = cfts.version.__version__
+
+        MetadataItem:
+            name = 'version.cftsdata'
+            value = cftsdata.version.__version__
+
+        MetadataItem:
+            name = 'version.cftscal'
+            value = cftscal.version.__version__
