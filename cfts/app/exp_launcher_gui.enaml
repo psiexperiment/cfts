@@ -763,7 +763,6 @@ enamldef ExperimentSequence(Container): experiment_box:
                                 if not p.required and not p.info.get('hide', False)]
                 constraints = [width == 30]
                 text = '⚙'
-                visible = bool(plugins)
                 clicked ::
                     popup = PluginPopup(parent=self,
                                         experiment=loop_item,
