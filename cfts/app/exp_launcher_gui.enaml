@@ -885,6 +885,7 @@ enamldef ExperimentInfo(GroupBox):
         text = 'Standard notes'
 
     AddRemoveCombo: standard_note:
+        selected := settings.standard_note
         items << settings.standard_notes
         items ::
             settings.standard_notes = items[:]
