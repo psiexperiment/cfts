@@ -1530,9 +1530,9 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
             }
             BandlimitedFIRNoise:
                 values = {
-                    'polarity': 1,
                     'seed': 1,
                 }
+                hide = ['polarity']
 
         Repeat: probe:
             name = 'click'
