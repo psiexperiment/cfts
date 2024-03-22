@@ -1562,7 +1562,8 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
 
         Expression:
             parameter = 'probe_click_delay'
-            expression = '((trial_duration / 2 * probe_rate) % 1) / probe_rate - probe_bandlimited_click_window / 2'
+            #expression = '((trial_duration / 2 * probe_rate) % 1) / probe_rate - probe_bandlimited_click_window / 2'
+            expression = '0'
 
         Expression:
             parameter = 'probe_bandlimited_click_flb'
@@ -1645,7 +1646,7 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
 
         Expression:
             parameter = 'trial_duration'
-            expression = '2 * max_level / ramp_rate'
+            expression = '2 * (max_level - min_level) / ramp_rate'
 
         Expression:
             parameter = 'elicitor_bandlimited_noise_fl'
