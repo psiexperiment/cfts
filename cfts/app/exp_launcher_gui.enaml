@@ -333,6 +333,7 @@ class Settings(Atom):
     record_output_monitor = Bool(False)
     show_output_monitor = Bool(False)
     record_body_temperature = Bool(True)
+    swap_outputs = Bool(False)
 
     #: How should speakers be configured?
     #: * in-ear - Perform in-ear calibration before starting experiment. Specify
@@ -443,6 +444,9 @@ class Settings(Atom):
 
         if self.show_output_monitor:
             args.extend(['--plugin', 'output_monitor_view'])
+
+        if self.swap_outputs:
+            args.extend(['--plugin', 'swap_outputs'])
 
         if self.record_body_temperature:
             for p in experiment.paradigm.plugins:
@@ -965,6 +969,10 @@ enamldef Main(MainWindow): main:
                             checked << settings.logging_level == loop_item
             Action:
                 separator = True
+            Action:
+                text = 'Swap primary/secondary outputs'
+                checkable = True
+                checked := settings.swap_outputs
             Action:
                 text = '&Record calibration microphone'
                 checkable = True
