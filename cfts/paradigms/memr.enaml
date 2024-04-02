@@ -1525,7 +1525,6 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
             values = {
                 'start_time': 0,
                 'envelope': 'bartlett',
-                'transform': lambda x: x ** 10,
                 'rise_time': None,
             }
             BandlimitedFIRNoise:
