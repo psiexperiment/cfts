@@ -15,6 +15,7 @@ COMMON_PLUGINS = [
     {'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitor', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitorView', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'cfts_mixins.SwapOutputs', 'required': False, 'info': {'hide': True}},
+    {'manifest': CFTS_PATH + 'video.PSIVideo', 'required': False},
 ]
 
 
