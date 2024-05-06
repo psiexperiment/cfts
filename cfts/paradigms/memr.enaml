@@ -349,44 +349,32 @@ def process_swept_memr(fl, fh, max_turntable_speed, probe_output,
         Callable taking a single argument. True indicates trial was rejected.
         False indicates trial was accepted.
     '''
+    trial = 0
     while True:
         data = (yield)
+        data.add_metadata('trial', trial)
+        trial += 1
 
         times = np.array([m['t0_actual'] for m in data.metadata])
         duration = np.mean(np.diff(times))
-        #speed = turntable_sink.get_segments(times, offset=0, duration=duration,
-        #                                    preload=False, allow_partial=True)
-        #keep_mask = list(speed.max(axis=1).values < max_turntable_speed)
-        #original_ranges = Counter([m['range'] for m in data.metadata])
-        #data = data[np.flatnonzero(keep_mask)]
-        #valid_ranges = Counter([m['range'] for m in data.metadata])
-        #log.info(len(data))
-        #log.info(len(data.metadata))
-        #log.info(valid_ranges)
-        #log.info(original_ranges)
+        target(data)
+        status_cb(False)
+        with probe_output.engine.lock, elicitor_output.engine.lock:
+            probe_uuid = data[0].metadata['key']
+            elicitor_uuid = data[0].metadata['elicitor_uuid']
+            try:
+                probe_output.queue.decrement_key(probe_uuid)
+                elicitor_output.queue.decrement_key(elicitor_uuid)
+            except Exception as e:
+                pass
 
-        if False:
-            pass
-        else:
-            target(data)
-            status_cb(False)
-            with probe_output.engine.lock, elicitor_output.engine.lock:
-                probe_uuid = data[0].metadata['key']
-                elicitor_uuid = data[0].metadata['elicitor_uuid']
-                try:
-                    probe_output.queue.decrement_key(probe_uuid)
-                    elicitor_output.queue.decrement_key(elicitor_uuid)
-                except Exception as e:
-                    pass
-
-                current_n = probe_output.queue.count_requested_trials() \
-                    - probe_output.queue.count_trials()
-                def update_counter():
-                    nonlocal current_n
-                    nonlocal counter
-                    counter.current_n = current_n
-                deferred_call(update_counter)
-
+            current_n = probe_output.queue.count_requested_trials() \
+                - probe_output.queue.count_trials()
+            def update_counter():
+                nonlocal current_n
+                nonlocal counter
+                counter.current_n = current_n
+            deferred_call(update_counter)
 
 
 class ProcessMEMR(EpochInput):
@@ -484,6 +472,7 @@ class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
 
 
 class GroupedSimultaneousMEMRPlot(GroupedEpochFFTPlot):
+    # This is also used for the SweptMEMRPlot
 
     def _y(self, epoch):
         n = [e for e in epoch if e.metadata['range'] == 'norm']
@@ -1615,6 +1604,12 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
                 default = 1
 
         Parameter:
+            label = 'Trial plot group (N)'
+            name = 'trial_plot_grouping'
+            default = 4
+            group_name = 'memr'
+
+        Parameter:
             name = 'trial_duration'
             label = 'Trial duration'
             group_name = 'memr'
@@ -1792,6 +1787,11 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
                 y_max = 3
 
                 GroupedSimultaneousMEMRPlot:
+                    plot_keys = [(k,) for k in range(C.trial_n // C.trial_plot_grouping)]
+                    group_key => (md):
+                        return (), (md['trial'] // C.trial_plot_grouping,)
+
+                    autogenerate_keys = 'neither'
                     name = 'memr_fft_plot'
                     source_name = 'probe_norm'
                     pen_width = 2
