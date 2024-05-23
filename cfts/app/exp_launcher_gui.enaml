@@ -539,7 +539,8 @@ class Settings(Atom):
                 # always a hack to put in the file).
                 s.pop('label', None)
                 s.pop('modes', None)
-                s['mode_notes'] = {k.lower(): v for k, v in s['mode_notes'].items()}
+                mode_notes = s.get('mode_notes', {})
+                s['mode_notes'] = {k.lower(): v for k, v in mode_notes.items()}
                 if mode == 'classic':
                     exp = Experiment(**s)
                 else:
