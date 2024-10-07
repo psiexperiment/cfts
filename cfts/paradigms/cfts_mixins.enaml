@@ -112,6 +112,14 @@ CONTEXT_ITEM_DETAIL = {
         'order_user_managed': True,
     },
 
+    # Click ABR
+    'target_click_level': {
+        'user_friendly_name': 'level',
+        'step_unit': 'dB',
+        'unit': 'dB SPL',
+        'order_user_managed': True,
+    },
+
     # SAM/RAM EFR
     'fm': {
         'user_friendly_name': 'modulation frequency',

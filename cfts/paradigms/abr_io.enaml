@@ -36,7 +36,7 @@ def add_setting(target, setting, averages, iti, key_map):
     key_map.setdefault(freq, []).append(key)
 
 
-def configure_experiment(key_map, event):
+def configure_experiment_tone(key_map, event):
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
     target = controller.get_output('target')
@@ -131,6 +131,63 @@ def configure_experiment(key_map, event):
     counter.requested_group_n = averages
 
 
+def configure_experiment_click(key_map, event):
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    target = controller.get_output('target')
+
+    duration = context.get_value('target_click_duration')
+    polarity = context.get_value('target_click_polarity')
+    target_averages = context.get_value('averages')
+
+    rate = context.get_value('rate')
+    if (polarity == 'alternating') and (averages % 2):
+        # Round to the nearest multiple of 2
+        averages = (round(averages/2) + 1) * 2
+
+    # Compensate for the tone duration. ITI is the time from tone offset to
+    # tone offset. Do sanity check while at it.
+    iti = 1/rate - tone_duration
+    if iti <= 0:
+        raise ValueError('Repetition rate is too fast')
+
+    # Configure the queues
+    if polarity == 'alternating':
+        target.queue = queue.GroupedFIFOSignalQueue(group_size=2)
+    else:
+        target.queue = queue.FIFOSignalQueue()
+
+    settings = list(context.iter_settings('default', 1))
+
+    key_map.clear()
+    if polarity == 'condensation':
+        for setting in settings:
+            setting['target_click_polarity'] = 1
+            add_setting(target, setting, averages, iti, key_map)
+    elif polarity == 'rarefaction':
+        for setting in settings:
+            setting['target_click_polarity'] = -1
+            add_setting(target, setting, averages, iti, key_map)
+    elif polarity == 'alternating':
+        for setting in settings:
+            setting['target_click_polarity'] = 1
+            add_setting(target, setting, averages / 2, iti, key_map)
+            setting['target_click_polarity'] = -1
+            add_setting(target, setting, averages / 2, iti, key_map)
+
+    # Set the expected range given the maximum click level. This will trigger
+    # some checks that ensure tha tthe max_sf is achievable prior to actually
+    # starting the experiment.
+    max_level = max(s['target_click_level'] for s in settings)
+    max_sf = target.calibration.get_sf(0, max_level)
+    target.channel.expected_range = (-max_sf, max_sf)
+
+    data = event.workbench.get_plugin('psi.data')
+    counter = data.find_sink('valid_erp_counter')
+    counter.requested_n = target.queue.count_requested_trials()
+    counter.requested_group_n = averages
+
+
 def next_frequency(key_map, event):
     controller = event.workbench.get_plugin('psi.controller')
     output = controller.get_output('target')
@@ -204,54 +261,12 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
             name = 'acquisition'
             label = 'Acquisition'
 
-        ContextRow:
-            name = 'averaging'
-            group_name = 'acquisition'
-            fmt = ['Average', averages, 'trials at', rate,
-                   'per sec. and alternate polarity?', alt_pol]
-
-            Parameter: averages:
-                name = 'averages'
-                label = 'Averages'
-                default = 512
-                scope = 'trial'
-
-            Parameter: rate:
-                name = 'rate'
-                label = 'Reps. per sec.'
-                default = 80
-                scope = 'trial'
-
-            BoolParameter: alt_pol:
-                name = 'alternate_polarity'
-                label = 'Alternate polarity?'
-                default = True
-                scope = 'experiment'
-
-        EnumParameter:
-            name = 'ordering'
-            label = 'Stimulus ordering'
-            choices = {
-                'conventional': '"sequential"',
-                'interleaved plateau': '"interleaved_plateau"',
-                'interleaved ramp': '"interleaved_ramp"',
-                'interleaved random': '"interleaved_random"',
-            }
-            scope = 'experiment'
-            group_name = 'acquisition'
-
     Extension:
         id = EXPERIMENT + '.commands'
         point = 'enaml.workbench.core.commands'
         Command:
-            id = EXPERIMENT + '.next_frequency'
-            handler = partial(next_frequency, manifest.key_map)
-        Command:
             id = EXPERIMENT + '.rebuffer'
             handler = rebuffer
-        Command:
-            id = 'psi.controller.configure_experiment'
-            handler = partial(configure_experiment, manifest.key_map)
 
     Extension:
         id = EXPERIMENT + '.actions'
@@ -303,8 +318,72 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
                     selected_tab := time_container.current_button
                     auto_select := time_container.auto_select
 
+
+enamldef ABRIOToneSimpleManifest(ABRIOBaseManifest): manifest:
+
+    token_name = 'tone_burst'
+
     Extension:
-        id = EXPERIMENT + '.abr_io.toolbar'
+        id = EXPERIMENT_SIMPLE + '.tone.selectors'
+        point = 'psi.context.selectors'
+
+        CFTSSelector:
+            label = 'ABR stimuli'
+            can_manage = ['target_tone_frequency', 'target_tone_level']
+            user_managed = False
+
+    Extension:
+        id = EXPERIMENT_SIMPLE + '.tone.items'
+        point = 'psi.context.items'
+
+        EnumParameter:
+            name = 'ordering'
+            label = 'Stimulus ordering'
+            choices = {
+                'conventional': '"sequential"',
+                'interleaved plateau': '"interleaved_plateau"',
+                'interleaved ramp': '"interleaved_ramp"',
+                'interleaved random': '"interleaved_random"',
+            }
+            scope = 'experiment'
+            group_name = 'acquisition'
+
+        ContextRow:
+            name = 'averaging'
+            group_name = 'acquisition'
+            fmt = ['Average', averages, 'trials at', rate,
+                   'per sec. and alternate polarity?', alt_pol]
+
+            Parameter: averages:
+                name = 'averages'
+                label = 'Averages'
+                default = 512
+                scope = 'trial'
+
+            Parameter: rate:
+                name = 'rate'
+                label = 'Reps. per sec.'
+                default = 80
+                scope = 'trial'
+
+            BoolParameter: alt_pol:
+                name = 'alternate_polarity'
+                label = 'Alternate polarity?'
+                default = True
+                scope = 'experiment'
+
+    Extension:
+        id = EXPERIMENT + '.tone.commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = EXPERIMENT + '.next_frequency'
+            handler = partial(next_frequency, manifest.key_map)
+        Command:
+            id = 'psi.controller.configure_experiment'
+            handler = partial(configure_experiment_tone, manifest.key_map)
+
+    Extension:
+        id = EXPERIMENT + '.abr_io.tone.toolbar'
         point = 'psi.experiment.toolbar'
 
         ToolBar:
@@ -317,24 +396,54 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
                     core.invoke_command(EXPERIMENT + '.next_frequency')
 
 
-enamldef ABRIOManifest(ABRIOBaseManifest): manifest:
+enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
+
+    token_name = 'click'
 
     Extension:
-        id = EXPERIMENT + '.selectors'
-        point = 'psi.context.selectors'
-
-        CartesianProduct:
-            name = 'default'
-            label = 'ABR sequence'
-
-
-enamldef ABRIOSimpleManifest(ABRIOBaseManifest): manifest:
-
-    Extension:
-        id = EXPERIMENT_SIMPLE + '.selectors'
+        id = EXPERIMENT_SIMPLE + '.click.selectors'
         point = 'psi.context.selectors'
 
         CFTSSelector:
             label = 'ABR stimuli'
-            can_manage = ['target_tone_frequency', 'target_tone_level']
+            can_manage = ['target_click_level']
             user_managed = False
+
+    Extension:
+        id = EXPERIMENT_SIMPLE + '.click.items'
+        point = 'psi.context.items'
+
+        ContextRow:
+            name = 'averaging'
+            group_name = 'acquisition'
+            fmt = ['Average', averages, 'trials at', rate,
+                   'per sec. with', polarity, 'polarity']
+
+            Parameter: averages:
+                name = 'averages'
+                label = 'Averages'
+                default = 512
+                scope = 'trial'
+
+            Parameter: rate:
+                name = 'rate'
+                label = 'Reps. per sec.'
+                default = 80
+                scope = 'trial'
+
+            EnumParameter: polarity:
+                name = 'polarity'
+                label = 'Click polarity'
+                choices = {
+                    'condensation': '"condensation"',
+                    'rarefaction': '"rarefaction"',
+                    'alternating': '"alternating"',
+                }
+                scope = 'trial'
+
+    Extension:
+        id = EXPERIMENT + '.click.commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'psi.controller.configure_experiment'
+            handler = partial(configure_experiment_click, manifest.key_map)

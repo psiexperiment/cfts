@@ -173,10 +173,10 @@ ParadigmDescription(
 
 ParadigmDescription(
     # This is the default, simple ABR experiment that most users will want.  
-    'abr_io', 'ABR', 'ear', [
+    'abr_io', 'ABR (tone)', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,
-        {'manifest': CFTS_PATH + 'abr_io.ABRIOSimpleManifest'},
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOToneSimpleManifest'},
         temperature_mixin,
         eeg_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
@@ -185,6 +185,23 @@ ParadigmDescription(
     ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
+
+
+ParadigmDescription(
+    # This is the default, simple ABR experiment that most users will want.  
+    'abr_io_click', 'ABR (click)', 'ear', [
+        eeg_dec_mixin,
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest'},
+        temperature_mixin,
+        eeg_view_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
+         'info': {'hide': True}
+         },
+    ] + COMMON_PLUGINS,
+    info={'modes': ['run']},
+)
+
 
 
 ParadigmDescription(
