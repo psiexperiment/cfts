@@ -17,7 +17,7 @@ from psi.context.api import (ContextGroup, FriendlyCartesianProduct, Parameter,
 from psi.controller.api import (Callback, ContinuousInput, Downsample,
                                 ExperimentAction, get_hw_ai_choices,
                                 get_hw_ao_choices, IIRFilter)
-from psi.controller.calibration.api import ChirpCalibrate, ToneCalibrate
+from psi.controller.calibration.api import ChirpCalibrate, ClickCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
 from psi.data.sinks.api import BinaryStore
 from psi.experiment.api import StatusItem
@@ -270,6 +270,41 @@ enamldef ABRInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): manife
 
     experiment = 'abr'
     outputs = {'target': ['target_tone_frequency']}
+
+
+enamldef ABRClickInEarCalibrationMixinManifest(ExperimentManifest): manifest:
+
+    attr experiment = 'abr_click'
+    attr microphone_channel = 'system_microphone'
+
+    id = f'{experiment}_inear_calibration'
+    title = 'In-ear calibration'
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'inear_calibration'
+            label = 'In-ear calibration'
+
+            Parameter:
+                name = 'calibration_gain'
+                label = 'Gain (dB)'
+                dtype = 'float'
+                default = -30
+
+    Extension:
+        id = manifest.id + '.calibration'
+        point = 'psi.controller.calibration.channels'
+
+        ClickCalibrate:
+            name = f'abr_click_calibration'
+            label = 'Click calibration'
+            input_name << manifest.microphone_channel
+            gain << C.calibration_gain
+            outputs = {'target': []}
+            duration = 100e-6
 
 
 enamldef DPOAEInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): manifest:

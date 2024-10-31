@@ -14,7 +14,8 @@ from psiaudio import queue
 from psiaudio.util import interleave_octaves
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
-                             EnumParameter, OrderedContextMeta, Parameter)
+                             EnumParameter, Expression, OrderedContextMeta,
+                             Parameter)
 
 from psi.context.selector import CartesianProduct
 from psi.controller.api import EngineStoppedException, ExperimentAction
@@ -136,9 +137,9 @@ def configure_experiment_click(key_map, event):
     controller = event.workbench.get_plugin('psi.controller')
     target = controller.get_output('target')
 
-    duration = context.get_value('target_click_duration')
-    polarity = context.get_value('target_click_polarity')
-    target_averages = context.get_value('averages')
+    duration = context.get_value('click_duration')
+    polarity = context.get_value('click_polarity')
+    averages = context.get_value('averages')
 
     rate = context.get_value('rate')
     if (polarity == 'alternating') and (averages % 2):
@@ -147,7 +148,7 @@ def configure_experiment_click(key_map, event):
 
     # Compensate for the tone duration. ITI is the time from tone offset to
     # tone offset. Do sanity check while at it.
-    iti = 1/rate - tone_duration
+    iti = 1/rate - duration
     if iti <= 0:
         raise ValueError('Repetition rate is too fast')
 
@@ -158,22 +159,20 @@ def configure_experiment_click(key_map, event):
         target.queue = queue.FIFOSignalQueue()
 
     settings = list(context.iter_settings('default', 1))
-
-    key_map.clear()
     if polarity == 'condensation':
         for setting in settings:
             setting['target_click_polarity'] = 1
-            add_setting(target, setting, averages, iti, key_map)
+            target.add_setting(setting, averages, iti)
     elif polarity == 'rarefaction':
         for setting in settings:
             setting['target_click_polarity'] = -1
-            add_setting(target, setting, averages, iti, key_map)
+            target.add_setting(setting, averages, iti)
     elif polarity == 'alternating':
         for setting in settings:
             setting['target_click_polarity'] = 1
-            add_setting(target, setting, averages / 2, iti, key_map)
+            target.add_setting(setting, averages / 2, iti)
             setting['target_click_polarity'] = -1
-            add_setting(target, setting, averages / 2, iti, key_map)
+            target.add_setting(setting, averages / 2, iti)
 
     # Set the expected range given the maximum click level. This will trigger
     # some checks that ensure tha tthe max_sf is achievable prior to actually
@@ -181,6 +180,7 @@ def configure_experiment_click(key_map, event):
     max_level = max(s['target_click_level'] for s in settings)
     max_sf = target.calibration.get_sf(0, max_level)
     target.channel.expected_range = (-max_sf, max_sf)
+    log.error(f'Setting max range to {max_sf}')
 
     data = event.workbench.get_plugin('psi.data')
     counter = data.find_sink('valid_erp_counter')
@@ -413,11 +413,19 @@ enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
         id = EXPERIMENT_SIMPLE + '.click.items'
         point = 'psi.context.items'
 
+        Expression:
+            parameter = 'target_click_polarity'
+            expression = 'click_polarity'
+
+        Expression:
+            parameter = 'target_click_duration'
+            expression = 'click_duration'
+
         ContextRow:
             name = 'averaging'
             group_name = 'acquisition'
-            fmt = ['Average', averages, 'trials at', rate,
-                   'per sec. with', polarity, 'polarity']
+            fmt = ['Average', averages, duration, 's clicks at', rate,
+                   '/sec. with', polarity, 'polarity']
 
             Parameter: averages:
                 name = 'averages'
@@ -431,8 +439,13 @@ enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
                 default = 80
                 scope = 'trial'
 
+            Parameter: duration:
+                name = 'click_duration'
+                default = 100e-6
+                scope = 'trial'
+
             EnumParameter: polarity:
-                name = 'polarity'
+                name = 'click_polarity'
                 label = 'Click polarity'
                 choices = {
                     'condensation': '"condensation"',

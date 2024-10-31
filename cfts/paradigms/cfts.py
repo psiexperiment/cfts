@@ -195,7 +195,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest'},
         temperature_mixin,
         eeg_view_mixin,
-        {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
+        {'manifest': CFTS_PATH + 'cfts_mixins.ABRClickInEarCalibrationMixinManifest',
          'info': {'hide': True}
          },
     ] + COMMON_PLUGINS,
