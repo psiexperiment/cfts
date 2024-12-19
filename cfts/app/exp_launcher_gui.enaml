@@ -16,12 +16,14 @@ from atom.api import (
 )
 from enaml.application import timed_call
 from enaml.core.api import Conditional, Looper
+from enaml.drag_drop import DragData, DropAction
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
+from enaml.styling import StyleSheet, Style, Setter
 from enaml.widgets.api import (
-    Action, ActionGroup, ButtonGroup, CheckBox, Container, Field, FileDialogEx,
-    Form, GroupBox, HGroup, Label, MainWindow, Menu, MenuBar, Notebook,
-    ObjectCombo, Page, PopupView, PushButton, VGroup,
+    Action, ActionGroup, ButtonGroup, CheckBox, Container, Feature, Field,
+    FileDialogEx, Form, GroupBox, HGroup, Label, MainWindow, Menu, MenuBar,
+    Notebook, ObjectCombo, Page, PopupView, PushButton, VGroup,
 )
 
 from psi import get_config, get_config_folder
@@ -309,6 +311,9 @@ class Settings(Atom):
     #: Create a process manager that will handle communication with experiment
     #: subprocesses.
     process_manager = Typed(ProcessManager, ())
+
+    def move_sequence_item_to(self, i, j):
+        pass
 
     def _observe_current_sequence_name(self, event):
         # This is needed to sync up changes where we select the sequence from the
@@ -674,6 +679,14 @@ enamldef ExperimentSequence(Container): experiment_box:
     attr settings
     attr autostart = False
 
+    StyleSheet:
+        Style:
+            element = 'Container'
+            style_class = 'hover'
+            Setter:
+                field = 'background'
+                value = 'lightblue'
+
     layout_constraints => ():
         # Align the subwidgets vertically
         widgets = self.visible_widgets()
@@ -687,8 +700,45 @@ enamldef ExperimentSequence(Container): experiment_box:
     Looper: exp_loop:
         iterable << experiment_box.sequence
 
-        Container:
+        Container: row:
             share_layout = True
+            style_class = ''
+
+            features << (Feature.DropEnabled | Feature.DragEnabled)
+
+            drag_start => ():
+                if not edit_mode:
+                    return
+                data = DragData()
+                data.supported_actions = DropAction.Copy
+                i = experiment_box.sequence.index(loop_item)
+                data.mime_data.set_data('text/plain', f'::experiment::{i}'.encode('utf-8'))
+                return data
+
+            drag_enter => (event):
+                if not edit_mode:
+                    return
+                if event.mime_data().has_format('text/plain'):
+                    data = event.mime_data().data('text/plain').decode('utf-8')
+                    if not data.startswith('::experiment::'):
+                        return
+                    else:
+                        self.style_class = 'hover'
+                        event.accept_proposed_action()
+
+            drag_leave => ():
+                self.style_class = ''
+
+            drop => (event):
+                if not edit_mode:
+                    return
+                self.style_class = ''
+                data = event.mime_data().data('text/plain').decode('utf-8')
+                i = int(data.rsplit('::', 1)[1])
+                j = experiment_box.sequence.index(loop_item)
+                sequence = experiment_box.sequence[:]
+                sequence.insert(j, sequence.pop(i))
+                experiment_box.sequence = sequence
 
             layout_constraints => ():
                 widgets = self.visible_widgets()
