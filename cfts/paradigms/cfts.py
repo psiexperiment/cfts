@@ -94,6 +94,40 @@ eeg_view_mixin_required = eeg_view_mixin.copy()
 eeg_view_mixin_required['required'] = True
 
 
+eeg_fft_view_mixin = {
+    'manifest': CORE_PATH + 'signal_mixins.SignalFFTViewManifest',
+    'attrs': {
+        'id': 'eeg_fft_view',
+        'title': 'EEG PSD',
+        'fft_time_span': 1,
+        'fft_freq_lb': 10,
+        'fft_freq_ub': 10000,
+        'source_name': 'eeg',
+        'y_label': 'EEG (dB re 1Vrms)',
+        # Show 60 Hz plus harmonics.
+        'vlines': [
+            {
+                'position': 60,
+                'color': 'LightPink',
+                'width': 5,
+            },
+            {
+                'position': 120,
+                'color': 'LightPink',
+                'width': 5,
+            },
+            {
+                'position': 180,
+                'color': 'LightPink',
+                'width': 5,
+            }
+        ]
+    }
+}
+eeg_fft_view_mixin_required = eeg_fft_view_mixin.copy()
+eeg_fft_view_mixin_required['required'] = True
+
+
 temperature_mixin = {
     'manifest': CFTS_PATH + 'cfts_mixins.TemperatureMixinManifest',
     'required': False,
@@ -152,6 +186,7 @@ ParadigmDescription(
         temperature_mixin,
         eeg_dec_mixin,
         eeg_view_mixin_required,
+        eeg_fft_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
     ] + COMMON_PLUGINS,
     info={'modes': ['run']},
@@ -179,6 +214,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'abr_io.ABRIOToneSimpleManifest'},
         temperature_mixin,
         eeg_view_mixin,
+        eeg_fft_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
          'info': {'hide': True}
          },
@@ -195,6 +231,7 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest'},
         temperature_mixin,
         eeg_view_mixin,
+        eeg_fft_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRClickInEarCalibrationMixinManifest',
          'info': {'hide': True}
          },
@@ -247,6 +284,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
+        eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
@@ -263,6 +301,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
+        eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
@@ -279,6 +318,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
+        eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
@@ -295,6 +335,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
         eeg_view_mixin,
+        eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
     info={'modes': ['run']},
 )
