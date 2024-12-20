@@ -304,7 +304,8 @@ enamldef ABRClickInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             input_name << manifest.microphone_channel
             gain << C.calibration_gain
             outputs = {'target': []}
-            duration = 100e-6
+            duration << C.click_duration
+            iti << (1 / C.rate) - C.click_duration
 
 
 enamldef DPOAEInEarCalibrationMixinManifest(InEarCalibrationMixinManifest): manifest:
