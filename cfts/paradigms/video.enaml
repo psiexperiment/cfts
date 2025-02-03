@@ -22,12 +22,10 @@ from psi.controller.api import ExperimentAction
 from psi.core.enaml.api import ExperimentManifest, PSIManifest
 from psi.data.api import Sink
 
-from psivideo.client import SyncVideoClient
-
 
 class VideoSink(Sink):
 
-    client = Typed(SyncVideoClient)
+    client = Value()
     base_path = Typed(Path)
     is_temp = Bool(False)
     port = d_(Int())
@@ -39,6 +37,7 @@ class VideoSink(Sink):
     stop = Event()
 
     def _default_client(self):
+        from psivideo.client import SyncVideoClient
         return SyncVideoClient(port=self.port)
 
     def set_base_path(self, base_path, is_temp):
