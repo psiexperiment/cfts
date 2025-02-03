@@ -10,7 +10,7 @@ maintainers = [
     {name = "Brad Buran", email="buran@ohsu.edu"},
 ]
 dependencies = [
-	"cftscal",
+    "cftscal",
     "cftsdata",
     "psiexperiment[zarr]",
     "enaml[qt6-pyside] >=0.13.0",
