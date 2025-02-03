@@ -4,6 +4,10 @@ with enaml.imports():
     from .exp_launcher_gui import Main as ExpLauncherMain
 
 
+from cfts import paradigms
+from cftscal import paradigms
+
+
 def cfts():
     import argparse
     parser = argparse.ArgumentParser('cfts')

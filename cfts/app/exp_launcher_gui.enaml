@@ -429,7 +429,7 @@ class Settings(Atom):
         mode_note = experiment.mode_notes.get(mode, '')
         filename = f'{{date_time}} {self.experimenter} {self.animal} {ear} {self.note} {self.standard_note} {mode_note} {experiment.paradigm.name}'
         filename = ' '.join(filename.split())
-        args = ['psi', experiment.paradigm.name]
+        args = ['psi', experiment.paradigm.full_name]
         if save:
             args.append(str(DATA_ROOT / filename))
         args.extend([
