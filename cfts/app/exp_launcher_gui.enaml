@@ -34,12 +34,11 @@ from cftscal.api import (
     list_input_amplifier_connections, list_starship_connections,
     microphone_manager, starship_manager
 )
-from cfts.paradigms import cfts
 from cftscal.plugins.widgets import AddItem
 
 
-DATA_ROOT = get_config('DATA_ROOT')
-CFTS_ROOT = get_config('CFTS_ROOT')
+DATA_ROOT = Path(get_config('DATA_ROOT'))
+CFTS_ROOT = Path(get_config('CFTS_ROOT'))
 
 
 class Experiment(Atom):
@@ -981,7 +980,7 @@ enamldef Main(MainWindow): main:
                 text = 'Load config\tCtrl+O'
                 triggered ::
                     path = CFTS_ROOT / 'cfts-launcher'
-                    path.mkdir(exist_ok=True)
+                    path.mkdir(exist_ok=True, parents=True)
                     filename = FileDialogEx.get_open_file_name(
                         current_path=str(path),
                         name_filters=['Experiment Settings (*.json)'],
@@ -992,7 +991,7 @@ enamldef Main(MainWindow): main:
                 text = 'Save config\tCtrl+O'
                 triggered ::
                     path = CFTS_ROOT / 'cfts-launcher'
-                    path.mkdir(exist_ok=True)
+                    path.mkdir(exist_ok=True, parents=True)
                     filename = FileDialogEx.get_save_file_name(
                         current_path=str(path),
                         name_filters=['Experiment Settings (*.json)'],
