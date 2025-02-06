@@ -500,7 +500,6 @@ class Settings(Atom):
             'starship_config': self.starship_config,
             'record_cal_mic': self.record_cal_mic,
             'cal_mic_config': {
-                'microphone': self.cal_mic_config['microphone'].name,
                 'gain': self.cal_mic_config['gain'],
                 'starship': self.cal_mic_config['starship'],
             },
@@ -513,6 +512,10 @@ class Settings(Atom):
             'standard_notes': self.standard_notes,
             'current_sequence_name': self.current_sequence_name,
         }
+
+        if self.cal_mic_config['microphone'] is not None:
+            self['cal_mic_config']['microphone'] = self.cal_mic_config['microphone'].name
+
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
         info['sequences'] = {n: [e.__getstate__() for e in s] for n, s in self.sequences.items()}
@@ -520,9 +523,10 @@ class Settings(Atom):
         for k, v in self.starship_config.items():
             info['starship_config'][k] = {
                 'ear': v['ear'],
-                'calibration': v['calibration'].name,
                 'gain': v['gain'],
             }
+            if v['calibration'] is not None:
+                info['starship_config'][k]['calibration'] = v['calibration'].name
 
         filename = Path(filename)
         filename.write_text(json.dumps(info, indent=2))
