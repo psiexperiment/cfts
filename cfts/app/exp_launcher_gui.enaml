@@ -514,7 +514,7 @@ class Settings(Atom):
         }
 
         if self.cal_mic_config['microphone'] is not None:
-            self['cal_mic_config']['microphone'] = self.cal_mic_config['microphone'].name
+            info['cal_mic_config']['microphone'] = self.cal_mic_config['microphone'].name
 
         info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
         info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
