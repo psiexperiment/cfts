@@ -192,6 +192,7 @@ class ProcessManager(Atom):
             connect_cb=self.connect_cb,
         )
         self.ws_server.start_thread()
+        log.error(self.ws_server.connected_uri)
         self.lock = threading.Lock()
         timed_call(1000, self.check_status)
 
@@ -227,7 +228,7 @@ class ProcessManager(Atom):
             if process['client_id'] == message['client_id']:
                 break
         else:
-            raise ValueError(f'No process with client ID {client_id}')
+            raise ValueError(f'No process with client ID {process["client_id"]}')
 
         if message['event'] == 'plugins_started':
             process['state'] = 'connected'
@@ -400,6 +401,7 @@ class Settings(Atom):
         '''
         amp_input_name = self.input_amp_config['input_name']
         env = {
+            'WEBSOCKETS_URI': self.process_manager.ws_server.connected_uri,
             'CFTS_INPUT_AMPLIFIER': amp_input_name,
             f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_GAIN': str(self.input_amp_config['gain']),
             f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_config['freq_lb']),
