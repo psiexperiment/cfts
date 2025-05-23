@@ -1,0 +1,17 @@
+from enaml.workbench.api import Extension
+
+from psi.core.enaml.api import ExperimentManifest
+from psi.data.sinks.api import Logger
+
+
+enamldef Logger(ExperimentManifest): manifest:
+
+    id = 'logger'
+    title = 'Logger'
+
+    Extension:
+        id = manifest.id + '.sinks'
+        point = 'psi.data.sinks'
+
+        Logger:
+            pass
