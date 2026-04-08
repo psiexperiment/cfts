@@ -28,7 +28,7 @@ from psi.experiment.api import paradigm_manager
 
 from cftscal.api import (
     list_input_amplifier_connections, list_starship_connections,
-    microphone_manager, starship_manager
+    measurement_microphone_manager, starship_manager
 )
 
 
@@ -37,9 +37,11 @@ CFTS_ROOT = Path(get_config('CFTS_ROOT'))
 
 from psiapp.api import (
     load_experiments,
+    AddRemoveCombo,
     Experiment as _Experiment,
-    ExperimentSequence as _ExperimentSequence,
-    FrozenExperiment as _FrozenExperiment
+    ExperimentSequence,
+    FrozenExperiment as _FrozenExperiment,
+    ProcessManager,
 )
 
 
@@ -106,7 +108,7 @@ class Settings(Atom):
 
     #: Currently selected sequence (this has to be broken out from sequences to
     #: enable proper change notifications, I think).
-    current_sequence = List(Experiment)
+    current_sequence = List(FrozenExperiment)
 
     starship_config = Dict()
 
@@ -388,7 +390,7 @@ class Settings(Atom):
             cal_mic_config['starship'] = next(iter(starships))
         if cal_mic_config['microphone'] is not None:
             cal_mic_config['microphone'] = \
-                microphone_manager.get_object(cal_mic_config['microphone'])
+                measurement_microphone_manager.get_object(cal_mic_config['microphone'])
         self.cal_mic_config = cal_mic_config
 
         input_amp_config = info.pop('input_amp_config', {})
@@ -655,7 +657,7 @@ enamldef Main(MainWindow): main:
                 visible << settings.record_cal_mic
 
             ObjectCombo: selected_mic:
-                items = sorted(microphone_manager.list_objects())
+                items = sorted(measurement_microphone_manager.list_objects())
                 selected << settings.cal_mic_config['microphone']
                 selected ::
                     settings.cal_mic_config['microphone'] = selected

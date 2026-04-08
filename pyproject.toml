@@ -11,10 +11,11 @@ maintainers = [
 ]
 dependencies = [
     "cftscal",
-    "cftsdata",
+    "cftsdata >=0.1.8",
     "psiexperiment[zarr]",
-    "enaml[qt6-pyside] >=0.13.0",
-    "enamlx >=0.6.2",
+	"psiapp >= 0.0.3",
+    "enaml[qt6-pyside] >=0.19.0",
+    "enamlx >=0.6.4",
     "tqdm",
 ]
 dynamic = ["version"]

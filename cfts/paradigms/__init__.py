@@ -73,6 +73,7 @@ microphone_fft_mixin = {
         'fft_time_span': 0.25,
         'fft_freq_lb': 500,
         'fft_freq_ub': 50000,
+        'axis_scale': 'octave',
         'source_name': 'system_microphone',
         'y_label': 'Microphone (dB)',
         'apply_calibration': True,
@@ -103,6 +104,7 @@ eeg_fft_view_mixin = {
         'fft_time_span': 1,
         'fft_freq_lb': 10,
         'fft_freq_ub': 10000,
+        'axis_scale': 'octave',
         'source_name': 'eeg',
         'y_label': 'EEG (dB re 1Vrms)',
         # Show 60 Hz plus harmonics.
@@ -384,6 +386,7 @@ multi_microphone_fft_mixin = {
         'fft_time_span': 0.25,
         'fft_freq_lb': 500,
         'fft_freq_ub': 50000,
+        'axis_scale': 'octave',
         'sources': {
             'left_microphone': {'color': 'DarkCyan', 'apply_calibration': True},
             'right_microphone': {'color': 'DarkMagenta', 'apply_calibration': True}
@@ -418,6 +421,7 @@ multi_memr_microphone_fft_mixin = {
         'fft_time_span': 0.25,
         'fft_freq_lb': 500,
         'fft_freq_ub': 50000,
+        'axis_scale': 'octave',
         'y_min': -10,
         'y_max': 100,
         'y_mode': 'mouse',

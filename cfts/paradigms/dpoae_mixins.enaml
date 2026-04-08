@@ -49,7 +49,7 @@ class DPOAEThreshold(BaseStore):
                             criterions=self.criterions,
                             debug=False)
         th.columns.name = 'criterion'
-        th = th.stack(dropna=False).rename('threshold').reset_index()
+        th = th.stack().rename('threshold').reset_index()
         self.thresholds = th.reset_index()
 
 

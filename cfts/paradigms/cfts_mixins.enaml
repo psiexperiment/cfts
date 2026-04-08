@@ -26,7 +26,7 @@ from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 from psi.paradigms.core.signal_mixins import MultiSignalViewExtension, MultiSignalViewFFTExtension
 
 
-from cftscal.api import microphone_manager
+from cftscal.api import measurement_microphone_manager
 
 
 ################################################################################
@@ -487,7 +487,7 @@ def initialize_cal_mic(event):
     channel = controller.get_channel('hw_ai::microphone_calibration')
     cal_mic = os.environ[f'CFTS_CAL_MIC']
     cal_mic_gain = os.environ[f'CFTS_CAL_MIC_GAIN']
-    channel.calibration = microphone_manager.from_string(cal_mic).load()
+    channel.calibration = measurement_microphone_manager.from_string(cal_mic).load()
     channel.gain = int(cal_mic_gain)
 
 

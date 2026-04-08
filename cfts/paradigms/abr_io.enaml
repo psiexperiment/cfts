@@ -228,23 +228,6 @@ def skip_keys(event, output, frequency, keys):
             except ValueError:
                 log.debug('Key %r already removed', key)
 
-    # Finally, flush the queue and update with new data. This needs to be
-    # outside the lock block because `rebuffer` acquires the lock as well.
-    rebuffer(event)
-
-
-def rebuffer(event):
-    controller = event.workbench.get_plugin('psi.controller')
-    output = controller.get_output('target')
-    if output.queue.is_empty():
-        # Nothing to rebuffer
-        return
-    with output.engine.lock:
-        try:
-            output.rebuffer(controller.get_ts() + 1.0)
-        except EngineStoppedException:
-            log.info('Failed to rebuffer because engine is stopped')
-
 
 enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
 
@@ -260,21 +243,6 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
         ContextGroup:
             name = 'acquisition'
             label = 'Acquisition'
-
-    Extension:
-        id = EXPERIMENT + '.commands'
-        point = 'enaml.workbench.core.commands'
-        Command:
-            id = EXPERIMENT + '.rebuffer'
-            handler = rebuffer
-
-    Extension:
-        id = EXPERIMENT + '.actions'
-        point = 'psi.controller.actions'
-
-        ExperimentAction:
-            event = 'target_keys_complete'
-            command = EXPERIMENT + '.rebuffer'
 
     Extension:
         id = EXPERIMENT + '.sink'
