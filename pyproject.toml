@@ -14,8 +14,7 @@ dependencies = [
     "cftsdata >=0.1.8",
     "psiexperiment[zarr]",
 	"psiapp >= 0.0.3",
-    "enaml[qt6-pyside] >=0.19.0",
-    "enamlx >=0.6.4",
+    "enaml >=0.19.0",
     "tqdm",
 ]
 dynamic = ["version"]
