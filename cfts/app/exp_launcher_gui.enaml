@@ -39,7 +39,7 @@ from psiapp.api import (
     load_experiments,
     AddRemoveCombo,
     Experiment as _Experiment,
-    ExperimentSequence,
+    ExperimentSequence as _ExperimentSequence,
     FrozenExperiment as _FrozenExperiment,
     ProcessManager,
 )
@@ -327,9 +327,17 @@ class Settings(Atom):
         if self.cal_mic_config['microphone'] is not None:
             info['cal_mic_config']['microphone'] = self.cal_mic_config['microphone'].name
 
-        info['experiment_sequence'] = [e.__getstate__() for e in self.experiment_sequence]
-        info['monitor_sequence'] = [e.__getstate__() for e in self.monitor_sequence]
-        info['sequences'] = {n: [e.__getstate__() for e in s] for n, s in self.sequences.items()}
+        def get_sequence_state(sequence):
+            result = []
+            for experiment in sequence:
+                state = experiment.__getstate__()
+                state.pop('preferences')
+                result.append(state)
+            return result
+
+        info['experiment_sequence'] = get_sequence_state(self.experiment_sequence)
+        info['monitor_sequence'] = get_sequence_state(self.monitor_sequence)
+        info['sequences'] = {n: get_sequence_state(s) for n, s in self.sequences.items()}
         info['starship_config'] = {}
         for k, v in self.starship_config.items():
             info['starship_config'][k] = {
@@ -359,7 +367,7 @@ class Settings(Atom):
 
         # Update the starship config list to reflect current starship connections
         starship_config = info.pop('starship_config', {})
-        starships = list_starship_connections()
+        starships = list(list_starship_connections().values())
         for starship in starships:
             if starship not in starship_config:
                 starship_config[starship] = {
@@ -411,6 +419,11 @@ class Settings(Atom):
             except AttributeError:
                 log.error('Unable to set attribute %s with value %r', k, v)
                 raise
+
+
+enamldef ExperimentSequence(_ExperimentSequence):
+
+    attr exp_class = Experiment
 
 
 enamldef ExperimentInfo(GroupBox):
