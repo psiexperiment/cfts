@@ -17,6 +17,7 @@ COMMON_PLUGINS = [
     {'manifest': CFTS_PATH + 'cfts_mixins.SwapOutputs', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'video.PSIVideo', 'required': False},
     {'manifest': CFTS_PATH + 'logging.Logger', 'required': True},
+    {'manifest': 'psi.data.sinks.event_log.EventLogManifest', 'required': True},
 ]
 
 
