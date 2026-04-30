@@ -47,6 +47,7 @@ def configure_experiment_tone(key_map, event):
     averages = context.get_value('averages')
 
     rate = context.get_value('rate')
+    rate_jitter_ms = context.get_value('rate_jitter_ms')
     tone_duration = context.get_value('target_tone_burst_duration')
     if alternate_polarity and (averages % 2):
         # Round to the nearest multiple of 2
@@ -54,9 +55,19 @@ def configure_experiment_tone(key_map, event):
 
     # Compensate for the tone duration. ITI is the time from tone offset to
     # tone offset. Do sanity check while at it.
-    iti = 1/rate - tone_duration
-    if iti <= 0:
-        raise ValueError('Repetition rate is too fast')
+    if rate_jitter_ms > 0:
+        # Set up the random ITI that is drawn from a reproducible uniform
+        # distribution.
+        min_iti = 1/rate - tone_duration - (rate_jitter_ms * 1e-3)
+        max_iti = 1/rate - tone_duration + (rate_jitter_ms * 1e-3)
+        if min_iti <= 0:
+            raise ValueError('Repetition rate is too fast')
+        rng = np.random.default_rng(seed=987654321)
+        iti = rng.uniform(min_iti, max_iti)
+    else:
+        iti = 1/rate - tone_duration
+        if iti <= 0:
+            raise ValueError('Repetition rate is too fast')
 
     # Configure the queues
     if ordering == 'interleaved_ramp':
@@ -142,15 +153,26 @@ def configure_experiment_click(key_map, event):
     averages = context.get_value('averages')
 
     rate = context.get_value('rate')
+    rate_jitter_ms = context.get_value('rate_jitter_ms')
     if (polarity == 'alternating') and (averages % 2):
         # Round to the nearest multiple of 2
         averages = (round(averages/2) + 1) * 2
 
-    # Compensate for the tone duration. ITI is the time from tone offset to
-    # tone offset. Do sanity check while at it.
-    iti = 1/rate - duration
-    if iti <= 0:
-        raise ValueError('Repetition rate is too fast')
+    # Compensate for the click duration. ITI is the time from click offset to
+    # click offset. Do sanity check while at it.
+    if rate_jitter_ms > 0:
+        # Set up the random ITI that is drawn from a reproducible uniform
+        # distribution.
+        min_iti = 1/rate - duration - (rate_jitter_ms * 1e-3)
+        max_iti = 1/rate - duration + (rate_jitter_ms * 1e-3)
+        if min_iti <= 0:
+            raise ValueError('Repetition rate is too fast')
+        rng = np.random.default_rng(seed=987654321)
+        iti = rng.uniform(min_iti, max_iti)
+    else:
+        iti = 1/rate - duration
+        if iti <= 0:
+            raise ValueError('Repetition rate is too fast')
 
     # Configure the queues
     if polarity == 'alternating':
@@ -232,6 +254,8 @@ def skip_keys(event, output, frequency, keys):
 enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
 
     attr key_map = {}
+    attr erp_span = 8.5e-3
+    attr erp_type = 'ABR'
 
     Extension:
         id = EXPERIMENT + '.context'
@@ -260,21 +284,21 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
         point = 'psi.data.plots'
 
         EpochTimeContainer: time_container:
-            label = 'ERP average'
-            span = 8.5e-3
+            label << '{} average'.format(manifest.erp_type)
+            span << manifest.erp_span
             allow_auto_select << C.ordering == 'sequential'
             fmt_button_cb << C.get_selector().get_formatter(plot.tab_grouping)
 
             ViewBox:
                 name = 'erp_waterfall_viewbox'
-                y_label = 'ABR amplitude'
+                y_label << '{} amplitude'.format(manifest.erp_type)
                 y_min = -5
                 y_max = 5
                 y_mode = 'mouse'
                 save_limits = True
 
                 StackedEpochAveragePlot: plot:
-                    label = 'ERP average plot'
+                    label << '{} average plot'.format(manifest.erp_type)
                     source_name = 'valid_erp'
                     n_update = 8
                     tab_grouping = C.get_names()[:-1]
@@ -319,8 +343,8 @@ enamldef ABRIOToneSimpleManifest(ABRIOBaseManifest): manifest:
         ContextRow:
             name = 'averaging'
             group_name = 'acquisition'
-            fmt = ['Average', averages, 'trials at', rate,
-                   'per sec. and alternate polarity?', alt_pol]
+            fmt = ['Average', averages, 'pips at', rate, '/s ±', rate_jitter,
+                   'ms and alt. pol.?', alt_pol]
 
             Parameter: averages:
                 name = 'averages'
@@ -332,6 +356,11 @@ enamldef ABRIOToneSimpleManifest(ABRIOBaseManifest): manifest:
                 name = 'rate'
                 label = 'Reps. per sec.'
                 default = 80
+                scope = 'trial'
+
+            Parameter: rate_jitter:
+                name = 'rate_jitter_ms'
+                default = 0
                 scope = 'trial'
 
             BoolParameter: alt_pol:
@@ -392,8 +421,8 @@ enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
         ContextRow:
             name = 'averaging'
             group_name = 'acquisition'
-            fmt = ['Average', averages, duration, 's clicks at', rate,
-                   '/sec. with', polarity, 'polarity']
+            fmt = ['Average', averages, duration, 's clicks at', rate, '/s ±',
+                   rate_jitter, 'ms w/', polarity, 'pol.']
 
             Parameter: averages:
                 name = 'averages'
@@ -407,6 +436,11 @@ enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
                 default = 80
                 scope = 'trial'
 
+            Parameter: rate_jitter:
+                name = 'rate_jitter_ms'
+                default = 0
+                scope = 'trial'
+
             Parameter: duration:
                 name = 'click_duration'
                 default = 100e-6
@@ -416,9 +450,9 @@ enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
                 name = 'click_polarity'
                 label = 'Click polarity'
                 choices = {
-                    'condensation': '"condensation"',
-                    'rarefaction': '"rarefaction"',
-                    'alternating': '"alternating"',
+                    'cond.': '"condensation"',
+                    'rare.': '"rarefaction"',
+                    'alt.': '"alternating"',
                 }
                 scope = 'trial'
 
@@ -427,4 +461,7 @@ enamldef ABRIOClickSimpleManifest(ABRIOBaseManifest): manifest:
         point = 'enaml.workbench.core.commands'
         Command:
             id = 'psi.controller.configure_experiment'
-            handler = partial(configure_experiment_click, manifest.key_map)
+            handler = partial(
+                configure_experiment_click,
+                manifest.key_map
+            )

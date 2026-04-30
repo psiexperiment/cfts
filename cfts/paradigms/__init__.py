@@ -243,6 +243,43 @@ ParadigmDescription(
 )
 
 
+ParadigmDescription(
+    # This is the default, simple ABR experiment that most users will want.  
+    'mlr_llr_io', 'MLR/LLR (tone)', 'ear', [
+        eeg_dec_mixin,
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOToneSimpleManifest',
+         'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+        turntable_linear_velocity_view_mixin_required,
+        turntable_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
+         'info': {'hide': True}
+         },
+    ] + COMMON_PLUGINS,
+    info={'modes': ['run']},
+)
+
+
+ParadigmDescription(
+    # This is the default, simple ABR experiment that most users will want.  
+    'mlr_llr_io_click', 'MLR/LLR (click)', 'ear', [
+        eeg_dec_mixin,
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest',
+         'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.ABRClickInEarCalibrationMixinManifest',
+         'info': {'hide': True}
+         },
+    ] + COMMON_PLUGINS,
+    info={'modes': ['run']},
+)
+
 
 ParadigmDescription(
     'dpoae_io', 'DPOAE', 'ear', [

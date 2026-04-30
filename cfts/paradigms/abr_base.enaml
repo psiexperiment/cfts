@@ -33,6 +33,8 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
     '''
     #: Name of stimulus as found in the `psi.token` plugin.
     attr token_name = 'tone_burst'
+    attr erp_span = 8.5e-3
+    attr erp_type = 'ABR'
 
     Extension:
         id = EXPERIMENT + '.store'
@@ -83,7 +85,7 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
         ExtractEpochs: extract:
             name = 'erp'
             source_name = 'eeg_filtered'
-            epoch_size = 8.5e-3
+            epoch_size << manifest.erp_span
             Detrend:
                 name = 'erp_detrend'
                 mode = C.detrend_mode
