@@ -712,7 +712,7 @@ enamldef Main(MainWindow): main:
                     to_string = lambda x: f'{x:.0f} ✕'
 
                 ObjectCombo: eeg_freq_lb:
-                    items = [10, 300]
+                    items = [1, 3, 10, 30, 100, 300]
                     selected << settings.input_amp_config['freq_lb']
                     selected ::
                         settings.input_amp_config['freq_lb'] = selected
