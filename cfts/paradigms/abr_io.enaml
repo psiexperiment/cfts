@@ -61,13 +61,13 @@ def configure_experiment_tone(key_map, event):
         min_iti = 1/rate - tone_duration - (rate_jitter_ms * 1e-3)
         max_iti = 1/rate - tone_duration + (rate_jitter_ms * 1e-3)
         if min_iti <= 0:
-            raise ValueError('Repetition rate is too fast')
+            raise ValueError(f'Repetition rate is too fast. Minimum ITI is {min_iti*1e3:.0f} msec.')
         rng = np.random.default_rng(seed=987654321)
         iti = rng.uniform(min_iti, max_iti)
     else:
         iti = 1/rate - tone_duration
         if iti <= 0:
-            raise ValueError('Repetition rate is too fast')
+            raise ValueError(f'Repetition rate is too fast. ITI is {iti*1e3:.0f} msec.')
 
     # Configure the queues
     if ordering == 'interleaved_ramp':
