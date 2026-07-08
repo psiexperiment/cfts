@@ -723,7 +723,7 @@ enamldef Main(MainWindow): main:
                     selected ::
                         settings.speaker_config[loop_item]['calibration'] = selected
                 ObjectCombo:
-                    items = [20, 40]
+                    items = [0]
                     selected << settings.speaker_config[loop_item]['gain']
                     selected ::
                         settings.speaker_config[loop_item]['gain'] = selected
