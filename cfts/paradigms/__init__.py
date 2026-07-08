@@ -45,6 +45,13 @@ selectable_starship_mixin = {
 }
 
 
+selectable_speaker_mixin = {
+    'manifest': CAL_PATH + 'objects.Speaker',
+    'required': True,
+    'attrs': {'id': 'system', 'title': 'Speaker'},
+}
+
+
 dual_starship_mixin = {
     'manifest': CAL_PATH + 'objects.Starship',
     'required': True,
@@ -193,7 +200,7 @@ ParadigmDescription(
         eeg_fft_view_mixin_required,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['none']},
 )
 
 
@@ -206,7 +213,7 @@ ParadigmDescription(
         turntable_mixin,
         {'manifest': CFTS_PATH + 'monitor.MonitorManifest', 'selected': True},
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['none']},
 )
 
 
@@ -223,7 +230,7 @@ ParadigmDescription(
          'info': {'hide': True}
          },
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -240,18 +247,16 @@ ParadigmDescription(
          'info': {'hide': True}
          },
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
 ParadigmDescription(
-    # This is the default, simple ABR experiment that most users will want.  
     'mlr_llr_io', 'MLR/LLR (tone)', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOToneSimpleManifest',
          'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
-        temperature_mixin,
         eeg_view_mixin,
         eeg_fft_view_mixin,
         turntable_linear_velocity_view_mixin_required,
@@ -260,25 +265,36 @@ ParadigmDescription(
          'info': {'hide': True}
          },
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
 ParadigmDescription(
-    # This is the default, simple ABR experiment that most users will want.  
     'mlr_llr_io_click', 'MLR/LLR (click)', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest',
          'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
-        temperature_mixin,
         eeg_view_mixin,
         eeg_fft_view_mixin,
         {'manifest': CFTS_PATH + 'cfts_mixins.ABRClickInEarCalibrationMixinManifest',
          'info': {'hide': True}
          },
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
+)
+
+
+ParadigmDescription(
+    'mlr_llr_io_click_freefield', 'MLR/LLR (click, freefield)', 'ear', [
+        eeg_dec_mixin,
+        selectable_speaker_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest',
+         'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['freefield']},
 )
 
 
@@ -294,7 +310,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -310,7 +326,7 @@ ParadigmDescription(
         microphone_mixin,
         microphone_fft_mixin,
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -327,7 +343,7 @@ ParadigmDescription(
         eeg_view_mixin,
         eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -344,7 +360,7 @@ ParadigmDescription(
         eeg_view_mixin,
         eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -361,7 +377,7 @@ ParadigmDescription(
         eeg_view_mixin,
         eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -378,7 +394,7 @@ ParadigmDescription(
         eeg_view_mixin,
         eeg_fft_view_mixin,
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 
@@ -392,7 +408,7 @@ ParadigmDescription(
         {'manifest': CAL_PATH + 'calibration_mixins.ChirpMixin'},
         {'manifest': CAL_PATH + 'calibration_mixins.ToneValidateMixin'},
     ] + COMMON_PLUGINS,
-    info={'modes': ['run']},
+    info={'modes': ['either']},
 )
 
 

@@ -42,7 +42,7 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
 
         BinaryStore:
             name = 'erp_eeg'
-            continuous_inputs = ['eeg', 'system_microphone']
+            continuous_inputs = ['eeg']
 
         TextStore:
             epoch_inputs = ['erp']
