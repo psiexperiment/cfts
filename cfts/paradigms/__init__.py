@@ -14,6 +14,7 @@ COMMON_PLUGINS = [
     {'manifest': CFTS_PATH + 'cfts_mixins.CalibrationMicrophone', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitor', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'cfts_mixins.OutputMonitorView', 'required': False, 'info': {'hide': True}},
+    {'manifest': CFTS_PATH + 'cfts_mixins.MonitorInputsView', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'cfts_mixins.SwapOutputs', 'required': False, 'info': {'hide': True}},
     {'manifest': CFTS_PATH + 'video.PSIVideo', 'required': False},
     {'manifest': CFTS_PATH + 'logging.Logger', 'required': True},
@@ -252,6 +253,34 @@ ParadigmDescription(
 
 
 ParadigmDescription(
+    # This is the default, simple ABR experiment that most users will want.  
+    'abr_io_freefield', 'ABR (tone, freefield)', 'ear', [
+        eeg_dec_mixin,
+        selectable_speaker_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOToneSimpleManifest'},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['freefield']},
+)
+
+
+ParadigmDescription(
+    # This is the default, simple ABR experiment that most users will want.  
+    'abr_io_click_freefield', 'ABR (click, freefield)', 'ear', [
+        eeg_dec_mixin,
+        selectable_speaker_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest'},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['freefield']},
+)
+
+
+ParadigmDescription(
     'mlr_llr_io', 'MLR/LLR (tone)', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,
@@ -290,6 +319,19 @@ ParadigmDescription(
         eeg_dec_mixin,
         selectable_speaker_mixin,
         {'manifest': CFTS_PATH + 'abr_io.ABRIOClickSimpleManifest',
+         'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['freefield']},
+)
+
+
+ParadigmDescription(
+    'mlr_llr_io_tone_freefield', 'MLR/LLR (tone, freefield)', 'ear', [
+        eeg_dec_mixin,
+        selectable_speaker_mixin,
+        {'manifest': CFTS_PATH + 'abr_io.ABRIOToneSimpleManifest',
          'attrs': {'erp_span': 200e-3, 'erp_type': 'MLR/LLR'}},
         eeg_view_mixin,
         eeg_fft_view_mixin,

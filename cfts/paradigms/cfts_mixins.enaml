@@ -5,6 +5,7 @@ import functools
 import itertools
 import os
 
+from enaml.core.api import Conditional, Looper
 from enaml.widgets.api import Label
 from enaml.workbench.api import Extension
 from enaml.workbench.core.api import Command
@@ -19,6 +20,7 @@ from psi.controller.api import (Callback, ContinuousInput, Downsample,
                                 get_hw_ao_choices, IIRFilter)
 from psi.controller.calibration.api import ChirpCalibrate, ClickCalibrate, ToneCalibrate
 from psi.core.enaml.api import ExperimentManifest
+from psi.data.plot_util import get_color_cycle
 from psi.data.sinks.api import BinaryStore
 from psi.experiment.api import StatusItem
 
@@ -26,7 +28,7 @@ from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 from psi.paradigms.core.signal_mixins import MultiSignalViewExtension, MultiSignalViewFFTExtension
 
 
-from cftscal.api import measurement_microphone_manager
+from cftscal.api import measurement_microphone_manager, microphone_manager
 
 
 ################################################################################
@@ -545,6 +547,7 @@ enamldef OutputMonitor(ExperimentManifest): manifest:
     '''
     id = 'output_monitor'
     title = manifest.id.capitalize().replace('_', ' ')
+    attr source_name = 'hw_ai::output_monitor'
 
     Extension:
         id = manifest.id + '.output_monitor_io'
@@ -552,7 +555,7 @@ enamldef OutputMonitor(ExperimentManifest): manifest:
 
         ContinuousInput:
             name = 'output_monitor'
-            source_name = 'hw_ai::output_monitor'
+            source_name = manifest.source_name
 
     Extension:
         id = manifest.id + '.sinks'
@@ -572,6 +575,8 @@ enamldef OutputMonitorView(ExperimentManifest): manifest:
     '''
     id = 'output_monitor_view'
     title = manifest.id.capitalize().replace('_', ' ')
+
+    attr sources = os.environ.get('CFTS_OUTPUT_MONITOR', '')
 
     Extension:
         id = manifest.id + '.output_monitor_io'
@@ -594,6 +599,140 @@ enamldef OutputMonitorView(ExperimentManifest): manifest:
         sources = {
             'output_monitor_view': {'color': 'k'},
         }
+
+
+def initialize_monitor_inputs(event):
+    '''
+    Attach the calibration and gain selected in the launcher to each
+    monitored input channel.
+
+    For each channel named in `CFTS_MONITOR_INPUTS`, looks for a
+    `CFTS_MONITOR_INPUT_<NAME>` environment variable holding a calibration
+    reference string (as produced by `MultiTypeSensorReference.get_calibration`
+    -- includes 'Unity', i.e. no calibration, for channels like EEG or sync
+    lines that don't have one) and a `CFTS_MONITOR_INPUT_<NAME>_GAIN`
+    environment variable holding the preamp gain, in dB, to apply.
+    '''
+    controller = event.workbench.get_plugin('psi.controller')
+    channels = [c for c in os.environ.get('CFTS_MONITOR_INPUTS', '').split(',') if c]
+    for name in channels:
+        prefix = f'CFTS_MONITOR_INPUT_{name.upper()}'
+        cal_string = os.environ.get(prefix)
+        if cal_string is None:
+            continue
+        channel = controller.get_channel(f'hw_ai::{name}')
+        channel.calibration = microphone_manager.from_string(cal_string).load()
+        channel.gain = float(os.environ.get(f'{prefix}_GAIN', 0))
+
+
+def _monitor_channels():
+    '''
+    Parse the per-channel monitor configuration passed via environment
+    variables (see `MonitorInputsView`'s docstring) into a dict mapping
+    channel name -> {'plot_time', 'plot_fft', 'save'} bools.
+    '''
+    channels = [c for c in os.environ.get('CFTS_MONITOR_INPUTS', '').split(',') if c]
+    result = {}
+    for name in channels:
+        prefix = f'CFTS_MONITOR_INPUT_{name.upper()}'
+        result[name] = {
+            'plot_time': os.environ.get(f'{prefix}_PLOT_TIME') == '1',
+            'plot_fft': os.environ.get(f'{prefix}_PLOT_FFT') == '1',
+            'save': os.environ.get(f'{prefix}_SAVE') == '1',
+        }
+    return result
+
+
+enamldef MonitorInputsView(ExperimentManifest): manifest:
+    '''
+    Displays a time view of one or more selected input channels and/or saves
+    them to the recording.
+
+    Which channels to include, and whether each is plotted (time domain
+    and/or PSD) and/or saved, is determined by the `channels` attribute -- a
+    dict mapping raw hardware input channel name (as returned by
+    `cftscal.api.list_inputs`) to a `{'plot_time', 'plot_fft', 'save'}` dict
+    of bools. Defaults to `_monitor_channels()`, which parses this from the
+    `CFTS_MONITOR_INPUTS`/`CFTS_MONITOR_INPUT_<NAME>_*` environment
+    variables -- how the CFTS launcher passes the user's per-paradigm
+    selection through to the subprocess. Any channel with a matching
+    `CFTS_MONITOR_INPUT_<NAME>` environment variable has that calibration
+    attached (see `initialize_monitor_inputs`).
+    '''
+    id = 'monitor_inputs_view'
+    title = manifest.id.capitalize().replace('_', ' ')
+
+    attr channels = _monitor_channels()
+
+    #: Assigns each channel a stable color shared between the time and PSD
+    #: views, so the same channel is easy to track across both.
+    attr colors << dict(zip(
+        manifest.channels,
+        get_color_cycle('palettable.colorbrewer.qualitative.Dark2_8', len(manifest.channels)),
+    ))
+
+    Extension:
+        id = manifest.id + '.io'
+        point = 'psi.controller.io'
+
+        Looper:
+            iterable << list(manifest.channels)
+
+            ContinuousInput:
+                name << f'{loop_item}_monitor'
+                source_name << f'hw_ai::{loop_item}'
+
+    Extension:
+        id = manifest.id + '.commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = manifest.id + '.initialize_monitor_inputs'
+            handler = initialize_monitor_inputs
+
+    Extension:
+        id = manifest.id + '.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            event = 'plugins_started'
+            command = manifest.id + '.initialize_monitor_inputs'
+
+    Conditional:
+        condition << any(c['save'] for c in manifest.channels.values())
+
+        Extension:
+            id = manifest.id + '.sinks'
+            point = 'psi.data.sinks'
+
+            BinaryStore:
+                name = manifest.id + '.store'
+                continuous_inputs << [
+                    f'{c}_monitor' for c, cfg in manifest.channels.items() if cfg['save']
+                ]
+
+    Conditional:
+        condition << any(c['plot_time'] for c in manifest.channels.values())
+
+        MultiSignalViewExtension:
+            id = manifest.id + '_time_plot'
+            title = manifest.title + ' (time)'
+            sources << {
+                f'{c}_monitor': {'color': manifest.colors[c]}
+                for c, cfg in manifest.channels.items() if cfg['plot_time']
+            }
+
+    Conditional:
+        condition << any(c['plot_fft'] for c in manifest.channels.values())
+
+        MultiSignalViewFFTExtension:
+            id = manifest.id + '_fft_plot'
+            title = manifest.title + ' (PSD)'
+            y_label = 'Signal (dB)'
+            sources << {
+                f'{c}_monitor': {'color': manifest.colors[c], 'apply_calibration': True}
+                for c, cfg in manifest.channels.items() if cfg['plot_fft']
+            }
 
 
 def swap_outputs(event):

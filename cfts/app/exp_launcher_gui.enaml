@@ -18,9 +18,9 @@ from enaml.core.api import Conditional, Looper
 from enaml.layout.api import align, hbox, spacer, vbox
 from enaml.stdlib.message_box import critical
 from enaml.widgets.api import (
-    Action, ActionGroup, ButtonGroup, CheckBox, Container, Feature, Field,
-    FileDialogEx, Form, GroupBox, HGroup, Label, MainWindow, Menu, MenuBar,
-    Notebook, ObjectCombo, Page, PopupView, PushButton, VGroup,
+    Action, ActionGroup, ButtonGroup, CheckBox, Container, Dialog, Feature,
+    Field, FileDialogEx, Form, GroupBox, HGroup, Label, MainWindow, Menu,
+    MenuBar, Notebook, ObjectCombo, Page, PushButton, ScrollArea, VGroup,
 )
 
 from psi import get_config, get_config_folder
@@ -28,13 +28,15 @@ from psi.experiment.api import paradigm_manager
 
 from cftscal.api import (
     list_input_amplifier_connections, list_speaker_connections,
-    list_starship_connections, measurement_microphone_manager, speaker_manager,
-    starship_manager
+    list_starship_connections, measurement_microphone_manager, list_inputs
 )
+from cftscal.plugins.settings import MultiTypeSensorReference
+from cftscal.plugins.widgets import SensorView
 
 
 DATA_ROOT = Path(get_config('DATA_ROOT'))
 CFTS_ROOT = Path(get_config('CFTS_ROOT'))
+
 
 from psiapp.api import (
     load_experiments,
@@ -88,6 +90,22 @@ class FrozenExperiment(_FrozenExperiment):
     ear = Enum('selected', 'left', 'right')
 
 
+class MonitorChannelSettings(Atom):
+    '''
+    Per-paradigm, per-channel monitor-input configuration: whether to plot
+    the channel live (time domain and/or PSD) and/or save it alongside the
+    experiment's own recording. Which calibration applies to the channel is
+    NOT part of this -- that's global, configured once via File > Settings
+    (see `Settings.monitor_input_sensors`), not per paradigm.
+    '''
+    plot_time = Bool(False)
+    plot_fft = Bool(False)
+    save = Bool(False)
+
+    def is_active(self):
+        return self.plot_time or self.plot_fft or self.save
+
+
 class Settings(Atom):
 
     logging_level = Enum('trace', 'debug', 'info', 'warning', 'error')('info')
@@ -100,6 +118,59 @@ class Settings(Atom):
 
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
+
+    #: Per-paradigm monitor-input configuration. Maps paradigm name
+    #: (`experiment.paradigm.name`) -> {channel_name: MonitorChannelSettings}.
+    #: Populated lazily -- see `monitor_input_config_for()`.
+    monitor_input_config = Dict()
+
+    def monitor_input_config_for(self, paradigm_name):
+        '''
+        Return the (mutable, live) per-channel monitor-input configuration
+        for the given paradigm, creating default entries for any input
+        channel present on this system but not yet configured.
+        '''
+        channels = self.monitor_input_config.setdefault(paradigm_name, {})
+        for name in list_inputs().values():
+            channels.setdefault(name, MonitorChannelSettings())
+        return channels
+
+    #: Global (not per-paradigm) calibration/gain for each monitorable input
+    #: channel -- configured once via File > Settings. Maps channel name ->
+    #: a MultiTypeSensorReference. Populated lazily -- see
+    #: monitor_input_sensor_for(). This is also the SOLE source of
+    #: calibration/gain for starships and speakers (see
+    #: equipment_calibration()) -- there's no separate starship/speaker
+    #: calibration picker, since e.g. a starship's calibration is one and
+    #: the same as its probe microphone's input calibration.
+    monitor_input_sensors = Dict()
+
+    def monitor_input_sensor_for(self, channel_name):
+        return self.monitor_input_sensors.setdefault(
+            channel_name, MultiTypeSensorReference(sensor_type='Unity'),
+        )
+
+    def equipment_calibration(self, key, expected_type, suffix='_microphone'):
+        '''
+        Resolve the calibration/gain to use for an output device (a
+        starship or speaker connection, keyed the same as
+        starship_config/speaker_config) by looking it up in the Input
+        Channels list instead of maintaining a separate picker: the
+        channel named `f'{key}{suffix}'` (e.g. `starship_A_microphone`) is
+        the physical microphone built into that device, so whatever
+        calibration is configured there IS the device's calibration.
+
+        Returns the configured `MultiTypeSensorReference`, or None if no
+        such input channel exists, or it isn't configured with a
+        matching-type (`expected_type`, e.g. 'Starship'/'Speaker')
+        calibration.
+        '''
+        sensor = self.monitor_input_sensors.get(f'{key}{suffix}')
+        if sensor is None:
+            return None
+        if sensor.sensor_type != expected_type or not sensor.is_configured():
+            return None
+        return sensor
 
     #: Dictionary of sequence names to lists of FrozenExperiment
     sequences = Dict()
@@ -229,14 +300,24 @@ class Settings(Atom):
             f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_config['freq_lb']),
             f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_UB': str(self.input_amp_config['freq_ub']),
         }
-        for k, v in self.starship_config.items():
-            cal_string = v['calibration'].get_current_calibration().to_string()
-            env[f'CFTS_STARSHIP_{k.upper()}'] = cal_string
-            env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(v['gain'])
-        for k, v in self.speaker_config.items():
-            cal_string = v['calibration'].get_current_calibration().to_string()
-            env[f'CFTS_SPEAKER_{k.upper()}'] = cal_string
-            env[f'CFTS_SPEAKER_{k.upper()}_GAIN'] = str(v['gain'])
+        for k in self.starship_config:
+            sensor = self.equipment_calibration(k, 'Starship')
+            if sensor is None:
+                raise ValueError(
+                    f'No calibration configured for {k} -- select one for '
+                    f'its microphone channel in File > Settings'
+                )
+            env[f'CFTS_STARSHIP_{k.upper()}'] = sensor.get_calibration().to_string()
+            env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(sensor.gain)
+        for k in self.speaker_config:
+            sensor = self.equipment_calibration(k, 'Speaker')
+            if sensor is None:
+                raise ValueError(
+                    f'No calibration configured for {k} -- select one for '
+                    f'its microphone channel in File > Settings'
+                )
+            env[f'CFTS_SPEAKER_{k.upper()}'] = sensor.get_calibration().to_string()
+            env[f'CFTS_SPEAKER_{k.upper()}_GAIN'] = str(sensor.gain)
 
         if mode.lower() == 'either':
             env['CFTS_TEST_STARSHIP'] = self.find_output(ear, True)
@@ -280,6 +361,29 @@ class Settings(Atom):
 
         if self.show_output_monitor:
             args.extend(['--plugin', 'output_monitor_view'])
+
+        channel_config = self.monitor_input_config.get(experiment.paradigm.name, {})
+        active_channels = {n: c for n, c in channel_config.items() if c.is_active()}
+        if active_channels:
+            unconfigured = [
+                n for n in active_channels
+                if not self.monitor_input_sensor_for(n).is_configured()
+            ]
+            if unconfigured:
+                raise ValueError(
+                    f'Select a calibration (File > Settings) for monitored '
+                    f'channel(s): {", ".join(unconfigured)}'
+                )
+            env['CFTS_MONITOR_INPUTS'] = ','.join(active_channels)
+            for name, config in active_channels.items():
+                sensor = self.monitor_input_sensor_for(name)
+                prefix = f'CFTS_MONITOR_INPUT_{name.upper()}'
+                env[prefix] = sensor.get_calibration().to_string()
+                env[f'{prefix}_GAIN'] = str(sensor.gain)
+                env[f'{prefix}_PLOT_TIME'] = str(int(config.plot_time))
+                env[f'{prefix}_PLOT_FFT'] = str(int(config.plot_fft))
+                env[f'{prefix}_SAVE'] = str(int(config.save))
+            args.extend(['--plugin', 'monitor_inputs_view'])
 
         if self.swap_outputs:
             args.extend(['--plugin', 'swap_outputs'])
@@ -343,6 +447,27 @@ class Settings(Atom):
             },
             'standard_notes': self.standard_notes,
             'current_sequence_name': self.current_sequence_name,
+
+            'record_cal_mic': self.record_cal_mic,
+            'record_body_temperature': self.record_body_temperature,
+            'record_output_monitor': self.record_output_monitor,
+            'show_output_monitor': self.show_output_monitor,
+            'monitor_input_config': {
+                paradigm: {
+                    channel: {
+                        'plot_time': c.plot_time,
+                        'plot_fft': c.plot_fft,
+                        'save': c.save,
+                    }
+                    for channel, c in channels.items() if c.is_active()
+                }
+                for paradigm, channels in self.monitor_input_config.items()
+            },
+            'monitor_input_sensors': {
+                channel: sensor.get_persistence()
+                for channel, sensor in self.monitor_input_sensors.items()
+            },
+            'swap_outputs': self.swap_outputs,
         }
 
         if self.cal_mic_config['microphone'] is not None:
@@ -361,14 +486,8 @@ class Settings(Atom):
         info['sequences'] = {n: get_sequence_state(s) for n, s in self.sequences.items()}
 
         for key in ('starship_config', 'speaker_config'):
-            info[key] = {}
-            for k, v in getattr(self, key).items():
-                info[key][k] = {
-                    'ear': v['ear'],
-                    'gain': v['gain'],
-                }
-                if v['calibration'] is not None:
-                    info[key][k]['calibration'] = v['calibration'].name
+            # Calibration/gain aren't stored here -- see equipment_calibration().
+            info[key] = {k: {'ear': v['ear']} for k, v in getattr(self, key).items()}
 
         filename = Path(filename)
         filename.write_text(json.dumps(info, indent=2))
@@ -381,6 +500,9 @@ class Settings(Atom):
             info = {}
 
         info.pop('experimenter', None)
+        # Legacy key from the old flat-list monitor_inputs model, superseded
+        # by the per-paradigm monitor_input_config handled below.
+        info.pop('monitor_inputs', None)
 
         # Load and resurrect the experiment sequences 
         self.experiment_sequence = load_experiments(info.pop('experiment_sequence', []), Experiment)
@@ -388,50 +510,48 @@ class Settings(Atom):
         self.sequences = {n: load_experiments(s, FrozenExperiment) for n, s in info.pop('sequences', {}).items()}
         self.current_sequence_name = info.pop('current_sequence_name', '')
 
-        # Update the starship config list to reflect current starship connections
+        # Update the starship config list to reflect current starship
+        # connections. Label is always overwritten even if it is stored in the
+        # config since the user may be modifying the label in the hardware
+        # confiruration file.
+        # Calibration/gain are NOT stored here -- they're derived from the
+        # matching input channel's sensor (see Settings.equipment_calibration()),
+        # so only 'ear' (and the always-recomputed 'label') need to persist.
         starship_config = info.pop('starship_config', {})
         starships = list(list_starship_connections().values())
+        starship_map = {name: label for label, name in list_starship_connections().items()}
         for starship in starships:
             if starship not in starship_config:
-                starship_config[starship] = {
-                    'ear': 'not used',
-                    'calibration': None,
-                    'gain': 40,
-                }
+                starship_config[starship] = {'ear': 'not used', 'label': starship_map[starship]}
         # Make sure all configs are present
         for starship in list(starship_config.keys()):
             if starship not in starships:
                 starship_config.pop(starship)
             else:
                 s = starship_config[starship]
-                s.setdefault('gain', 40)
-                s.setdefault('calibration', None)
+                s.pop('calibration', None)
+                s.pop('gain', None)
                 s.setdefault('ear', 'not used')
-                if s['calibration'] is not None:
-                    s['calibration'] = starship_manager.get_object(s['calibration'])
+                s['label'] = starship_map[starship]
         self.starship_config = starship_config
 
         # Update the speaker config list to reflect current speaker connections
         speaker_config = info.pop('speaker_config', {})
         speakers = list(list_speaker_connections().values())
+        speaker_map = {name: label for label, name in list_speaker_connections().items()}
         for speaker in speakers:
             if speaker not in speaker_config:
-                speaker_config[speaker] = {
-                    'ear': 'not used',
-                    'calibration': None,
-                    'gain': 40,
-                }
+                speaker_config[speaker] = {'ear': 'not used', 'label': speaker_map[speaker]}
         # Make sure all configs are present
         for speaker in list(speaker_config.keys()):
             if speaker not in speakers:
                 speaker_config.pop(speaker)
             else:
                 s = speaker_config[speaker]
-                s.setdefault('gain', 40)
-                s.setdefault('calibration', None)
+                s.pop('calibration', None)
+                s.pop('gain', None)
                 s.setdefault('ear', 'not used')
-                if s['calibration'] is not None:
-                    s['calibration'] = speaker_manager.get_object(s['calibration'])
+                s['label'] = speaker_map[speaker]
         self.speaker_config = speaker_config
 
         # Add microphone in if it was not in a previously-saved config.
@@ -457,6 +577,29 @@ class Settings(Atom):
         if 'freq_ub' not in input_amp_config:
             input_amp_config['freq_ub'] = 10e3
         self.input_amp_config = input_amp_config
+
+        # Resolve each paradigm's saved per-channel monitor-input
+        # configuration back into live MonitorChannelSettings instances.
+        monitor_input_config = {}
+        for paradigm, channels in info.pop('monitor_input_config', {}).items():
+            monitor_input_config[paradigm] = {
+                channel: MonitorChannelSettings(
+                    plot_time=c.get('plot_time', False),
+                    plot_fft=c.get('plot_fft', False),
+                    save=c.get('save', False),
+                )
+                for channel, c in channels.items()
+            }
+        self.monitor_input_config = monitor_input_config
+
+        # Resolve the global per-channel calibration/gain (File > Settings)
+        # back into live MultiTypeSensorReference instances.
+        monitor_input_sensors = {}
+        for channel, c in info.pop('monitor_input_sensors', {}).items():
+            sensor = MultiTypeSensorReference(sensor_type='Unity')
+            sensor.set_persistence(c)
+            monitor_input_sensors[channel] = sensor
+        self.monitor_input_sensors = monitor_input_sensors
 
         # Setting all remaining items
         for k, v in info.items():
@@ -547,12 +690,114 @@ enamldef ExperimentInfo(GroupBox):
             os.startfile(DATA_ROOT)
 
 
+enamldef MonitorInputsDialog(Dialog): dialog:
+    '''
+    Per-paradigm modal settings window: pick which input channels to plot
+    live (time domain and/or PSD) and/or save alongside the recording while
+    running `experiment`. Which calibration applies to a channel is NOT
+    configured here -- that's global, shared across every paradigm (see
+    File > Settings / `SettingsDialog`), since it doesn't make sense for the
+    same physical channel to have a different calibration depending on
+    which paradigm happens to be monitoring it.
+    '''
+    attr settings
+    attr experiment
+    attr channel_config << settings.monitor_input_config_for(experiment.paradigm.name)
+
+    title = f'Monitor inputs — {experiment.paradigm.title}'
+    initial_size = (400, 400)
+
+    Container:
+        ScrollArea:
+            Form:
+                padding = 0
+                Looper:
+                    iterable << sorted(list_inputs().items())
+                    Label:
+                        text = loop_item[0]
+                    HGroup:
+                        padding = 0
+                        CheckBox:
+                            text = 'Time'
+                            checked := channel_config[loop_item[1]].plot_time
+                        CheckBox:
+                            text = 'PSD'
+                            checked := channel_config[loop_item[1]].plot_fft
+                        CheckBox:
+                            text = 'Save'
+                            checked := channel_config[loop_item[1]].save
+
+        HGroup:
+            leading_spacer = spacer(0)
+            PushButton:
+                text = 'Close'
+                clicked ::
+                    dialog.accept()
+
+
+enamldef SettingsDialog(Dialog): dialog:
+    '''
+    Global (not per-paradigm/per-experiment) hardware settings: which
+    calibration and gain to use for each monitorable input channel. This is
+    the single source of truth for that configuration -- the main window's
+    Equipment Configuration panel only displays it (read-only); edit it
+    here instead.
+
+    Starships and speakers do NOT get their own picker here -- a starship's
+    (or speaker's) calibration IS the calibration of its own built-in
+    microphone, so it's configured by picking the matching 'Starship'/
+    'Speaker' type on that microphone's own input-channel row below (named
+    `<connection>_microphone`, e.g. `starship_A_microphone`). See
+    `Settings.equipment_calibration()`.
+    '''
+    attr settings
+
+    title = 'Settings'
+    initial_size = (600, 500)
+
+    Container:
+        ScrollArea:
+            GroupBox:
+                title = 'Input channels'
+                VGroup:
+                    Label:
+                        text = (
+                            "For a starship or speaker, pick its 'Starship'/\n"
+                            "'Speaker' type on the channel named\n"
+                            "<connection>_microphone (e.g. starship_A_microphone)\n"
+                            "-- that calibration is also used as the equipment's\n"
+                            "own output calibration."
+                        )
+
+                    Form:
+                        padding = 0
+                        Looper:
+                            iterable << sorted(list_inputs().items())
+                            Label:
+                                text = loop_item[0]
+                            SensorView:
+                                sensor << settings.monitor_input_sensor_for(loop_item[1])
+                                mode = 'static'
+                                show_label = False
+                                fill_row = True
+
+        HGroup:
+            leading_spacer = spacer(0)
+            PushButton:
+                text = 'Close'
+                clicked ::
+                    dialog.accept()
+
+
 enamldef Main(MainWindow): main:
 
     title = 'Cochlear Function Test Suite'
 
     attr settings = Settings()
     attr edit_mode = False
+
+    func configure_monitor_inputs(experiment):
+        MonitorInputsDialog(parent=main, settings=settings, experiment=experiment).exec_()
 
     MenuBar:
         Menu:
@@ -585,6 +830,12 @@ enamldef Main(MainWindow): main:
                 text = 'Edit config'
                 checkable = True
                 checked := main.edit_mode
+            Action:
+                separator = True
+            Action:
+                text = '&Settings...'
+                triggered ::
+                    SettingsDialog(parent=main, settings=settings).exec_()
 
         Menu:
             title = '&Options'
@@ -613,10 +864,6 @@ enamldef Main(MainWindow): main:
                 text = '&Record output monitor signal'
                 checkable = True
                 checked := settings.record_output_monitor
-            Action:
-                text = '&Show output monitor signal'
-                checkable = True
-                checked := settings.show_output_monitor
             Action:
                 text = '&Monitor body temperature'
                 checkable = True
@@ -691,42 +938,44 @@ enamldef Main(MainWindow): main:
             Looper:
                 iterable << settings.starship_config.keys()
                 Label:
-                    text = f'Starship {loop_item}'
+                    text = f'Starship {settings.starship_config[loop_item]["label"]}'
                 ObjectCombo:
                     items = ['either', 'left', 'right', 'not used']
                     selected << settings.starship_config[loop_item]['ear']
                     selected ::
                         settings.starship_config[loop_item]['ear'] = selected
-                ObjectCombo:
-                    items << sorted(starship_manager.list_objects())
-                    selected << settings.starship_config[loop_item]['calibration']
-                    selected ::
-                        settings.starship_config[loop_item]['calibration'] = selected
-                ObjectCombo:
-                    items = [20, 40]
-                    selected << settings.starship_config[loop_item]['gain']
-                    selected ::
-                        settings.starship_config[loop_item]['gain'] = selected
+                #: Read-only -- derived from the matching input channel's
+                #: calibration; configure it via File > Settings (SettingsDialog),
+                #: not here. See Settings.equipment_calibration().
+                Label:
+                    text << (
+                        lambda s: s.get_calibration().name if s is not None else 'Not configured'
+                    )(settings.equipment_calibration(loop_item, 'Starship'))
+                Label:
+                    text << (
+                        lambda s: f'{s.gain} dB' if s is not None else ''
+                    )(settings.equipment_calibration(loop_item, 'Starship'))
 
             Looper:
                 iterable << settings.speaker_config.keys()
                 Label:
-                    text = f'Speaker {loop_item}'
+                    text = f'{settings.speaker_config[loop_item]["label"]}'
                 ObjectCombo:
                     items = ['either', 'left', 'right', 'freefield', 'not used']
                     selected << settings.speaker_config[loop_item]['ear']
                     selected ::
                         settings.speaker_config[loop_item]['ear'] = selected
-                ObjectCombo:
-                    items << sorted(speaker_manager.list_objects())
-                    selected << settings.speaker_config[loop_item]['calibration']
-                    selected ::
-                        settings.speaker_config[loop_item]['calibration'] = selected
-                ObjectCombo:
-                    items = [0]
-                    selected << settings.speaker_config[loop_item]['gain']
-                    selected ::
-                        settings.speaker_config[loop_item]['gain'] = selected
+                #: Read-only -- derived from the matching input channel's
+                #: calibration; configure it via File > Settings (SettingsDialog),
+                #: not here. See Settings.equipment_calibration().
+                Label:
+                    text << (
+                        lambda s: s.get_calibration().name if s is not None else 'Not configured'
+                    )(settings.equipment_calibration(loop_item, 'Speaker'))
+                Label:
+                    text << (
+                        lambda s: f'{s.gain} dB' if s is not None else ''
+                    )(settings.equipment_calibration(loop_item, 'Speaker'))
 
             Label:
                 text = 'Cal. mic.'
@@ -741,6 +990,7 @@ enamldef Main(MainWindow): main:
                 selected << settings.cal_mic_config['microphone']
                 selected ::
                     settings.cal_mic_config['microphone'] = selected
+                to_string = lambda x: x.path
                 visible << settings.record_cal_mic
 
             ObjectCombo:
@@ -814,6 +1064,7 @@ enamldef Main(MainWindow): main:
                         edit_mode << main.edit_mode
                         settings << main.settings
                         autostart << check_autostart.checked
+                        configure_channels = configure_monitor_inputs
             Page:
                 title = 'Experiments'
                 closable = False
@@ -828,6 +1079,7 @@ enamldef Main(MainWindow): main:
                         edit_mode << main.edit_mode
                         settings << main.settings
                         autostart << exp_autostart.checked
+                        configure_channels = configure_monitor_inputs
 
             Page:
                 title = 'Sequences'
@@ -862,6 +1114,7 @@ enamldef Main(MainWindow): main:
                             sequence := main.settings.current_sequence
                             edit_mode << main.edit_mode
                             settings << main.settings
+                            configure_channels = configure_monitor_inputs
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
