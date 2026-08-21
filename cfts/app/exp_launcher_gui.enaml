@@ -48,7 +48,90 @@ from psiapp.api import (
 )
 
 
+class MonitorChannelSettings(Atom):
+    '''
+    Per-row, per-channel monitor-input configuration: whether to plot the
+    channel live (time domain and/or PSD) and/or save it alongside the
+    experiment's own recording. "Per-row" (not per-paradigm) means two rows
+    running the same paradigm (e.g. two `abr_io` rows) can record different
+    channels -- see `Experiment.monitor_input_config`. Which calibration
+    applies to the channel is NOT part of this -- that's global, configured
+    once via File > Settings (see `Settings.monitor_input_sensors`), not per
+    row.
+    '''
+    plot_time = Bool(False)
+    plot_fft = Bool(False)
+    save = Bool(False)
+
+    def is_active(self):
+        return self.plot_time or self.plot_fft or self.save
+
+
+def _channels_to_state(channels):
+    '''Convert {channel: MonitorChannelSettings} to a JSON-safe dict, only
+    keeping channels with something actually enabled.'''
+    return {
+        channel: {
+            'plot_time': c.plot_time,
+            'plot_fft': c.plot_fft,
+            'save': c.save,
+        }
+        for channel, c in channels.items() if c.is_active()
+    }
+
+
+def _channels_from_state(state):
+    '''Inverse of `_channels_to_state()`.'''
+    return {
+        channel: MonitorChannelSettings(
+            plot_time=c.get('plot_time', False),
+            plot_fft=c.get('plot_fft', False),
+            save=c.get('save', False),
+        )
+        for channel, c in state.items()
+    }
+
+
+# NOTE: the per-row monitor_input_config member/__init__/monitor_input_
+# config_for_channels()/__getstate__() below are deliberately duplicated
+# between Experiment and FrozenExperiment rather than factored into a
+# shared mixin -- Atom's C-level __getstate__ silently corrupts member
+# values when a Member is declared on a plain (non-Atom) mixin class ahead
+# of the Atom base in the MRO, so each must declare it directly as a
+# straight single-inheritance subclass of its own psiapp base.
+
+
 class Experiment(_Experiment):
+
+    #: Per-row (not per-paradigm) monitor-input configuration: which input
+    #: channels to plot/save while running THIS row, independent of every
+    #: other row -- including another row for the same paradigm (e.g. two
+    #: `abr_io` rows can record different channels). Persisted as part of
+    #: this row's own __getstate__(), not globally in Settings, so it
+    #: travels with the row through save_config()/load_config() and
+    #: through freeze(). Populated lazily -- see
+    #: monitor_input_config_for_channels().
+    monitor_input_config = Dict()
+
+    def __init__(self, *args, monitor_input_config=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.monitor_input_config = _channels_from_state(monitor_input_config or {})
+
+    def monitor_input_config_for_channels(self):
+        '''
+        Return the (mutable, live) per-channel monitor-input configuration
+        for this row, creating default entries for any input channel
+        present on this system but not yet configured.
+        '''
+        channels = self.monitor_input_config
+        for name in list_inputs().values():
+            channels.setdefault(name, MonitorChannelSettings())
+        return channels
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state['monitor_input_config'] = _channels_to_state(self.monitor_input_config)
+        return state
 
     def freeze(self, mode, ear='selected'):
         '''
@@ -76,6 +159,7 @@ class Experiment(_Experiment):
             preference=self.preference,
             plugins=self.plugins,
             mode_notes=self.mode_notes,
+            monitor_input_config=_channels_to_state(self.monitor_input_config),
             mode=mode,
             ear=ear,
         )
@@ -89,21 +173,23 @@ class FrozenExperiment(_FrozenExperiment):
     #: If either, then ear will be drawn from what is selected.
     ear = Enum('selected', 'left', 'right')
 
+    #: See Experiment.monitor_input_config.
+    monitor_input_config = Dict()
 
-class MonitorChannelSettings(Atom):
-    '''
-    Per-paradigm, per-channel monitor-input configuration: whether to plot
-    the channel live (time domain and/or PSD) and/or save it alongside the
-    experiment's own recording. Which calibration applies to the channel is
-    NOT part of this -- that's global, configured once via File > Settings
-    (see `Settings.monitor_input_sensors`), not per paradigm.
-    '''
-    plot_time = Bool(False)
-    plot_fft = Bool(False)
-    save = Bool(False)
+    def __init__(self, *args, monitor_input_config=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.monitor_input_config = _channels_from_state(monitor_input_config or {})
 
-    def is_active(self):
-        return self.plot_time or self.plot_fft or self.save
+    def monitor_input_config_for_channels(self):
+        channels = self.monitor_input_config
+        for name in list_inputs().values():
+            channels.setdefault(name, MonitorChannelSettings())
+        return channels
+
+    def __getstate__(self):
+        state = super().__getstate__()
+        state['monitor_input_config'] = _channels_to_state(self.monitor_input_config)
+        return state
 
 
 class Settings(Atom):
@@ -118,22 +204,6 @@ class Settings(Atom):
 
     monitor_sequence = List(Experiment)
     experiment_sequence = List(Experiment)
-
-    #: Per-paradigm monitor-input configuration. Maps paradigm name
-    #: (`experiment.paradigm.name`) -> {channel_name: MonitorChannelSettings}.
-    #: Populated lazily -- see `monitor_input_config_for()`.
-    monitor_input_config = Dict()
-
-    def monitor_input_config_for(self, paradigm_name):
-        '''
-        Return the (mutable, live) per-channel monitor-input configuration
-        for the given paradigm, creating default entries for any input
-        channel present on this system but not yet configured.
-        '''
-        channels = self.monitor_input_config.setdefault(paradigm_name, {})
-        for name in list_inputs().values():
-            channels.setdefault(name, MonitorChannelSettings())
-        return channels
 
     #: Bumped on every change to any sensor's calibration/gain -- Enaml's
     #: `<<` binding tracer only sees direct `obj.attr` reads executed in
@@ -157,7 +227,9 @@ class Settings(Atom):
     #: Global (not per-paradigm) calibration/gain for each monitorable input
     #: channel -- configured once via File > Settings. Maps channel name ->
     #: a MultiTypeSensorReference. Populated lazily -- see
-    #: monitor_input_sensor_for().
+    #: monitor_input_sensor_for(). Persisted to a shared hardware config
+    #: file, not the experiment config -- see save_hardware_config()/
+    #: load_hardware_config().
     monitor_input_sensors = Dict()
 
     def monitor_input_sensor_for(self, channel_name):
@@ -172,7 +244,9 @@ class Settings(Atom):
     #: name -> an OutputCalibrationReference. Populated lazily -- see
     #: output_sensor_for(). Does NOT cover a starship's own primary/
     #: secondary channels -- those aren't independently configured (see
-    #: equipment_calibration()).
+    #: equipment_calibration()). Persisted to a shared hardware config
+    #: file, not the experiment config -- see save_hardware_config()/
+    #: load_hardware_config().
     output_sensors = Dict()
 
     def output_sensor_for(self, channel_name):
@@ -404,8 +478,11 @@ class Settings(Atom):
         # Recording/plotting the calibration microphone or output monitor
         # is now just a matter of enabling save/plot on their own Input
         # Channels row (they're ordinary hw_ai channels) -- see below.
-        channel_config = self.monitor_input_config.get(experiment.paradigm.name, {})
-        active_channels = {n: c for n, c in channel_config.items() if c.is_active()}
+        # This is per-row (experiment.monitor_input_config), not
+        # per-paradigm -- see Experiment.monitor_input_config.
+        active_channels = {
+            n: c for n, c in experiment.monitor_input_config.items() if c.is_active()
+        }
         if active_channels:
             unconfigured = [
                 n for n in active_channels
@@ -486,25 +563,6 @@ class Settings(Atom):
             'current_sequence_name': self.current_sequence_name,
 
             'record_body_temperature': self.record_body_temperature,
-            'monitor_input_config': {
-                paradigm: {
-                    channel: {
-                        'plot_time': c.plot_time,
-                        'plot_fft': c.plot_fft,
-                        'save': c.save,
-                    }
-                    for channel, c in channels.items() if c.is_active()
-                }
-                for paradigm, channels in self.monitor_input_config.items()
-            },
-            'monitor_input_sensors': {
-                channel: sensor.get_persistence()
-                for channel, sensor in self.monitor_input_sensors.items()
-            },
-            'output_sensors': {
-                channel: sensor.get_persistence()
-                for channel, sensor in self.output_sensors.items()
-            },
             'swap_outputs': self.swap_outputs,
         }
 
@@ -527,6 +585,63 @@ class Settings(Atom):
         filename = Path(filename)
         filename.write_text(json.dumps(info, indent=2))
 
+    def save_hardware_config(self, filename):
+        '''
+        Save the calibration/gain configured for each monitorable input
+        channel and each configurable output channel (File > Settings).
+        This is rig hardware, not experiment configuration -- it belongs in
+        its own file, shared across every experiment config for the same
+        rig, and loaded alongside one (see load_hardware_config()).
+        '''
+        info = {
+            'monitor_input_sensors': {
+                channel: sensor.get_persistence()
+                for channel, sensor in self.monitor_input_sensors.items()
+            },
+            'output_sensors': {
+                channel: sensor.get_persistence()
+                for channel, sensor in self.output_sensors.items()
+            },
+        }
+        filename = Path(filename)
+        filename.write_text(json.dumps(info, indent=2))
+
+    def load_hardware_config(self, filename=None):
+        '''
+        Load the calibration/gain for each monitorable input channel and
+        each configurable output channel from a shared hardware config
+        file (see save_hardware_config()). Any channel not present in the
+        file falls back to its lazily-created Unity default (see
+        monitor_input_sensor_for()/output_sensor_for()).
+        '''
+        if filename is not None:
+            filename = Path(filename)
+            info = json.loads(filename.read_text())
+        else:
+            info = {}
+
+        # NOTE: _watch_sensor() must run BEFORE set_persistence() -- it only
+        # wires up the observers that bump _calibration_tick; calling it
+        # after would miss the very change events set_persistence() triggers,
+        # and the main window's read-only calibration/gain Labels (which
+        # depend on that tick -- see its own docstring) would then silently
+        # stay stale after a hardware config load.
+        monitor_input_sensors = {}
+        for channel, c in info.pop('monitor_input_sensors', {}).items():
+            sensor = self._watch_sensor(MultiTypeSensorReference(device_type='Unity'))
+            sensor.set_persistence(c)
+            monitor_input_sensors[channel] = sensor
+        self.monitor_input_sensors = monitor_input_sensors
+
+        output_sensors = {}
+        for channel, c in info.pop('output_sensors', {}).items():
+            sensor = self._watch_sensor(OutputCalibrationReference(device_type='Speaker'))
+            sensor.set_persistence(c)
+            output_sensors[channel] = sensor
+        self.output_sensors = output_sensors
+
+        self._bump_calibration_tick(None)
+
     def load_config(self, filename=None):
         if filename is not None:
             filename = Path(filename)
@@ -536,7 +651,7 @@ class Settings(Atom):
 
         info.pop('experimenter', None)
         # Legacy key from the old flat-list monitor_inputs model, superseded
-        # by the per-paradigm monitor_input_config handled below.
+        # by the per-row monitor_input_config (see Experiment.monitor_input_config).
         info.pop('monitor_inputs', None)
 
         # Load and resurrect the experiment sequences 
@@ -608,44 +723,30 @@ class Settings(Atom):
             input_amp_config['freq_ub'] = 10e3
         self.input_amp_config = input_amp_config
 
-        # Resolve each paradigm's saved per-channel monitor-input
-        # configuration back into live MonitorChannelSettings instances.
-        monitor_input_config = {}
-        for paradigm, channels in info.pop('monitor_input_config', {}).items():
-            monitor_input_config[paradigm] = {
-                channel: MonitorChannelSettings(
-                    plot_time=c.get('plot_time', False),
-                    plot_fft=c.get('plot_fft', False),
-                    save=c.get('save', False),
-                )
-                for channel, c in channels.items()
-            }
-        self.monitor_input_config = monitor_input_config
+        # Legacy top-level key from when monitor-input configuration was
+        # per-paradigm (shared by every row using that paradigm) rather than
+        # per-row -- it now lives on each row itself (see
+        # Experiment.monitor_input_config), embedded in experiment_sequence/
+        # monitor_sequence/sequences and resolved by load_experiments()
+        # above.
+        info.pop('monitor_input_config', None)
 
-        # Resolve the global per-channel calibration/gain (File > Settings)
-        # back into live MultiTypeSensorReference instances.
-        # NOTE: _watch_sensor() must run BEFORE set_persistence() -- it
-        # only wires up the observers that bump _calibration_tick; calling
-        # it after would miss the very change events set_persistence()
-        # triggers, and the main window's read-only calibration/gain
-        # Labels (which depend on that tick to know a `<<` binding needs
-        # re-evaluating -- see its own docstring) would then silently
-        # stay stale after a config load.
-        monitor_input_sensors = {}
-        for channel, c in info.pop('monitor_input_sensors', {}).items():
-            sensor = self._watch_sensor(MultiTypeSensorReference(device_type='Unity'))
-            sensor.set_persistence(c)
-            monitor_input_sensors[channel] = sensor
-        self.monitor_input_sensors = monitor_input_sensors
-
-        # Resolve the global per-output-channel calibration (File > Settings
-        # > Outputs) back into live OutputCalibrationReference instances.
-        output_sensors = {}
-        for channel, c in info.pop('output_sensors', {}).items():
-            sensor = self._watch_sensor(OutputCalibrationReference(device_type='Speaker'))
-            sensor.set_persistence(c)
-            output_sensors[channel] = sensor
-        self.output_sensors = output_sensors
+        # monitor_input_sensors/output_sensors (calibration/gain for each
+        # input and output channel) now live in their own hardware config
+        # file, shared across experiment configs for the same rig -- see
+        # save_hardware_config()/load_hardware_config(), called separately
+        # (e.g. `cfts <experiment_config.json> <hardware_config.json>` or
+        # File > Load hardware config). Discard a legacy experiment config
+        # that still embeds them rather than silently reviving stale data.
+        if 'monitor_input_sensors' in info or 'output_sensors' in info:
+            log.warning(
+                'Ignoring monitor_input_sensors/output_sensors embedded in '
+                'experiment config %r -- move them to a hardware config '
+                'file and load it via File > Load hardware config.',
+                filename,
+            )
+        info.pop('monitor_input_sensors', None)
+        info.pop('output_sensors', None)
 
         # Setting all remaining items
         for k, v in info.items():
@@ -745,19 +846,20 @@ enamldef ExperimentInfo(GroupBox):
 
 enamldef MonitorInputsView(Container): view:
     '''
-    Per-paradigm inline channel picker, embedded in the row's ⚙ popup
-    (see `PluginPopup`/`ExperimentSequence.build_channels_view` in
-    psiapp): pick which input channels to plot live (time domain and/or
-    PSD) and/or save alongside the recording while running `experiment`.
-    Which calibration applies to a channel is NOT configured here --
-    that's global, shared across every paradigm (see File > Settings /
+    Per-row inline channel picker, embedded in the row's ⚙ popup (see
+    `PluginPopup`/`ExperimentSequence.build_channels_view` in psiapp): pick
+    which input channels to plot live (time domain and/or PSD) and/or save
+    alongside the recording while running `experiment`. This is specific to
+    this one row -- another row running the same paradigm can be configured
+    to record different channels (see `Experiment.monitor_input_config`). Which
+    calibration applies to a channel is NOT configured here -- that's
+    global, shared across every row (see File > Update Hardware Config /
     `SettingsDialog`), since it doesn't make sense for the same physical
-    channel to have a different calibration depending on which paradigm
-    happens to be monitoring it.
+    channel to have a different calibration depending on which row happens
+    to be monitoring it.
     '''
-    attr settings
     attr experiment
-    attr channel_config << settings.monitor_input_config_for(experiment.paradigm.name)
+    attr channel_config << experiment.monitor_input_config_for_channels()
 
     padding = 0
 
@@ -875,7 +977,7 @@ enamldef Main(MainWindow): main:
     attr edit_mode = False
 
     func build_monitor_channels_view(experiment):
-        return [MonitorInputsView(settings=settings, experiment=experiment)]
+        return [MonitorInputsView(experiment=experiment)]
 
     MenuBar:
         Menu:
@@ -905,15 +1007,37 @@ enamldef Main(MainWindow): main:
             Action:
                 separator = True
             Action:
-                text = 'Edit config'
-                checkable = True
-                checked := main.edit_mode
+                text = 'Load hardware config'
+                triggered ::
+                    path = CFTS_ROOT / 'cfts-launcher'
+                    path.mkdir(exist_ok=True, parents=True)
+                    filename = FileDialogEx.get_open_file_name(
+                        current_path=str(path),
+                        name_filters=['Hardware Settings (*.json)'],
+                    )
+                    if filename:
+                        settings.load_hardware_config(filename)
+            Action:
+                text = 'Save hardware config'
+                triggered ::
+                    path = CFTS_ROOT / 'cfts-launcher'
+                    path.mkdir(exist_ok=True, parents=True)
+                    filename = FileDialogEx.get_save_file_name(
+                        current_path=str(path),
+                        name_filters=['Hardware Settings (*.json)'],
+                    )
+                    if filename:
+                        settings.save_hardware_config(filename)
+            Action:
+                text = 'Update Hardware Config'
+                triggered ::
+                    SettingsDialog(parent=main, settings=settings).exec_()
             Action:
                 separator = True
             Action:
-                text = '&Settings...'
-                triggered ::
-                    SettingsDialog(parent=main, settings=settings).exec_()
+                text = 'Edit experiment config'
+                checkable = True
+                checked := main.edit_mode
 
         Menu:
             title = '&Options'
