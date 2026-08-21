@@ -150,7 +150,7 @@ class Settings(Atom):
         self._calibration_tick += 1
 
     def _watch_sensor(self, sensor):
-        for member in ('name', 'sensor_type', 'gain', 'sensitivity'):
+        for member in ('name', 'device_type', 'gain', 'sensitivity'):
             sensor.observe(member, self._bump_calibration_tick)
         return sensor
 
@@ -163,7 +163,7 @@ class Settings(Atom):
     def monitor_input_sensor_for(self, channel_name):
         if channel_name not in self.monitor_input_sensors:
             self.monitor_input_sensors[channel_name] = self._watch_sensor(
-                MultiTypeSensorReference(sensor_type='Unity')
+                MultiTypeSensorReference(device_type='Unity')
             )
         return self.monitor_input_sensors[channel_name]
 
@@ -178,7 +178,7 @@ class Settings(Atom):
     def output_sensor_for(self, channel_name):
         if channel_name not in self.output_sensors:
             self.output_sensors[channel_name] = self._watch_sensor(
-                OutputCalibrationReference(sensor_type='Speaker')
+                OutputCalibrationReference(device_type='Speaker')
             )
         return self.output_sensors[channel_name]
 
@@ -221,7 +221,7 @@ class Settings(Atom):
             sensor = self.output_sensors.get(key)
         if sensor is None:
             return None
-        if sensor.sensor_type != expected_type or not sensor.is_configured():
+        if sensor.device_type != expected_type or not sensor.is_configured():
             return None
         return sensor
 
@@ -633,7 +633,7 @@ class Settings(Atom):
         # stay stale after a config load.
         monitor_input_sensors = {}
         for channel, c in info.pop('monitor_input_sensors', {}).items():
-            sensor = self._watch_sensor(MultiTypeSensorReference(sensor_type='Unity'))
+            sensor = self._watch_sensor(MultiTypeSensorReference(device_type='Unity'))
             sensor.set_persistence(c)
             monitor_input_sensors[channel] = sensor
         self.monitor_input_sensors = monitor_input_sensors
@@ -642,7 +642,7 @@ class Settings(Atom):
         # > Outputs) back into live OutputCalibrationReference instances.
         output_sensors = {}
         for channel, c in info.pop('output_sensors', {}).items():
-            sensor = self._watch_sensor(OutputCalibrationReference(sensor_type='Speaker'))
+            sensor = self._watch_sensor(OutputCalibrationReference(device_type='Speaker'))
             sensor.set_persistence(c)
             output_sensors[channel] = sensor
         self.output_sensors = output_sensors
@@ -743,48 +743,41 @@ enamldef ExperimentInfo(GroupBox):
             os.startfile(DATA_ROOT)
 
 
-enamldef MonitorInputsDialog(Dialog): dialog:
+enamldef MonitorInputsView(Container): view:
     '''
-    Per-paradigm modal settings window: pick which input channels to plot
-    live (time domain and/or PSD) and/or save alongside the recording while
-    running `experiment`. Which calibration applies to a channel is NOT
-    configured here -- that's global, shared across every paradigm (see
-    File > Settings / `SettingsDialog`), since it doesn't make sense for the
-    same physical channel to have a different calibration depending on
-    which paradigm happens to be monitoring it.
+    Per-paradigm inline channel picker, embedded in the row's ⚙ popup
+    (see `PluginPopup`/`ExperimentSequence.build_channels_view` in
+    psiapp): pick which input channels to plot live (time domain and/or
+    PSD) and/or save alongside the recording while running `experiment`.
+    Which calibration applies to a channel is NOT configured here --
+    that's global, shared across every paradigm (see File > Settings /
+    `SettingsDialog`), since it doesn't make sense for the same physical
+    channel to have a different calibration depending on which paradigm
+    happens to be monitoring it.
     '''
     attr settings
     attr experiment
     attr channel_config << settings.monitor_input_config_for(experiment.paradigm.name)
 
-    title = f'Monitor inputs — {experiment.paradigm.title}'
-    initial_size = (400, 400)
+    padding = 0
 
-    Container:
-        Form:
-            padding = 0
-            Looper:
-                iterable << sorted(list_inputs().items())
-                Label:
-                    text = loop_item[0]
-                HGroup:
-                    padding = 0
-                    CheckBox:
-                        text = 'Time'
-                        checked := channel_config[loop_item[1]].plot_time
-                    CheckBox:
-                        text = 'PSD'
-                        checked := channel_config[loop_item[1]].plot_fft
-                    CheckBox:
-                        text = 'Save'
-                        checked := channel_config[loop_item[1]].save
-
-        HGroup:
-            leading_spacer = spacer(0)
-            PushButton:
-                text = 'Close'
-                clicked ::
-                    dialog.accept()
+    Form:
+        padding = 0
+        Looper:
+            iterable << sorted(list_inputs().items())
+            Label:
+                text = loop_item[0]
+            HGroup:
+                padding = 0
+                CheckBox:
+                    text = 'Time'
+                    checked := channel_config[loop_item[1]].plot_time
+                CheckBox:
+                    text = 'PSD'
+                    checked := channel_config[loop_item[1]].plot_fft
+                CheckBox:
+                    text = 'Save'
+                    checked := channel_config[loop_item[1]].save
 
 
 enamldef SettingsDialog(Dialog): dialog:
@@ -815,14 +808,14 @@ enamldef SettingsDialog(Dialog): dialog:
             output_widgets = output_group.visible_widgets()
             labels = input_widgets[::2] + output_widgets[::2]
 
-            sensor_types = []
+            type_combos = []
             for w in (input_widgets[1::2] + output_widgets[1::2]):
-                sensor_types.append(w.visible_widgets()[0])
+                type_combos.append(w.visible_widgets()[0])
 
             return [
                 vbox(input_group, output_group, action_buttons, spacing=10),
                 align('width', *labels),
-                align('width', *sensor_types),
+                align('width', *type_combos),
             ]
 
         GroupBox: input_group:
@@ -881,8 +874,8 @@ enamldef Main(MainWindow): main:
     attr settings = Settings()
     attr edit_mode = False
 
-    func configure_monitor_inputs(experiment):
-        MonitorInputsDialog(parent=main, settings=settings, experiment=experiment).exec_()
+    func build_monitor_channels_view(experiment):
+        return [MonitorInputsView(settings=settings, experiment=experiment)]
 
     MenuBar:
         Menu:
@@ -1117,7 +1110,7 @@ enamldef Main(MainWindow): main:
                         edit_mode << main.edit_mode
                         settings << main.settings
                         autostart << check_autostart.checked
-                        configure_channels = configure_monitor_inputs
+                        build_channels_view = build_monitor_channels_view
             Page:
                 title = 'Experiments'
                 closable = False
@@ -1132,7 +1125,7 @@ enamldef Main(MainWindow): main:
                         edit_mode << main.edit_mode
                         settings << main.settings
                         autostart << exp_autostart.checked
-                        configure_channels = configure_monitor_inputs
+                        build_channels_view = build_monitor_channels_view
 
             Page:
                 title = 'Sequences'
@@ -1167,7 +1160,7 @@ enamldef Main(MainWindow): main:
                             sequence := main.settings.current_sequence
                             edit_mode << main.edit_mode
                             settings << main.settings
-                            configure_channels = configure_monitor_inputs
+                            build_channels_view = build_monitor_channels_view
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
