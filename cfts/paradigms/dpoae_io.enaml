@@ -1,6 +1,7 @@
 import logging
 log = logging.getLogger(__name__)
 
+from enaml.application import deferred_call
 from enaml.stdlib.message_box import warning
 from enaml.widgets.api import ProgressBar
 from enaml.workbench.api import Extension
@@ -19,6 +20,7 @@ EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
 
 enamldef DPOAEPlotContainer(PlotContainer): pc:
+
     attr suffix = ''
     name = f'dpoae_io{suffix}_container'
     label = 'DPOAE IO'
@@ -216,8 +218,8 @@ def configure_dpoaeio_gui(event):
     context = event.workbench.get_plugin('psi.context')
     n_fft = context.get_value('n_fft')
     n_time = context.get_value('n_time')
-    pb_trial.maximum = n_fft * n_time
-    pb_trials.maximum = context.n_values()
+    deferred_call(setattr, pb_trial, 'maximum', n_fft * n_time)
+    deferred_call(setattr, pb_trials, 'maximum', context.n_values())
     f2 = context.unique_values('secondary_tone_frequency')
     l1 = context.unique_values('primary_tone_level')
     l2 = context.unique_values('secondary_tone_level')
@@ -229,8 +231,8 @@ def configure_dpoaeio_gui(event):
 
     pc.x_min = min(levels) - 10
     pc.x_max = max(levels) + 10
-    vb.y_min = min(vb.y_min, min(levels) - 10)
-    vb.y_max = max(vb.y_max, max(levels) + 10)
+    vb.expand_y_range(min(levels) - 10, max(levels) + 10)
+    log.info('Set dpoae_io_container x-axis to %d to %d', pc.x_min, pc.x_max)
 
     lb, ub = min(f2) / 1.2, max(f2) * 1.2
     pc = data.find_plot_container('dpoae_threshold_container')
@@ -245,6 +247,7 @@ def configure_dpoaeio_gui(event):
         plugin.manifest.fft_freq_ub = ub
     except ValueError:
         # Plugin is not registered
+        log.warning('Could not find plugin dpoae_microphone_fft_mixin')
         pass
 
 
@@ -372,8 +375,8 @@ def configure_dual_dpoaeio_gui(event):
     context = event.workbench.get_plugin('psi.context')
     n_fft = context.get_value('n_fft')
     n_time = context.get_value('n_time')
-    pb_trial.maximum = n_fft * n_time
-    pb_trials.maximum = context.n_values()
+    deferred_call(setattr, pb_trial, 'maximum', n_fft * n_time)
+    deferred_call(setattr, pb_trials, 'maximum', context.n_values())
     f2 = context.unique_values('secondary_left_tone_frequency')
     l1 = context.unique_values('primary_left_tone_level')
     l2 = context.unique_values('secondary_left_tone_level')
