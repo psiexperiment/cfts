@@ -96,11 +96,14 @@ def configure_experiment(event):
     # Set the microphone FFT to show the modulation frequency plus the upper
     # carrier frequency. This will allow us to scan for potential harmonics or
     # other artifacts in the microphone spectrum that may affect EEG.
-    fm_range = context.unique_values('fm')
-    freq_range = context.unique_values(fc_name)
-    mic_fft = data.find_plot_container('microphone_fft_view_container')
-    mic_fft.freq_lb = min(fm_range) / 1.2
-    mic_fft.freq_ub = max(freq_range) * 1.2
+    try:
+        mic_fft = data.find_plot_container('microphone_fft_view_container')
+        fm_range = context.unique_values('fm')
+        freq_range = context.unique_values(fc_name)
+        mic_fft.freq_lb = min(fm_range) / 1.2
+        mic_fft.freq_ub = max(freq_range) * 1.2
+    except AttributeError:
+        log.warning('No microphone_fft_view_container found')
 
 
 enamldef BaseEFRManifest(ControllerManifest): manifest:
@@ -114,11 +117,6 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
 
-        ExtractEpochs: extract_mic:
-            source_name = 'system_microphone'
-            epoch_size = getattr(C, f'target_{selected_token}_duration')
-            name = 'mic_segment'
-
         QueuedEpochOutput: output:
             name = 'target'
             target_name = 'system_output'
@@ -126,7 +124,6 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
             token << workbench.get_plugin('psi.token').get_token(selected_token)
             queue ::
                 extract_eeg.subscribe_to_queue(self.queue)
-                extract_mic.subscribe_to_queue(self.queue)
 
         ExtractEpochs: extract_eeg:
             source_name = 'eeg'
@@ -213,11 +210,11 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
 
         TextStore:
             name = 'erp_metadata_store'
-            epoch_inputs = ['analyze_efr', 'mic_segment']
+            epoch_inputs = ['analyze_efr']
 
         BinaryStore:
             name = 'continuous_store'
-            continuous_inputs = ['system_microphone', 'eeg']
+            continuous_inputs = ['eeg']
 
     Extension:
         id = EXPERIMENT + '.workspace'
