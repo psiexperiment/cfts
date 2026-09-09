@@ -33,6 +33,8 @@ from cftscal.api import (
 from cftscal.plugins.settings import MultiTypeSensorReference, OutputCalibrationReference
 from cftscal.plugins.widgets import SensorView
 
+from .branding import load_app_icon
+
 
 DATA_ROOT = Path(get_config('DATA_ROOT'))
 CFTS_ROOT = Path(get_config('CFTS_ROOT'))
@@ -972,6 +974,7 @@ enamldef SettingsDialog(Dialog): dialog:
 enamldef Main(MainWindow): main:
 
     title = 'Cochlear Function Test Suite'
+    icon = load_app_icon()
 
     attr settings = Settings()
     attr edit_mode = False

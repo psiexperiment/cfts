@@ -29,6 +29,12 @@ dev = ["coloredlogs"]
 [project.scripts]
 cfts = "cfts.app.main:cfts"
 
+[tool.setuptools.package-data]
+cfts = [
+    "icons/*.ico",
+    "icons/*.png",
+]
+
 [build-system]
 requires = ["setuptools>=61.2", "wheel", "setuptools_scm[toml]>=3.4.3"]
 build-backend = "setuptools.build_meta"
