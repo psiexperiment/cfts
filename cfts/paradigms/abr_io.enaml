@@ -31,6 +31,11 @@ EXPERIMENT = __name__.rsplit('.', 1)[-1]
 EXPERIMENT_SIMPLE = __name__.rsplit('.', 1)[-1] + '_simple'
 
 
+def delays(rng, low, high):
+    while True:
+        yield rng.uniform(low, high)
+
+
 def add_setting(target, setting, averages, iti, key_map):
     key, _ = target.add_setting(setting, averages, iti)
     freq = setting['target_tone_frequency']
@@ -63,7 +68,7 @@ def configure_experiment_tone(key_map, event):
         if min_iti <= 0:
             raise ValueError(f'Repetition rate is too fast. Minimum ITI is {min_iti*1e3:.0f} msec.')
         rng = np.random.default_rng(seed=987654321)
-        iti = rng.uniform(min_iti, max_iti)
+        iti = delays(rng, min_iti, max_iti)
     else:
         iti = 1/rate - tone_duration
         if iti <= 0:
@@ -168,7 +173,7 @@ def configure_experiment_click(key_map, event):
         if min_iti <= 0:
             raise ValueError('Repetition rate is too fast')
         rng = np.random.default_rng(seed=987654321)
-        iti = rng.uniform(min_iti, max_iti)
+        iti = delays(rng, min_iti, max_iti)
     else:
         iti = 1/rate - duration
         if iti <= 0:
