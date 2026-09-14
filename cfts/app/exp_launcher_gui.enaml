@@ -1092,7 +1092,7 @@ enamldef Main(MainWindow): main:
 
         GroupBox: starship_info:
             title = 'Equipment Configuration'
-            flat = True
+            flat = False
             share_layout = True
 
             layout_constraints => ():
@@ -1291,7 +1291,6 @@ enamldef Main(MainWindow): main:
 
         GroupBox: experiment_stats:
             title = 'Experiment Info'
-            flat = True
             share_layout = True
 
             Label:

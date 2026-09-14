@@ -105,14 +105,14 @@ enamldef DPGramBaseManifest(ExperimentManifest): manifest:
 
         StatusItem:
             label = 'Current trial'
-
+            trailing_spacer = False
             ProgressBar: pb_trial:
                 name = 'dpoae_trial_pb'
                 text_visible = True
 
         StatusItem:
             label = 'Trials '
-
+            trailing_spacer = False
             ProgressBar: pb_trials:
                 name = 'dpoae_trials_pb'
                 text_visible = True
