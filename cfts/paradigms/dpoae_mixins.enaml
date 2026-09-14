@@ -83,6 +83,7 @@ enamldef DPOAEThresholdManifest(PSIManifest): manifest:
             name = manifest.contribution.name + '_container'
             freq_lb = 1e3
             freq_ub = 100e3
+            axis_scale = 'octave'
 
             ViewBox:
                 y_min = -20
