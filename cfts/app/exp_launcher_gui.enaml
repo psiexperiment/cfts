@@ -540,13 +540,19 @@ class Settings(Atom):
         self.process_manager.open_next_subprocess()
 
     def prepare_sequence(self, sequence, save=True):
-        for i, experiment in enumerate(sequence):
+        # Build every command before queueing any so that a failure partway
+        # through doesn't leave a partial sequence queued. Anything left over
+        # from a previous run that was aborted is discarded.
+        commands = []
+        for experiment in sequence:
             ear = self.ear if experiment.ear == 'selected' else experiment.ear
-            cmd, env = self.build_experiment(experiment,
-                                             experiment.mode,
-                                             ear,
-                                             save=save,
-                                             )
+            commands.append(self.build_experiment(experiment,
+                                                  experiment.mode,
+                                                  ear,
+                                                  save=save,
+                                                  ))
+        self.process_manager.clear_commands()
+        for cmd, env in commands:
             self.process_manager.add_command(cmd, env)
 
     def save_config(self, filename):
