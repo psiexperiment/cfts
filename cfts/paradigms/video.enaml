@@ -6,6 +6,7 @@ log = logging.getLogger(__name__)
 
 import atexit
 from functools import partial
+import math
 from pathlib import Path
 import shutil
 import tempfile
@@ -27,6 +28,8 @@ class VideoSink(Sink):
 
     client = Value()
     client_connected = Bool(False)
+    #: Cleared if psivideo rejects set_experiment_offset (older versions).
+    offset_supported = Bool(True)
     base_path = Typed(Path)
     is_temp = Bool(False)
     port = d_(Int())
@@ -66,13 +69,34 @@ class VideoSink(Sink):
             # Older psivideo servers do not support snapshots.
             log.exception(e)
 
+    def get_experiment_ts(self):
+        # NaN (e.g., engine clock not readable) is returned as None so
+        # psivideo leaves the experiment time out of the filename.
+        try:
+            ts = float(self.controller.get_ts())
+        except Exception as e:
+            log.exception(e)
+            return None
+        return ts if math.isfinite(ts) else None
+
     def take_snapshot(self, label=None):
-        # Saved by psivideo as snapshot_<date time>_<label>.png.
+        # Saved by psivideo as snapshot_<date time>_t<experiment ts>s_<label>.png.
         if not self.client_connected or self.is_temp or self.base_path is None:
             return
         try:
-            self.client.snapshot(label)
+            self.client.snapshot(label, self.get_experiment_ts())
         except Exception as e:
+            log.exception(e)
+
+    def send_experiment_offset(self, controller_ts, frame_ts):
+        # Lets psivideo convert frame times to experiment time so snapshots
+        # from its overlay button can be named with the experiment time.
+        if not self.offset_supported or not math.isfinite(controller_ts):
+            return
+        try:
+            self.client.set_experiment_offset(controller_ts - frame_ts)
+        except Exception as e:
+            self.offset_supported = False
             log.exception(e)
 
     def start_recording(self):
@@ -98,6 +122,7 @@ class VideoSink(Sink):
             frame = str(int(round(timing['frame_number'])))
             frame_ts = str(timing['timestamp'])
             self.timing_fh.write(','.join((frame, frame_ts, controller_ts)) + '\n')
+            self.send_experiment_offset(float(controller_ts), timing['timestamp'])
             timed_call(1000, self.check_timing)
         except Exception as e:
             log.exception(e)
@@ -153,9 +178,12 @@ enamldef PSIVideo(ExperimentManifest): manifest:
             event = 'experiment_prepare'
             command = manifest.id + '.start_recording'
         ExperimentAction:
+            # Runs after psi.controller.start_engines (weight 50) so the
+            # experiment clock is running.
             event = 'experiment_start'
             command = manifest.id + '.take_snapshot'
             kwargs = {'label': 'experiment_start'}
+            weight = 100
         ExperimentAction:
             event = 'experiment_end'
             command = manifest.id + '.stop_recording'
