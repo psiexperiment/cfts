@@ -66,12 +66,12 @@ class VideoSink(Sink):
             # Older psivideo servers do not support snapshots.
             log.exception(e)
 
-    def take_snapshot(self, prefix='snapshot'):
-        # psivideo appends the date and time to the prefix.
+    def take_snapshot(self, label=None):
+        # Saved by psivideo as snapshot_<date time>_<label>.png.
         if not self.client_connected or self.is_temp or self.base_path is None:
             return
         try:
-            self.client.snapshot(prefix)
+            self.client.snapshot(label)
         except Exception as e:
             log.exception(e)
 
@@ -120,7 +120,7 @@ enamldef VideoSinkManifest(PSIManifest): manifest:
         Command:
             id = manifest.contribution.name + '.take_snapshot'
             handler = lambda e: manifest.contribution.take_snapshot(
-                e.parameters.get('prefix', 'snapshot'))
+                e.parameters.get('label'))
 
 
 enamldef PSIVideo(ExperimentManifest): manifest:
@@ -155,7 +155,7 @@ enamldef PSIVideo(ExperimentManifest): manifest:
         ExperimentAction:
             event = 'experiment_start'
             command = manifest.id + '.take_snapshot'
-            kwargs = {'prefix': 'snapshot_experiment_start'}
+            kwargs = {'label': 'experiment_start'}
         ExperimentAction:
             event = 'experiment_end'
             command = manifest.id + '.stop_recording'
