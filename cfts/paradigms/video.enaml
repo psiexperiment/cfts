@@ -26,6 +26,7 @@ from psi.data.api import Sink
 class VideoSink(Sink):
 
     client = Value()
+    client_connected = Bool(False)
     base_path = Typed(Path)
     is_temp = Bool(False)
     port = d_(Int())
@@ -46,10 +47,24 @@ class VideoSink(Sink):
             base_path.mkdir(parents=True, exist_ok=True)
         self.base_path = base_path
         self.is_temp = is_temp
+        self.send_data_folder()
 
     def start_client(self):
         self.client.connect()
+        self.client_connected = True
         atexit.register(self.client.disconnect)
+        self.send_data_folder()
+
+    def send_data_folder(self):
+        # Tells psivideo where its snapshot button saves images. Temporary
+        # folders are discarded, so leave snapshots disabled in that case.
+        if not self.client_connected or self.is_temp or self.base_path is None:
+            return
+        try:
+            self.client.set_data_folder(self.base_path)
+        except Exception as e:
+            # Older psivideo servers do not support snapshots.
+            log.exception(e)
 
     def start_recording(self):
         self.client.start(self.base_path / self.filename)
