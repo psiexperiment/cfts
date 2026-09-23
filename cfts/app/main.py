@@ -1,5 +1,7 @@
 from enaml.qt.qt_application import QtApplication
 import enaml
+# psiapp.util rather than psiapp.api: the latter pulls in .enaml modules.
+from psiapp.util import set_app_id
 with enaml.imports():
     from .exp_launcher_gui import Main as ExpLauncherMain
 
@@ -24,6 +26,11 @@ def cfts():
     ))
 
     args = parser.parse_args()
+
+    # Before the Qt application is created, and distinct from the `psi.psi`
+    # that the experiment subprocesses claim, so cfts gets its own taskbar
+    # button showing its icon rather than python.exe's.
+    set_app_id('psi.cfts')
     app = QtApplication()
     view = ExpLauncherMain()
 
