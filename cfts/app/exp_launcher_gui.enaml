@@ -23,7 +23,7 @@ from enaml.widgets.api import (
     MenuBar, Notebook, ObjectCombo, Page, PushButton, VGroup,
 )
 
-from psi import get_config, get_config_folder
+from psi import get_config
 from psi.experiment.api import paradigm_manager
 
 from cftscal.api import (
@@ -36,7 +36,7 @@ from cftscal.plugins.widgets import SensorView
 from .branding import load_app_icon
 
 
-DATA_ROOT = Path(get_config('DATA_ROOT'))
+DATA_ROOT = Path(get_config('PSI_DATA_ROOT'))
 CFTS_ROOT = Path(get_config('CFTS_ROOT'))
 
 
@@ -420,10 +420,10 @@ class Settings(Atom):
         amp_input_name = self.input_amp_config['input_name']
         env = {
             'WEBSOCKETS_URI': self.process_manager.ws_server.connected_uri,
-            'CFTS_INPUT_AMPLIFIER': amp_input_name,
-            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_GAIN': str(self.input_amp_config['gain']),
-            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_config['freq_lb']),
-            f'CFTS_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_UB': str(self.input_amp_config['freq_ub']),
+            'CFTSCAL_INPUT_AMPLIFIER': amp_input_name,
+            f'CFTSCAL_INPUT_AMPLIFIER_{amp_input_name.upper()}_GAIN': str(self.input_amp_config['gain']),
+            f'CFTSCAL_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_config['freq_lb']),
+            f'CFTSCAL_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_UB': str(self.input_amp_config['freq_ub']),
         }
         for k in self.starship_config:
             sensor = self.equipment_calibration(k, 'Starship')
@@ -432,8 +432,8 @@ class Settings(Atom):
                     f'No calibration configured for {k} -- select one for '
                     f'its microphone channel in File > Settings'
                 )
-            env[f'CFTS_STARSHIP_{k.upper()}'] = sensor.get_calibration().to_string()
-            env[f'CFTS_STARSHIP_{k.upper()}_GAIN'] = str(sensor.gain)
+            env[f'CFTSCAL_STARSHIP_{k.upper()}'] = sensor.get_calibration().to_string()
+            env[f'CFTSCAL_STARSHIP_{k.upper()}_GAIN'] = str(sensor.gain)
         for k in self.speaker_config:
             sensor = self.equipment_calibration(k, 'Speaker')
             if sensor is None:
@@ -444,25 +444,25 @@ class Settings(Atom):
             # No _GAIN env var here -- unlike inputs/starships, an output's
             # `initialize_output()` handler (cftscal/paradigms/objects.enaml)
             # never reads one; a speaker has no preamp gain to record.
-            env[f'CFTS_SPEAKER_{k.upper()}'] = sensor.get_calibration().to_string()
+            env[f'CFTSCAL_SPEAKER_{k.upper()}'] = sensor.get_calibration().to_string()
 
         if mode.lower() == 'either':
-            env['CFTS_TEST_STARSHIP'] = self.find_output(ear, True)
+            env['CFTSCAL_TEST_STARSHIP'] = self.find_output(ear, True)
         elif mode.lower() == 'ipsi':
-            env['CFTS_TEST_STARSHIP'] = self.find_output(ear, True)
-            env['CFTS_NONTEST_STARSHIP'] = env['CFTS_TEST_STARSHIP']
+            env['CFTSCAL_TEST_STARSHIP'] = self.find_output(ear, True)
+            env['CFTSCAL_NONTEST_STARSHIP'] = env['CFTSCAL_TEST_STARSHIP']
         elif mode.lower() == 'contra':
-            env['CFTS_TEST_STARSHIP'] = self.find_output(ear, True)
+            env['CFTSCAL_TEST_STARSHIP'] = self.find_output(ear, True)
             try:
                 nontest_ear = 'right' if ear == 'left' else 'left'
-                env['CFTS_NONTEST_STARSHIP'] = self.find_output(nontest_ear, False)
+                env['CFTSCAL_NONTEST_STARSHIP'] = self.find_output(nontest_ear, False)
             except ValueError:
                 pass
         elif mode.lower() == 'binaural':
-            env['CFTS_LEFT_STARSHIP'] = self.find_output('left', False)
-            env['CFTS_RIGHT_STARSHIP'] = self.find_output('right', False)
+            env['CFTSCAL_LEFT_STARSHIP'] = self.find_output('left', False)
+            env['CFTSCAL_RIGHT_STARSHIP'] = self.find_output('right', False)
         elif mode.lower() == 'freefield':
-            env['CFTS_SPEAKER'] = self.find_output('freefield', False)
+            env['CFTSCAL_SPEAKER'] = self.find_output('freefield', False)
 
         mode_note = experiment.mode_notes.get(mode, '')
         filename = f'{{date_time}} {self.experimenter} {self.animal} {ear} {self.note} {self.standard_note} {mode_note} {experiment.paradigm.name}'
@@ -495,10 +495,10 @@ class Settings(Atom):
                     f'Select a calibration (File > Settings) for monitored '
                     f'channel(s): {", ".join(unconfigured)}'
                 )
-            env['CFTS_MONITOR_INPUTS'] = ','.join(active_channels)
+            env['CFTSCAL_MONITOR_INPUTS'] = ','.join(active_channels)
             for name, config in active_channels.items():
                 sensor = self.monitor_input_sensor_for(name)
-                prefix = f'CFTS_MONITOR_INPUT_{name.upper()}'
+                prefix = f'CFTSCAL_MONITOR_INPUT_{name.upper()}'
                 env[prefix] = sensor.get_calibration().to_string()
                 env[f'{prefix}_GAIN'] = str(sensor.gain)
                 env[f'{prefix}_PLOT_TIME'] = str(int(config.plot_time))
