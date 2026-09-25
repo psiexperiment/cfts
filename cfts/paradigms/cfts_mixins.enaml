@@ -480,15 +480,15 @@ def initialize_cal_mic(event):
 
     Requires the following environment variables:
 
-        * `CFTS_CAL_MIC` - The name of the calibration microphone connected to
+        * `CFTSCAL_CAL_MIC` - The name of the calibration microphone connected to
         the `microphone_calibration` input defined in the IOManifest. The name
         is defined when generating the calibration using CFTSCal.
-        * `CFTS_CAL_MIC_GAIN` - The gain, in dB, of the calibration microphone.
+        * `CFTSCAL_CAL_MIC_GAIN` - The gain, in dB, of the calibration microphone.
     '''
     controller = event.workbench.get_plugin('psi.controller')
     channel = controller.get_channel('hw_ai::microphone_calibration')
-    cal_mic = os.environ[f'CFTS_CAL_MIC']
-    cal_mic_gain = os.environ[f'CFTS_CAL_MIC_GAIN']
+    cal_mic = os.environ[f'CFTSCAL_CAL_MIC']
+    cal_mic_gain = os.environ[f'CFTSCAL_CAL_MIC_GAIN']
     channel.calibration = measurement_microphone_manager.from_string(cal_mic).load()
     channel.gain = int(cal_mic_gain)
 
@@ -576,7 +576,7 @@ enamldef OutputMonitorView(ExperimentManifest): manifest:
     id = 'output_monitor_view'
     title = manifest.id.capitalize().replace('_', ' ')
 
-    attr sources = os.environ.get('CFTS_OUTPUT_MONITOR', '')
+    attr sources = os.environ.get('CFTSCAL_OUTPUT_MONITOR', '')
 
     Extension:
         id = manifest.id + '.output_monitor_io'
@@ -606,17 +606,17 @@ def initialize_monitor_inputs(event):
     Attach the calibration and gain selected in the launcher to each
     monitored input channel.
 
-    For each channel named in `CFTS_MONITOR_INPUTS`, looks for a
-    `CFTS_MONITOR_INPUT_<NAME>` environment variable holding a calibration
+    For each channel named in `CFTSCAL_MONITOR_INPUTS`, looks for a
+    `CFTSCAL_MONITOR_INPUT_<NAME>` environment variable holding a calibration
     reference string (as produced by `MultiTypeSensorReference.get_calibration`
     -- includes 'Unity', i.e. no calibration, for channels like EEG or sync
-    lines that don't have one) and a `CFTS_MONITOR_INPUT_<NAME>_GAIN`
+    lines that don't have one) and a `CFTSCAL_MONITOR_INPUT_<NAME>_GAIN`
     environment variable holding the preamp gain, in dB, to apply.
     '''
     controller = event.workbench.get_plugin('psi.controller')
-    channels = [c for c in os.environ.get('CFTS_MONITOR_INPUTS', '').split(',') if c]
+    channels = [c for c in os.environ.get('CFTSCAL_MONITOR_INPUTS', '').split(',') if c]
     for name in channels:
-        prefix = f'CFTS_MONITOR_INPUT_{name.upper()}'
+        prefix = f'CFTSCAL_MONITOR_INPUT_{name.upper()}'
         cal_string = os.environ.get(prefix)
         if cal_string is None:
             continue
@@ -631,10 +631,10 @@ def _monitor_channels():
     variables (see `MonitorInputsView`'s docstring) into a dict mapping
     channel name -> {'plot_time', 'plot_fft', 'save'} bools.
     '''
-    channels = [c for c in os.environ.get('CFTS_MONITOR_INPUTS', '').split(',') if c]
+    channels = [c for c in os.environ.get('CFTSCAL_MONITOR_INPUTS', '').split(',') if c]
     result = {}
     for name in channels:
-        prefix = f'CFTS_MONITOR_INPUT_{name.upper()}'
+        prefix = f'CFTSCAL_MONITOR_INPUT_{name.upper()}'
         result[name] = {
             'plot_time': os.environ.get(f'{prefix}_PLOT_TIME') == '1',
             'plot_fft': os.environ.get(f'{prefix}_PLOT_FFT') == '1',
@@ -653,10 +653,10 @@ enamldef MonitorInputsView(ExperimentManifest): manifest:
     dict mapping raw hardware input channel name (as returned by
     `cftscal.api.list_inputs`) to a `{'plot_time', 'plot_fft', 'save'}` dict
     of bools. Defaults to `_monitor_channels()`, which parses this from the
-    `CFTS_MONITOR_INPUTS`/`CFTS_MONITOR_INPUT_<NAME>_*` environment
+    `CFTSCAL_MONITOR_INPUTS`/`CFTSCAL_MONITOR_INPUT_<NAME>_*` environment
     variables -- how the CFTS launcher passes the user's per-paradigm
     selection through to the subprocess. Any channel with a matching
-    `CFTS_MONITOR_INPUT_<NAME>` environment variable has that calibration
+    `CFTSCAL_MONITOR_INPUT_<NAME>` environment variable has that calibration
     attached (see `initialize_monitor_inputs`).
     '''
     id = 'monitor_inputs_view'
