@@ -419,7 +419,7 @@ class Settings(Atom):
         '''
         amp_input_name = self.input_amp_config['input_name']
         env = {
-            'WEBSOCKETS_URI': self.process_manager.ws_server.connected_uri,
+            'PSI_WEBSOCKETS_URI': self.process_manager.ws_server.connected_uri,
             'CFTSCAL_INPUT_AMPLIFIER': amp_input_name,
             f'CFTSCAL_INPUT_AMPLIFIER_{amp_input_name.upper()}_GAIN': str(self.input_amp_config['gain']),
             f'CFTSCAL_INPUT_AMPLIFIER_{amp_input_name.upper()}_FREQ_LB': str(self.input_amp_config['freq_lb']),
