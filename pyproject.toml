@@ -29,6 +29,11 @@ dev = ["coloredlogs"]
 [project.scripts]
 cfts = "cfts.app.main:cfts"
 
+[project.entry-points."psi.settings"]
+# Lets psi-config (and anything else built on psi) see this
+# package's settings without importing the package itself.
+cfts = "cfts.config_defaults:DEFAULTS"
+
 [tool.setuptools.package-data]
 cfts = [
     "icons/*.ico",
