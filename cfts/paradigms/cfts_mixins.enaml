@@ -474,48 +474,6 @@ enamldef DebugCalibration(ExperimentManifest): manifest:
             command = manifest.id + '.set_debug_calibration'
 
 
-enamldef CalibrationMicrophone(ExperimentManifest): manifest:
-    '''
-    Saves the calibration microphone to the recording.
-
-    This is typically used in validating that stimuli are calibrated properly.
-    Requires that an input channel called `microphone_calibration` be available
-    in the IOManifest.
-
-    The recording is uncalibrated -- it carries the channel's raw signal
-    rather than a level in Pa. This used to load a calibration and gain onto
-    the channel from CFTSCAL_CAL_MIC and CFTSCAL_CAL_MIC_GAIN, but nothing has
-    ever written those: no launcher in any of these repos sets them, and none
-    did at any point in this file's history. Since it ran on `plugins_started`
-    it raised KeyError before anything else, so enabling this mixin failed
-    outright and the recording it exists to make was unreachable. The reads
-    are gone rather than kept as a permanently inert branch.
-
-    To calibrate the channel, configure it the way every other object here is
-    configured -- an `env_prefix` read through `read_env_vars` -- so a launcher
-    supplies it and a missing value is reported by name instead of as a bare
-    KeyError.
-    '''
-    id = 'calibration_microphone'
-    title = manifest.id.capitalize().replace('_', ' ')
-
-    Extension:
-        id = manifest.id + '.io'
-        point = 'psi.controller.io'
-
-        ContinuousInput:
-            name = 'calibration_microphone'
-            source_name = 'hw_ai::microphone_calibration'
-
-    Extension:
-        id = manifest.id + '.sinks'
-        point = 'psi.data.sinks'
-
-        BinaryStore:
-            name = manifest.id + '.cal_mic_store'
-            continuous_inputs = ['calibration_microphone']
-
-
 enamldef OutputMonitor(ExperimentManifest): manifest:
     '''
     Saves the output monitor to the recording.
