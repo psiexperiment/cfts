@@ -329,6 +329,17 @@ class Settings(Atom):
     def move_sequence_item_to(self, i, j):
         pass
 
+    def refresh_preferences(self):
+        # Rescan the preference files available to every row (e.g., to pick up
+        # settings just saved from within a running experiment).
+        # current_sequence is skipped since it holds the same Experiment
+        # objects as sequences[current_sequence_name].
+        experiments = [*self.experiment_sequence, *self.monitor_sequence]
+        for sequence in self.sequences.values():
+            experiments.extend(sequence)
+        for experiment in experiments:
+            experiment.update_preferences()
+
     def _observe_current_sequence_name(self, event):
         # This is needed to sync up changes where we select the sequence from the
         # GUI
