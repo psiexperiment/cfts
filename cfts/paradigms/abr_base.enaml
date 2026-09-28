@@ -18,7 +18,7 @@ from psi.controller.api import (
     ControllerManifest, Detrend, ExtractEpochs, RejectEpochs, QueuedEpochOutput
 )
 from psi.data.sinks.api import BinaryStore, TextStore
-from psi.token.primitives import Click, Cos2Envelope, Tone
+from psi.token.primitives import Click, Envelope, Tone
 
 
 EXPERIMENT = 'abr_base'
@@ -51,10 +51,10 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
         id = EXPERIMENT + '.tokens'
         point = 'psi.token.tokens'
 
-        Cos2Envelope: tone_burst:
+        Envelope: tone_burst:
             name = 'tone_burst'
             label = 'tone'
-            hide = ['start_time']
+            hide = ['start_time', 'transform']
             Tone:
                 hide = ['polarity', 'phase']
 
