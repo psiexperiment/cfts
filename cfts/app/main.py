@@ -1,7 +1,7 @@
 from enaml.qt.qt_application import QtApplication
 import enaml
-# psiapp.util rather than psiapp.api: the latter pulls in .enaml modules.
-from psiapp.util import set_app_id
+# psi.core.app_id rather than psi.launcher.api: the latter pulls in .enaml modules.
+from psi.core.app_id import set_app_id
 with enaml.imports():
     from .exp_launcher_gui import Main as ExpLauncherMain
 
