@@ -28,7 +28,7 @@ from psi.experiment.api import paradigm_manager
 
 from cftscal.api import (
     list_input_amplifier_connections, list_speaker_connections,
-    list_starship_connections, list_inputs, list_outputs,
+    list_starship_connections, list_inputs, list_outputs, resolve_io,
 )
 from cftscal.plugins.settings import MultiTypeSensorReference, OutputCalibrationReference
 from cftscal.plugins.widgets import SensorView
@@ -431,6 +431,11 @@ class Settings(LauncherSettings):
                                    self.note, self.standard_note, mode_note,
                                    experiment.paradigm.name) if save else None
         args = self.psi_command(experiment, data_path)
+        # The manifest the channel choices above were filled from, so the
+        # experiment runs on the hardware the user picked channels on.
+        manifest, io_env = resolve_io()
+        args.extend(['--io', manifest])
+        env.update(io_env)
 
         # Recording/plotting the calibration microphone or output monitor
         # is now just a matter of enabling save/plot on their own Input

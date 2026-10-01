@@ -5,7 +5,9 @@ Registered with :func:`psi.config.register_defaults` when ``cfts`` is
 imported, so ``get_config('CFTS_ROOT')`` resolves the same way as any psi
 setting: default, then ``config.toml``, then the environment.
 '''
-from psi import get_config
+from pathlib import Path
+
+from psi import Setting, get_config
 
 
 DEFAULTS = {
@@ -14,5 +16,7 @@ DEFAULTS = {
     #: `cfts-launcher` subfolder). Distinct from CFTSCAL_ROOT, which is
     #: where calibration data lives, and from the CFTSCAL_* handoff
     #: variables, which are a process contract rather than settings.
-    'CFTS_ROOT': lambda: get_config('PSI_BASE_DIRECTORY') / 'cfts',
+    'CFTS_ROOT': Setting(
+        Path, lambda: get_config('PSI_BASE_DIRECTORY') / 'cfts',
+        doc='Saved cfts launcher presets.'),
 }
