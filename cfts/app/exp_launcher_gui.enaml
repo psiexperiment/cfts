@@ -198,7 +198,7 @@ class Settings(Atom):
 
     logging_level = Enum('trace', 'debug', 'info', 'warning', 'error')('info')
     animal = Str()
-    ear = Enum('left', 'right')
+    ear = Enum('left', 'right', 'diotic')
     experimenter = Str()
     note = Str()
     standard_notes = List(Str())
@@ -381,8 +381,9 @@ class Settings(Atom):
 
         Parameters
         ----------
-        ear : {'left', 'right', 'freefield'}
-            Ear to locate output for
+        ear : {'left', 'right', 'diotic', 'freefield'}
+            Ear to locate output for. Diotic assumes a single output (marked
+            'either') that presents to both ears.
         monaural : bool
             If True, will load the output marked for either ear if it exists
             and it can't find an output specifically designated for the
@@ -402,6 +403,9 @@ class Settings(Atom):
 
         if len(output_to_use) != 1:
             log.error(output_to_use)
+            if ear == 'diotic':
+                raise ValueError('Diotic requires a single output marked '
+                                 '"either" in File > Settings.')
             raise ValueError(f'Outputs incorrectly configured. Found {len(output_to_use)} for {ear}.')
 
         return next(iter(output_to_use))
@@ -795,7 +799,7 @@ enamldef ExperimentInfo(GroupBox):
     constraints = [
         vbox(
             hbox(experimenter_label, experimenter_field),
-            hbox(animal_label, animal_field, hbox(l_button, r_button, spacing=0)),
+            hbox(animal_label, animal_field, hbox(l_button, r_button, d_button, spacing=0)),
             hbox(note_label, note_field),
             hbox(standard_note_label, standard_note),
             hbox(spacer(0), pb_raw),
@@ -803,7 +807,7 @@ enamldef ExperimentInfo(GroupBox):
         align('right', experimenter_label, animal_label, note_label, standard_note_label),
         align('left', experimenter_label, animal_label, note_label, standard_note_label),
         align('v_center', experimenter_label, experimenter_field),
-        align('v_center', animal_label, animal_field, l_button, r_button),
+        align('v_center', animal_label, animal_field, l_button, r_button, d_button),
         align('v_center', note_label, note_field),
         align('v_center', standard_note_label, standard_note),
         l_button.width == 30,
@@ -856,6 +860,14 @@ enamldef ExperimentInfo(GroupBox):
         checked << settings.ear == 'right'
         checked ::
             settings.ear = 'right'
+
+    PushButton: d_button:
+        text = 'Diotic'
+        checkable = True
+        group = ear_group
+        checked << settings.ear == 'diotic'
+        checked ::
+            settings.ear = 'diotic'
 
     PushButton: pb_raw:
         text = '📂 Raw'
