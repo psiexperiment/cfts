@@ -1,3 +1,4 @@
+from enaml.qt.QtCore import Qt
 from enaml.qt.qt_application import QtApplication
 import enaml
 # psi.core.app_id rather than psi.launcher.api: the latter pulls in .enaml modules.
@@ -37,6 +38,14 @@ def cfts():
     # This needs to be loaded to ensure that some defaults are set properly.
     view.settings.load_config(args.experiment_config)
     view.settings.load_hardware_config(args.hardware_config)
+
+    # Settings are usually saved from within the experiment subprocess (or
+    # copied in via Explorer), so rescan the available preference files each
+    # time the user switches back to the launcher.
+    def refresh_preferences(state):
+        if state == Qt.ApplicationState.ApplicationActive:
+            view.settings.refresh_preferences()
+    app._qapp.applicationStateChanged.connect(refresh_preferences)
 
     view.show()
     app.start()
