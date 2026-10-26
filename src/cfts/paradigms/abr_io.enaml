@@ -44,19 +44,9 @@ def add_setting(target, setting, averages, iti, key_map):
 
 def configure_experiment_tone(key_map, event):
     context = event.workbench.get_plugin('psi.context')
-    controller = event.workbench.get_plugin('psi.controller')
-    target = controller.get_output('target')
-
-    ordering = context.get_value('ordering')
-    alternate_polarity = context.get_value('alternate_polarity')
-    averages = context.get_value('averages')
-
     rate = context.get_value('rate')
     rate_jitter_ms = context.get_value('rate_jitter_ms')
     tone_duration = context.get_value('target_tone_burst_duration')
-    if alternate_polarity and (averages % 2):
-        # Round to the nearest multiple of 2
-        averages = (round(averages/2) + 1) * 2
 
     # Compensate for the tone duration. ITI is the time from tone offset to
     # tone offset. Do sanity check while at it.
@@ -73,6 +63,26 @@ def configure_experiment_tone(key_map, event):
         iti = 1/rate - tone_duration
         if iti <= 0:
             raise ValueError(f'Repetition rate is too fast. ITI is {iti*1e3:.0f} msec.')
+
+    configure_tone_queue(key_map, event, iti)
+
+
+def configure_tone_queue(key_map, event, iti):
+    '''
+    Queue the tone settings using the requested ordering and polarity. Shared
+    with the ABR adaptation paradigm, which uses the same context names for
+    ordering, polarity and averages.
+    '''
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    target = controller.get_output('target')
+
+    ordering = context.get_value('ordering')
+    alternate_polarity = context.get_value('alternate_polarity')
+    averages = context.get_value('averages')
+    if alternate_polarity and (averages % 2):
+        # Round to the nearest multiple of 2
+        averages = (round(averages/2) + 1) * 2
 
     # Configure the queues
     if ordering == 'interleaved_ramp':
@@ -150,18 +160,9 @@ def configure_experiment_tone(key_map, event):
 
 def configure_experiment_click(key_map, event):
     context = event.workbench.get_plugin('psi.context')
-    controller = event.workbench.get_plugin('psi.controller')
-    target = controller.get_output('target')
-
     duration = context.get_value('click_duration')
-    polarity = context.get_value('click_polarity')
-    averages = context.get_value('averages')
-
     rate = context.get_value('rate')
     rate_jitter_ms = context.get_value('rate_jitter_ms')
-    if (polarity == 'alternating') and (averages % 2):
-        # Round to the nearest multiple of 2
-        averages = (round(averages/2) + 1) * 2
 
     # Compensate for the click duration. ITI is the time from click offset to
     # click offset. Do sanity check while at it.
@@ -178,6 +179,25 @@ def configure_experiment_click(key_map, event):
         iti = 1/rate - duration
         if iti <= 0:
             raise ValueError('Repetition rate is too fast')
+
+    configure_click_queue(event, iti)
+
+
+def configure_click_queue(event, iti):
+    '''
+    Queue the click settings using the requested polarity. Shared with the ABR
+    adaptation paradigm, which uses the same context names for polarity and
+    averages.
+    '''
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    target = controller.get_output('target')
+
+    polarity = context.get_value('click_polarity')
+    averages = context.get_value('averages')
+    if (polarity == 'alternating') and (averages % 2):
+        # Round to the nearest multiple of 2
+        averages = (round(averages/2) + 1) * 2
 
     # Configure the queues
     if polarity == 'alternating':

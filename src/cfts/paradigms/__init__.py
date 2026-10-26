@@ -280,6 +280,40 @@ ParadigmDescription(
 
 
 ParadigmDescription(
+    # Trains of tone bursts separated by a pause to measure ABR adaptation.
+    'abr_adaptation', 'ABR adaptation (tone)', 'ear', [
+        eeg_dec_mixin,
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'abr_adaptation.ABRAdaptationToneManifest'},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.ABRInEarCalibrationMixinManifest',
+         'info': {'hide': True}
+         },
+    ] + COMMON_PLUGINS,
+    info={'modes': ['either']},
+)
+
+
+ParadigmDescription(
+    # Trains of clicks separated by a pause to measure ABR adaptation.
+    'abr_adaptation_click', 'ABR adaptation (click)', 'ear', [
+        eeg_dec_mixin,
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'abr_adaptation.ABRAdaptationClickManifest'},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.ABRClickInEarCalibrationMixinManifest',
+         'info': {'hide': True}
+         },
+    ] + COMMON_PLUGINS,
+    info={'modes': ['either']},
+)
+
+
+ParadigmDescription(
     'mlr_llr_io', 'MLR/LLR (tone)', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,
