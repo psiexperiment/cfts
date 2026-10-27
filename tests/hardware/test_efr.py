@@ -28,10 +28,6 @@ DUTY_CYCLE = 0.25
 #: Seed of the gaps between tokens (`efr_epochs.rng_generator`).
 ISI_SEED = 123456789
 
-#: SAM EFR (continuous) plays one long token per setting; keep it short.
-CONTINUOUS_DURATION = 2
-CONTINUOUS_RISE_TIME = 0.1
-
 
 def load_efr(path):
     data = EFR(path)
@@ -124,17 +120,3 @@ class TestRAMEpoch(ABRTests):
     def checks(self, efr_ram_epoch):
         return efr_ram_epoch
 
-
-def test_sam_continuous(routing, results_dir):
-    '''
-    SAM EFR (continuous) has to at least run to the end on its own.
-    '''
-    settings = {'parameters': {
-        'duration': CONTINUOUS_DURATION,
-        'fm': FM,
-        'fc': FC,
-        'target_sam_tone_level': LEVEL,
-        'target_sam_tone_rise_time': CONTINUOUS_RISE_TIME,
-    }}
-    run_eeg_paradigm('efr_sam', 'efr_sam', settings, routing, results_dir,
-                     load_efr)

@@ -30,7 +30,9 @@ def pytest_addoption(parser):
                      help='Put this source folder ahead of the installed '
                      'packages when running paradigms (e.g., a worktree of '
                      'another cfts branch, or psiexperiment/src). May be '
-                     'given more than once.')
+                     'given more than once. Write it as --src=PATH: given '
+                     'as two arguments, pytest also takes PATH as a '
+                     'candidate root directory.')
 
 
 def pytest_configure(config):
