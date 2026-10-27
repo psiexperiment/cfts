@@ -37,20 +37,22 @@ EXPERIMENT = __name__.rsplit('.', 1)[-1]
 @coroutine
 def split_bursts(n, rate, span, target):
     '''
-    Split each sequence epoch into one epoch per burst. Burst `i` starts at
-    `i / rate` relative to the start of the sequence and is tagged with the
-    `burst` metadata.
+    Split each sequence epoch into one epoch per burst. Burst `i` starts
+    `i` periods into the sequence and is tagged with the `burst` metadata.
+    The period is rounded to whole samples, as `psiaudio.stim.repeat` does
+    when it builds the train, so each epoch starts on its burst.
     '''
     while True:
         new_data = []
         for epoch in (yield):
+            s_period = int(round(epoch.fs / rate))
             # Rounding can leave the sequence epoch a sample short of the last
             # burst window, so clip the window to keep every burst the same
             # length.
-            s_last = int(round((n - 1) / rate * epoch.fs))
+            s_last = (n - 1) * s_period
             s_span = min(int(round(span * epoch.fs)), epoch.shape[-1] - s_last)
             for i in range(n):
-                lb = int(round(i / rate * epoch.fs))
+                lb = i * s_period
                 d = PipelineData(np.asarray(epoch)[..., lb:lb+s_span],
                                  fs=epoch.fs, s0=0, channel=epoch.channel,
                                  metadata=epoch.metadata.copy())
