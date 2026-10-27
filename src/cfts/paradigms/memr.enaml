@@ -456,33 +456,56 @@ class ProcessSweptMEMR(ProcessMEMR):
             target=cb).send
 
 
-class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
+def fold_subsets(y, in_a, in_b):
+    '''
+    Fold an epoch so a group's running mean tracks the average of two subsets
+    of its epochs: rows are `y` if the epoch is in subset a (else 0), `y` if
+    in subset b, and indicators of a and b. See `subset_means`.
+    '''
+    zero = np.zeros_like(y)
+    return np.stack([y if in_a else zero, y if in_b else zero,
+                     np.full_like(y, in_a), np.full_like(y, in_b)])
 
+
+def subset_means(mean):
+    '''
+    Average of each subset from the running mean of `fold_subsets`, or NaN
+    until the subset has an epoch.
+    '''
+    with np.errstate(invalid='ignore', divide='ignore'):
+        return mean[0] / mean[2], mean[1] / mean[3]
+
+
+class GroupedInterleavedMEMRPlot(GroupedEpochFFTPlot):
+    '''
+    Change in the probe's PSD from the first probe (before any elicitor) to
+    the final one, averaged in power across the trials of each group.
+    '''
     final_probe = d_(Int())
 
-    def _y(self, epoch):
-        b = [e for e in epoch if e.metadata['repeat'] == 0]
-        r = [e for e in epoch if e.metadata['repeat'] == self.final_probe]
-        b = np.array(concat(b, axis='epoch'))[:, self.channel]
-        r = np.array(concat(r, axis='epoch'))[:, self.channel]
+    def _fold(self, epoch):
+        repeat = epoch.metadata['repeat']
+        psd = util.psd(np.asarray(epoch)[self.channel], self.source.fs)
+        return fold_subsets(psd, repeat == self.final_probe, repeat == 0)
 
-        r_psd = util.db(util.psd(r, self.source.fs).mean(axis=0))
-        b_psd = util.db(util.psd(b, self.source.fs).mean(axis=0))
-        return r_psd - b_psd
+    def _render_mean(self, mean):
+        final, baseline = subset_means(mean)
+        return util.db(final) - util.db(baseline)
 
 
 class GroupedSimultaneousMEMRPlot(GroupedEpochFFTPlot):
-    # This is also used for the SweptMEMRPlot
+    '''
+    Change in the PSD of the averaged probe from the normalization window to
+    the elicitor window. Also used for the swept MEMR.
+    '''
+    def _fold(self, epoch):
+        r = epoch.metadata['range']
+        y = np.asarray(epoch)[self.channel]
+        return fold_subsets(y, r == 'elicitor', r == 'norm')
 
-    def _y(self, epoch):
-        n = [e for e in epoch if e.metadata['range'] == 'norm']
-        e = [e for e in epoch if e.metadata['range'] == 'elicitor']
-        n = np.array(concat(n, axis='epoch'))[:, self.channel]
-        e = np.array(concat(e, axis='epoch'))[:, self.channel]
-
-        n_psd = util.db(util.psd(n.mean(axis=0), self.source.fs))
-        e_psd = util.db(util.psd(e.mean(axis=0), self.source.fs))
-        return e_psd - n_psd
+    def _render_mean(self, mean):
+        elicitor, norm = subset_means(mean)
+        return util.db(util.psd(elicitor, self.source.fs))             - util.db(util.psd(norm, self.source.fs))
 
 
 enamldef BaseMEMRManifest(ControllerManifest): manifest:
