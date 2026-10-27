@@ -39,6 +39,13 @@ from .branding import load_app_icon
 DATA_ROOT = Path(get_config('PSI_DATA_ROOT'))
 CFTS_ROOT = Path(get_config('CFTS_ROOT'))
 
+#: Menu labels for `Settings.output_monitor_loopback`.
+LOOPBACK_LABELS = {
+    '': 'Off (record normally)',
+    'eeg': 'EEG',
+    'system_microphone': 'Starship microphone',
+}
+
 
 from psi.launcher.api import (
     load_experiments,
@@ -327,6 +334,16 @@ class Settings(LauncherSettings):
     record_body_temperature = Bool(True)
     swap_outputs = Bool(False)
 
+    #: Input to feed the output monitor into (empty to record normally).
+    #: Deliberately not saved with the settings so a later session cannot
+    #: silently record loopback instead of the animal.
+    output_monitor_loopback = Enum('', 'eeg', 'system_microphone')
+
+    #: Output (hw_ao) channel that is hard-wired to the output monitor input,
+    #: or empty if not wired. Rig hardware, so it is persisted in the hardware
+    #: config file -- see save_hardware_config()/load_hardware_config().
+    output_monitor_wiring = Str()
+
     #: How should speakers be configured?
     #: * in-ear - Perform in-ear calibration before starting experiment. Specify
     #:   stimulus levels in dB SPL.
@@ -488,6 +505,15 @@ class Settings(LauncherSettings):
         if self.swap_outputs:
             args.extend(['--plugin', 'swap_outputs'])
 
+        if self.output_monitor_loopback:
+            if not self.output_monitor_wiring:
+                raise ValueError('Select the output the output monitor is '
+                                 'wired to (File > Settings) before using '
+                                 'output monitor loopback.')
+            env['CFTSCAL_OUTPUT_MONITOR_LOOPBACK'] = self.output_monitor_loopback
+            env['CFTSCAL_OUTPUT_MONITOR_WIRING'] = self.output_monitor_wiring
+            args.extend(['--plugin', 'output_monitor_loopback'])
+
         if self.record_body_temperature:
             for p in experiment.paradigm.plugins:
                 if p.id  == 'temperature':
@@ -569,6 +595,7 @@ class Settings(LauncherSettings):
                 channel: sensor.get_persistence()
                 for channel, sensor in self.output_sensors.items()
             },
+            'output_monitor_wiring': self.output_monitor_wiring,
         }
         filename = Path(filename)
         filename.write_text(json.dumps(info, indent=2))
@@ -606,6 +633,12 @@ class Settings(LauncherSettings):
             sensor.set_persistence(c)
             output_sensors[channel] = sensor
         self.output_sensors = output_sensors
+
+        # Drop a saved channel that is no longer in the IO manifest.
+        wiring = info.pop('output_monitor_wiring', '')
+        if wiring not in list_outputs(raise_error=False).values():
+            wiring = ''
+        self.output_monitor_wiring = wiring
 
         self._bump_calibration_tick(None)
 
@@ -907,7 +940,8 @@ enamldef SettingsDialog(Dialog): dialog:
                 type_combos.append(w.visible_widgets()[0])
 
             return [
-                vbox(input_group, output_group, action_buttons, spacing=10),
+                vbox(input_group, output_group, monitor_group, action_buttons,
+                     spacing=10),
                 align('width', *labels),
                 align('width', *type_combos),
             ]
@@ -953,6 +987,21 @@ enamldef SettingsDialog(Dialog): dialog:
                     show_gain = False
                     fill_row = True
 
+        GroupBox: monitor_group:
+            title = 'Output monitor'
+            flat = True
+            share_layout = True
+
+            Form:
+                padding = 0
+                Label:
+                    text = 'Wired to'
+                ObjectCombo:
+                    # Empty entry = output monitor not wired to any output.
+                    items = [''] + list(list_outputs(raise_error=False).values())
+                    to_string = lambda x: x or 'Not wired'
+                    selected := settings.output_monitor_wiring
+
         HGroup: action_buttons:
             leading_spacer = spacer(0)
             PushButton:
@@ -963,7 +1012,11 @@ enamldef SettingsDialog(Dialog): dialog:
 
 enamldef Main(MainWindow): main:
 
-    title = 'Cochlear Function Test Suite'
+    # Loopback isn't saved with the settings, but make it hard to miss while
+    # it is on.
+    title << 'Cochlear Function Test Suite' + (
+        f' [OUTPUT MONITOR LOOPBACK -> {LOOPBACK_LABELS[settings.output_monitor_loopback]}]'
+        if settings.output_monitor_loopback else '')
     icon = load_app_icon()
 
     attr settings = Settings()
@@ -1055,6 +1108,21 @@ enamldef Main(MainWindow): main:
                 text = '&Monitor body temperature'
                 checkable = True
                 checked := settings.record_body_temperature
+            Menu:
+                title = 'Loop output monitor into'
+                ActionGroup:
+                    Looper:
+                        iterable = LOOPBACK_LABELS.items()
+                        Action:
+                            text = loop_item[1]
+                            checkable = True
+                            checked << settings.output_monitor_loopback == loop_item[0]
+                            checked ::
+                                # Also fires when the previous choice is
+                                # unchecked, which must not overwrite the new
+                                # one.
+                                if checked:
+                                    settings.output_monitor_loopback = loop_item[0]
             Action:
                 separator = True
             Menu:

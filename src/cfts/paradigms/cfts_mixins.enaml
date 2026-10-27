@@ -22,7 +22,7 @@ from psi.controller.calibration.api import ChirpCalibrate, ClickCalibrate, ToneC
 from psi.core.enaml.api import ExperimentManifest
 from psi.data.plot_util import get_color_cycle
 from psi.data.sinks.api import BinaryStore
-from psi.experiment.api import StatusItem
+from psi.experiment.api import MetadataItem, StatusItem
 
 from psi.paradigms.core.io_mixins import QueuedEpochChannelOutput
 from psi.paradigms.core.signal_mixins import MultiSignalViewExtension, MultiSignalViewFFTExtension
@@ -708,3 +708,133 @@ enamldef SwapOutputs(ExperimentManifest): manifest:
         ExperimentAction:
             event = 'plugins_started'
             command = manifest.id + '.swap_outputs'
+
+
+################################################################################
+# Output monitor loopback
+################################################################################
+#: Name of the input that the output monitor is redirected into (e.g., `eeg`
+#: or `system_microphone`) and the output channel the monitor is hard-wired
+#: to. Both are set by the launcher.
+LOOPBACK_ENV = 'CFTSCAL_OUTPUT_MONITOR_LOOPBACK'
+WIRING_ENV = 'CFTSCAL_OUTPUT_MONITOR_WIRING'
+LOOPBACK_SOURCE = 'hw_ai::output_monitor'
+
+
+def disable_artifact_reject(event):
+    '''
+    The loopback signal has no physiological artifacts but can easily exceed
+    the reject threshold at high stimulus levels, so never reject.
+    '''
+    context = event.workbench.get_plugin('psi.context')
+    try:
+        item = context.get_item('reject_threshold')
+    except KeyError:
+        return
+    item.expression = "float('inf')"
+    item.editable = False
+
+
+def redirect_output_monitor(input_name, wiring, event):
+    '''
+    Reconnect `input_name` to the output monitor. The monitor keeps its own
+    gain (from the IO manifest) and mirrors the calibration of the output it
+    loops back so stimulus levels read back as requested.
+    '''
+    controller = event.workbench.get_plugin('psi.controller')
+    try:
+        i = controller.get_input(input_name)
+    except KeyError:
+        log.warning('No input named %s in this experiment. Output monitor '
+                    'loopback not applied.', input_name)
+        return
+
+    # If this experiment doesn't drive the output the monitor is wired to, the
+    # loopback would just record silence.
+    active = {c.name: c for c in
+              controller.get_channels('analog', 'output', 'hardware')}
+    if wiring not in active:
+        names = ', '.join(active) or 'none'
+        raise ValueError(f'The output monitor is wired to "{wiring}", which '
+                         f'this experiment does not use (active outputs: '
+                         f'{names}).')
+    output = active[wiring]
+    monitor = controller.get_channel(LOOPBACK_SOURCE)
+
+    # Some inputs (e.g., the Starship microphone) set the preamp gain on their
+    # channel whenever the source changes, so restore the monitor's gain after
+    # reconnecting.
+    gain = monitor.gain
+    if i.source is not None:
+        i.source.remove_input(i)
+    monitor.add_input(i)
+    i.source_name = LOOPBACK_SOURCE
+    monitor.gain = gain
+
+    # In-ear calibration updates the output calibration after this point, so
+    # keep the monitor in sync rather than copying once.
+    def mirror_calibration(change=None):
+        monitor.calibration = output.calibration
+    mirror_calibration()
+    output.observe('calibration', mirror_calibration)
+
+    log.warning('Output monitor loopback: %s now records %s (mirroring the '
+                'calibration of %s)', input_name, LOOPBACK_SOURCE, output.name)
+
+
+enamldef OutputMonitorLoopback(ExperimentManifest): manifest:
+    '''
+    Feeds the output monitor into one of the recorded inputs (e.g., EEG or
+    the Starship microphone) for validating the stimulus and analysis chain
+    without an animal. Requires an input channel called `output_monitor` in
+    the IOManifest. The input is selected by the CFTSCAL_OUTPUT_MONITOR_LOOPBACK
+    environment variable and the output the monitor is hard-wired to by
+    CFTSCAL_OUTPUT_MONITOR_WIRING. Both are saved in the experiment metadata
+    so loopback recordings cannot be mistaken for real data.
+    '''
+    id = 'output_monitor_loopback'
+    title = 'Output monitor loopback'
+
+    attr input_name = os.environ.get(LOOPBACK_ENV, '')
+    attr wiring = os.environ.get(WIRING_ENV, '')
+
+    Extension:
+        id = manifest.id + '.metadata'
+        point = 'psi.experiment.metadata'
+
+        MetadataItem:
+            name = 'output_monitor_loopback'
+            value = manifest.input_name
+
+        MetadataItem:
+            name = 'output_monitor_wiring'
+            value = manifest.wiring
+
+    Extension:
+        id = manifest.id + '.commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = manifest.id + '.disable_artifact_reject'
+            handler = disable_artifact_reject
+
+        Command:
+            id = manifest.id + '.redirect'
+            handler = functools.partial(redirect_output_monitor,
+                                        manifest.input_name, manifest.wiring)
+
+    Extension:
+        id = manifest.id + '.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            # Before the context is initialized so the threshold is in effect
+            # for the whole experiment.
+            event = 'experiment_initialize'
+            command = manifest.id + '.disable_artifact_reject'
+            weight = 10
+
+        ExperimentAction:
+            # Inputs are connected to their channels just before this event.
+            event = 'io_configured'
+            command = manifest.id + '.redirect'
