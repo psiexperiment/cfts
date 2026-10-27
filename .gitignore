@@ -76,3 +76,6 @@ __enamlcache__/
 sandbox/
 .ropeproject/
 .ipynb_checkpoints/
+
+# Fireface loopback test runs
+tests/hardware/results/
