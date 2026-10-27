@@ -372,23 +372,6 @@ ParadigmDescription(
 
 
 ParadigmDescription(
-    'efr_sam', 'SAM EFR (continuous)', 'ear', [
-        selectable_starship_mixin,
-        eeg_mixin,
-        {'manifest': CFTS_PATH + 'efr.SAMEFRManifest'},
-        {'manifest': CFTS_PATH + 'cfts_mixins.SAMEFRInEarCalibrationMixinManifest',
-         'info': {'hide': True}},
-        temperature_mixin,
-        microphone_mixin,
-        microphone_fft_mixin,
-        eeg_view_mixin,
-        eeg_fft_view_mixin,
-    ] + COMMON_PLUGINS,
-    info={'modes': ['either']},
-)
-
-
-ParadigmDescription(
     'efr_sam_epoch', 'SAM EFR (epoch)', 'ear', [
         selectable_starship_mixin,
         eeg_mixin,
