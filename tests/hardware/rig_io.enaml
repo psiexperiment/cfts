@@ -1,0 +1,88 @@
+'''
+The IO manifest the paradigm tests run on: `cftscal.io.dummy_fireface` plus
+a stationary turntable.
+
+The MEMR paradigms require the turntable (they reject trials where the
+animal is moving), which reads a counter input the Fireface doesn't have.
+`StationaryTurntable` supplies that input as a constant zero angle, so the
+turntable never moves and no trial is rejected for it.
+'''
+import logging
+log = logging.getLogger(__name__)
+
+from threading import Event, Thread
+import time
+
+from atom.api import Float, Typed
+from enaml.workbench.api import Extension
+import numpy as np
+
+from psiaudio.pipeline import PipelineData
+from psi.controller.api import Engine
+from psi.controller.channel import HardwareCIChannel
+from psi.controller.engines.callback import ChannelSliceCallbackMixin
+
+from cftscal.io.dummy_fireface import IOManifest as FirefaceIOManifest
+
+
+class StationaryTurntable(ChannelSliceCallbackMixin, Engine):
+    '''
+    Streams zeros on every hardware counter input, in real time.
+    '''
+    t0 = Float()
+    _stop = Typed(Event)
+    _thread = Typed(Thread)
+
+    def configure(self, active=True):
+        channels = self.get_channels('counter', 'input', 'hardware',
+                                     active=active)
+        self._channel_names['hw_ci'] = [c.name for c in channels]
+        super().configure()
+
+    def start(self):
+        self.t0 = time.time()
+        self._stop = Event()
+        self._thread = Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        channels = self.get_channels('counter', 'input', 'hardware')
+        fs = channels[0].fs
+        s0 = 0
+        while not self._stop.wait(self.hw_ai_monitor_period):
+            s1 = int((time.time() - self.t0) * fs)
+            if s1 <= s0:
+                continue
+            data = PipelineData(np.zeros((len(channels), s1 - s0)), fs=fs,
+                                s0=s0)
+            for _, s, cb in self._callbacks.get('ci', []):
+                cb(data[s])
+            s0 = s1
+
+    def stop(self):
+        if self._stop is not None:
+            self._stop.set()
+            self._thread.join()
+        self.complete()
+
+    def get_ts(self):
+        return time.time() - self.t0
+
+
+enamldef IOManifest(FirefaceIOManifest): manifest:
+
+    id = 'cfts_test_rig_io'
+
+    Extension:
+        id = 'cfts_test_turntable'
+        point = 'psi.controller.io'
+
+        StationaryTurntable:
+            name = 'turntable'
+            # Started before the Fireface, which stays the master clock.
+            weight = -1
+
+            HardwareCIChannel:
+                name = 'turntable_angle'
+                label = 'Turntable angle'
+                fs = 100
