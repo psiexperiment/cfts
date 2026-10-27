@@ -1,0 +1,387 @@
+'''
+ABR adaptation paradigms. Each trial is a train of N tone bursts (or clicks)
+presented at a fixed rate followed by a pause. The full train is extracted as a
+single epoch (for artifact reject and the waterfall plot) and then split into
+one epoch per burst so the adaptation across the train can be compared.
+'''
+import logging
+log = logging.getLogger(__name__)
+
+from functools import partial
+
+import numpy as np
+
+from atom.api import Float, Int
+from enaml.core.api import d_
+from enaml.widgets.api import Action, ToolBar
+from enaml.workbench.api import Extension
+from enaml.workbench.core.api import Command
+
+from psiaudio.pipeline import concat, coroutine, PipelineData
+
+from psi.context.api import (BoolParameter, ContextRow, EnumParameter,
+                             Expression, Parameter)
+from psi.controller.api import EpochInput
+from psi.data.plots import (EpochTimeContainer, GroupedEpochAveragePlot,
+                            ViewBox)
+from psi.token.primitives import Click, Envelope, Repeat, Tone
+
+from .abr_io import (ABRIOBaseManifest, configure_click_queue,
+                     configure_tone_queue, next_frequency)
+from .cfts_mixins import CFTSSelector
+
+
+EXPERIMENT = __name__.rsplit('.', 1)[-1]
+
+
+@coroutine
+def split_bursts(n, rate, span, target):
+    '''
+    Split each sequence epoch into one epoch per burst. Burst `i` starts
+    `i` periods into the sequence and is tagged with the `burst` metadata.
+    The period is rounded to whole samples, as `psiaudio.stim.repeat` does
+    when it builds the train, so each epoch starts on its burst.
+    '''
+    while True:
+        new_data = []
+        for epoch in (yield):
+            s_period = int(round(epoch.fs / rate))
+            # Rounding can leave the sequence epoch a sample short of the last
+            # burst window, so clip the window to keep every burst the same
+            # length.
+            s_last = (n - 1) * s_period
+            s_span = min(int(round(span * epoch.fs)), epoch.shape[-1] - s_last)
+            for i in range(n):
+                lb = i * s_period
+                d = PipelineData(np.asarray(epoch)[..., lb:lb+s_span],
+                                 fs=epoch.fs, s0=0, channel=epoch.channel,
+                                 metadata=epoch.metadata.copy())
+                d.add_metadata('burst', i)
+                new_data.append(d)
+        target(concat(new_data, axis='epoch'))
+
+
+class SplitBursts(EpochInput):
+
+    #: Number of bursts in the sequence.
+    n = d_(Int(1)).tag(metadata=True)
+
+    #: Rate (bursts per second) at which bursts are presented.
+    rate = d_(Float(1)).tag(metadata=True)
+
+    #: Duration of the epoch to extract for each burst.
+    span = d_(Float()).tag(metadata=True)
+
+    def _get_duration(self):
+        return self.span
+
+    def configure_callback(self):
+        cb = super().configure_callback()
+        return split_bursts(self.n, self.rate, self.span, cb).send
+
+
+def configure_sequence(manifest, event, burst_duration):
+    '''
+    Size the sequence and burst epochs and return the pause between sequences
+    (used as the queue ITI).
+    '''
+    context = event.workbench.get_plugin('psi.context')
+    n = context.get_value('n_bursts')
+    rate = context.get_value('rate')
+    pause = context.get_value('sequence_pause')
+
+    if n < 1:
+        raise ValueError('Number of bursts per sequence must be at least 1.')
+    if burst_duration >= 1 / rate:
+        raise ValueError(
+            f'Repetition rate is too fast. Burst duration is '
+            f'{burst_duration*1e3:.1f} msec but burst period is '
+            f'{1e3/rate:.1f} msec.')
+    if pause < 0:
+        raise ValueError('Pause between sequences cannot be negative.')
+
+    manifest.n_bursts = n
+    manifest.burst_rate = rate
+    manifest.erp_span = (n - 1) / rate + manifest.burst_span
+    return pause
+
+
+def configure_experiment_tone(manifest, event):
+    context = event.workbench.get_plugin('psi.context')
+    duration = context.get_value('target_tone_burst_duration')
+    iti = configure_sequence(manifest, event, duration)
+    configure_tone_queue(manifest.key_map, event, iti)
+
+
+def configure_experiment_click(manifest, event):
+    context = event.workbench.get_plugin('psi.context')
+    duration = context.get_value('click_duration')
+    iti = configure_sequence(manifest, event, duration)
+    configure_click_queue(event, iti)
+
+
+enamldef ABRAdaptationBaseManifest(ABRIOBaseManifest): manifest:
+    '''
+    Subclasses must define the burst train token and the context parameters
+    `n_bursts`, `rate`, `sequence_pause` and `averages`.
+    '''
+    #: Duration of the epoch extracted for each burst in the sequence.
+    attr burst_span = 8.5e-3
+
+    #: Updated from the context when the experiment is configured. The
+    #: sequence epoch (`erp_span`) is also updated at that time.
+    attr n_bursts = 1
+    attr burst_rate = 1.0
+
+    Extension:
+        id = EXPERIMENT + '.io'
+        point = 'psi.controller.io'
+
+        SplitBursts:
+            source_name = 'valid_erp'
+            name = 'valid_erp_burst'
+            n << manifest.n_bursts
+            rate << manifest.burst_rate
+            span << manifest.burst_span
+
+    Extension:
+        id = EXPERIMENT + '.plots'
+        point = 'psi.data.plots'
+
+        EpochTimeContainer: burst_container:
+            name = 'burst_time_container'
+            label << '{} average (per burst)'.format(manifest.erp_type)
+            span << manifest.burst_span
+            fmt_button_cb << C.get_selector().get_formatter(burst_plot.tab_grouping)
+
+            ViewBox:
+                name = 'erp_burst_viewbox'
+                y_label << '{} amplitude'.format(manifest.erp_type)
+                y_min = -5
+                y_max = 5
+                y_mode = 'mouse'
+                save_limits = True
+
+                GroupedEpochAveragePlot: burst_plot:
+                    label << '{} burst average plot'.format(manifest.erp_type)
+                    source_name = 'valid_erp_burst'
+                    n_update = 8
+                    tab_grouping = C.get_names()
+                    plot_grouping = ['burst']
+                    plot_keys << [(i,) for i in range(manifest.n_bursts)]
+                    autogenerate_keys = 'tab'
+                    fmt_plot_label_cb = lambda x, s: f'Burst {x[0] + 1}'
+                    pen_color_cycle = 'palettable.matplotlib.Viridis_10'
+                    pen_width = 2
+
+
+enamldef ABRAdaptationToneManifest(ABRAdaptationBaseManifest): manifest:
+
+    token_name = 'tone_burst_train'
+
+    Extension:
+        id = EXPERIMENT + '.tone.tokens'
+        point = 'psi.token.tokens'
+
+        Repeat:
+            name = 'tone_burst_train'
+            label = 'tone burst train'
+            hide = ['skip_n', 'delay']
+            Envelope:
+                name = 'tone_burst'
+                label = 'tone'
+                hide = ['start_time', 'transform']
+                Tone:
+                    hide = ['polarity', 'phase']
+
+    Extension:
+        id = EXPERIMENT + '.tone.selectors'
+        point = 'psi.context.selectors'
+
+        CFTSSelector:
+            label = 'ABR stimuli'
+            can_manage = ['target_tone_frequency', 'target_tone_level']
+            user_managed = False
+
+    Extension:
+        id = EXPERIMENT + '.tone.items'
+        point = 'psi.context.items'
+
+        Expression:
+            parameter = 'target_tone_burst_train_n'
+            expression = 'n_bursts'
+
+        Expression:
+            parameter = 'target_tone_burst_train_rate'
+            expression = 'rate'
+
+        EnumParameter:
+            name = 'ordering'
+            label = 'Stimulus ordering'
+            choices = {
+                'conventional': '"sequential"',
+                'interleaved plateau': '"interleaved_plateau"',
+                'interleaved ramp': '"interleaved_ramp"',
+                'interleaved random': '"interleaved_random"',
+            }
+            scope = 'experiment'
+            group_name = 'acquisition'
+
+        ContextRow:
+            name = 'averaging'
+            group_name = 'acquisition'
+            fmt = ['Average', averages, 'sequences of', n_bursts, 'pips at',
+                   rate, '/s with', pause, 's pause and alt. pol.?', alt_pol]
+
+            Parameter: averages:
+                name = 'averages'
+                label = 'Averages'
+                default = 512
+                scope = 'trial'
+
+            Parameter: n_bursts:
+                name = 'n_bursts'
+                label = 'Bursts per sequence'
+                default = 10
+                scope = 'experiment'
+
+            Parameter: rate:
+                name = 'rate'
+                label = 'Reps. per sec.'
+                default = 100
+                scope = 'experiment'
+
+            Parameter: pause:
+                name = 'sequence_pause'
+                label = 'Pause between sequences (s)'
+                default = 3
+                scope = 'experiment'
+
+            BoolParameter: alt_pol:
+                name = 'alternate_polarity'
+                label = 'Alternate polarity?'
+                default = True
+                scope = 'experiment'
+
+    Extension:
+        id = EXPERIMENT + '.tone.commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = EXPERIMENT + '.next_frequency'
+            handler = partial(next_frequency, manifest.key_map)
+        Command:
+            id = 'psi.controller.configure_experiment'
+            handler = partial(configure_experiment_tone, manifest)
+
+    Extension:
+        id = EXPERIMENT + '.tone.toolbar'
+        point = 'psi.experiment.toolbar'
+
+        ToolBar:
+            Action:
+                text = 'Next freq.'
+                enabled << workbench.get_plugin('psi.controller').experiment_state == 'running' \
+                    and C.ordering == 'sequential'
+                triggered ::
+                    core = workbench.get_plugin('enaml.workbench.core')
+                    core.invoke_command(EXPERIMENT + '.next_frequency')
+
+
+enamldef ABRAdaptationClickManifest(ABRAdaptationBaseManifest): manifest:
+
+    token_name = 'click_train'
+
+    Extension:
+        id = EXPERIMENT + '.click.tokens'
+        point = 'psi.token.tokens'
+
+        Repeat:
+            name = 'click_train'
+            label = 'click train'
+            hide = ['skip_n', 'delay']
+            Click:
+                name = 'click'
+                label = 'click'
+                hide = ['polarity']
+
+    Extension:
+        id = EXPERIMENT + '.click.selectors'
+        point = 'psi.context.selectors'
+
+        CFTSSelector:
+            label = 'ABR stimuli'
+            can_manage = ['target_click_level']
+            user_managed = False
+
+    Extension:
+        id = EXPERIMENT + '.click.items'
+        point = 'psi.context.items'
+
+        Expression:
+            parameter = 'target_click_train_n'
+            expression = 'n_bursts'
+
+        Expression:
+            parameter = 'target_click_train_rate'
+            expression = 'rate'
+
+        Expression:
+            parameter = 'target_click_polarity'
+            expression = 'click_polarity'
+
+        Expression:
+            parameter = 'target_click_duration'
+            expression = 'click_duration'
+
+        ContextRow:
+            name = 'averaging'
+            group_name = 'acquisition'
+            fmt = ['Average', averages, 'sequences of', n_bursts, duration,
+                   's clicks at', rate, '/s with', pause, 's pause w/',
+                   polarity, 'pol.']
+
+            Parameter: averages:
+                name = 'averages'
+                label = 'Averages'
+                default = 512
+                scope = 'trial'
+
+            Parameter: n_bursts:
+                name = 'n_bursts'
+                label = 'Clicks per sequence'
+                default = 10
+                scope = 'experiment'
+
+            Parameter: duration:
+                name = 'click_duration'
+                default = 100e-6
+                scope = 'trial'
+
+            Parameter: rate:
+                name = 'rate'
+                label = 'Reps. per sec.'
+                default = 100
+                scope = 'experiment'
+
+            Parameter: pause:
+                name = 'sequence_pause'
+                label = 'Pause between sequences (s)'
+                default = 3
+                scope = 'experiment'
+
+            EnumParameter: polarity:
+                name = 'click_polarity'
+                label = 'Click polarity'
+                choices = {
+                    'cond.': '"condensation"',
+                    'rare.': '"rarefaction"',
+                    'alt.': '"alternating"',
+                }
+                scope = 'trial'
+
+    Extension:
+        id = EXPERIMENT + '.click.commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'psi.controller.configure_experiment'
+            handler = partial(configure_experiment_click, manifest)
