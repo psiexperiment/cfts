@@ -19,6 +19,7 @@ from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
 
 from psi.context.selector import CartesianProduct
 from psi.controller.api import EngineStoppedException, ExperimentAction
+from psi.controller.token_context import initialize_factory
 from psi.data.plots import (StackedEpochAveragePlot, EpochTimeContainer, ViewBox)
 from psi.data.sinks.api import GroupedEpochCounter
 
@@ -158,9 +159,26 @@ def configure_tone_queue(key_map, event, iti):
     counter.requested_group_n = averages
 
 
+def played_click_duration(event):
+    '''
+    Duration of the click as played. The click is a whole number of samples,
+    so it can be shorter than requested (e.g., 9 samples, or 93.75 usec, for
+    100 usec at 96 kHz).
+    '''
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    target = controller.get_output('target')
+    setting = next(context.iter_settings('default', 1))
+    # The polarity setting is a choice (e.g., "alternating") until the queue
+    # is configured, so give the factory a valid one.
+    setting = {**setting, 'target_click_polarity': 1}
+    return initialize_factory(target, target.token, setting).get_duration()
+
+
 def configure_experiment_click(key_map, event):
     context = event.workbench.get_plugin('psi.context')
-    duration = context.get_value('click_duration')
+    # Space the clicks by the duration actually played so the rate is exact.
+    duration = played_click_duration(event)
     rate = context.get_value('rate')
     rate_jitter_ms = context.get_value('rate_jitter_ms')
 
