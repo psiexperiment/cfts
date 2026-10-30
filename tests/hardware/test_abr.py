@@ -11,11 +11,11 @@ import pandas as pd
 import pytest
 
 from cftsdata import abr
+from psi.loopback.report import write_report
 
 from abr_analysis import analyze_stimuli, check_intervals, check_sequence
 from checks import click, tone_burst
 import plots
-from report import write_report
 from runner import (OUTPUT_CAL_DB, eeg_env, find_starship,
                     measure_run_latency, require_paradigm, run_paradigm,
                     starship_env)

@@ -12,9 +12,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from checks import (db_ratio, epoch_alignment, fit_stimuli, gain_db,
-                    polarity_cancellation)
-from report import Checks
+from psi.loopback.fit import fit_stimuli, gain_db
+from psi.loopback.report import Checks
+
+from checks import epoch_alignment, polarity_cancellation
 from rig import INPUT_DBFS
 
 

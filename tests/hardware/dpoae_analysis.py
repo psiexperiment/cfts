@@ -15,7 +15,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from report import Checks
+from psi.loopback.report import Checks
+
 from rig import INPUT_DBFS
 from runner import OUTPUT_CAL_DB
 

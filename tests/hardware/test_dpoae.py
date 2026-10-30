@@ -12,10 +12,10 @@ import pandas as pd
 import pytest
 
 from psidata.api import Recording
+from psi.loopback.report import write_report
 
 from dpoae_analysis import analyze_dpoae
 import plots
-from report import write_report
 from runner import (measure_run_latency, require_routes, run_paradigm,
                     starship_env)
 

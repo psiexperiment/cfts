@@ -1,18 +1,15 @@
 '''
-Figures for the run reports.
+Figures for the cfts run reports (see `psi.loopback.plots` for the shared
+ones).
 '''
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-from checks import gain_db
-
-
-def save(figure, path):
-    figure.savefig(path, dpi=110, bbox_inches='tight')
-    plt.close(figure)
-    return path.name
+from psi.loopback.fit import gain_db
+# Shared with the other psi programs; plot_timing is used by the tests.
+from psi.loopback.plots import plot_timing, save  # noqa: F401
 
 
 def format_key(names, values):
@@ -60,29 +57,6 @@ def as_tuple(key):
     return key if isinstance(key, tuple) else (key,)
 
 
-def plot_routing(routing, path):
-    from rig import INPUTS, OUTPUTS, ROUTE_THRESHOLD
-    figure, ax = plt.subplots(figsize=(7, 4.5))
-    g = np.abs(routing.gain)
-    db = 20 * np.log10(np.maximum(g, 1e-6))
-    # Below the threshold is just how well independent noise correlates by
-    # chance, not a route.
-    shown = np.where(g > ROUTE_THRESHOLD, db, np.nan)
-    im = ax.imshow(shown, vmin=-30, vmax=0, cmap='viridis')
-    ax.set_xticks(range(len(OUTPUTS)), list(OUTPUTS), rotation=45, ha='right')
-    ax.set_yticks(range(len(INPUTS)), list(INPUTS))
-    for i in range(db.shape[0]):
-        for o in range(db.shape[1]):
-            if g[i, o] > ROUTE_THRESHOLD:
-                ax.text(o, i, f'{db[i, o]:.1f}', ha='center', va='center',
-                        color='k', fontsize=8)
-    ax.set_xlabel('Output')
-    ax.set_ylabel('Input')
-    figure.colorbar(im, label='Gain (dB)')
-    ax.set_title(f'Routing at {routing.fs / 1e3:.0f} kHz')
-    return save(figure, path)
-
-
 def plot_timeline(fit, onsets, epoch_span, path, n=6):
     '''
     The start of the recording, with the logged onsets and the window psi
@@ -106,46 +80,6 @@ def plot_timeline(fit, onsets, epoch_span, path, n=6):
     ax.set_title(f'Stimuli arrive {fit.latency} samples '
                  f'({fit.latency / fs * 1e3:.2f} ms) after their logged onset')
     ax.legend(loc='upper right', fontsize=8)
-    return save(figure, path)
-
-
-def plot_timing(fit, path, expected_ioi=None):
-    '''
-    Lag of each stimulus re the common latency, and the interval between
-    onsets. `expected_ioi` (seconds, scalar or list) are the intervals the
-    paradigm should produce; each interval is plotted as its error from the
-    nearest one, in samples. Without it, the intervals themselves are
-    plotted (e.g., with rate jitter).
-    '''
-    fs = fit.fs
-    e = fit.epochs
-    figure, axes = plt.subplots(1, 2, figsize=(10, 3.2))
-    ax = axes[0]
-    ax.plot(e.onset, e.lag, 'o', ms=3)
-    ax.set_xlabel('Onset (s)')
-    ax.set_ylabel('Lag re latency (samples)')
-    ax.set_title(f'Onset jitter (latency {fit.latency} samples)')
-    lim = max(2, np.nanmax(np.abs(e.lag)) + 1)
-    ax.set_ylim(-lim, lim)
-
-    ax = axes[1]
-    ioi = np.diff(e.onset.values)
-    if expected_ioi is None:
-        ax.plot(e.onset.values[1:], ioi * 1e3, 'o', ms=3)
-        ax.set_ylabel('Interval (ms)')
-        ax.set_title('Interval from previous onset')
-    else:
-        expected = np.atleast_1d(expected_ioi)
-        nearest = expected[np.argmin(np.abs(ioi[:, None] - expected), axis=1)]
-        error = (ioi - nearest) * fs
-        ax.plot(e.onset.values[1:], error, 'o', ms=3)
-        ax.set_ylabel('Error (samples)')
-        label = ', '.join(f'{i * 1e3:.3f}' for i in expected)
-        ax.set_title(f'Interval from previous onset, re {label} ms')
-        lim = max(2, np.nanmax(np.abs(error)) + 1)
-        ax.set_ylim(-lim, lim)
-    ax.set_xlabel('Onset (s)')
-    figure.tight_layout()
     return save(figure, path)
 
 
