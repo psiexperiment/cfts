@@ -654,3 +654,37 @@ ParadigmDescription(
     ] + COMMON_PLUGINS,
     info={'modes': ['contra']},
 )
+
+
+################################################################################
+# Two-starship paradigms for MOC suppression of DPOAEs
+################################################################################
+# Unlike the MEMR, the response (the DPOAE) is measured in the test ear and
+# the elicitor plays in the opposite ear.
+moc_probe_starship_mixin = {
+    'manifest': CAL_PATH + 'objects.Starship',
+    'required': True,
+    'attrs': {'id': 'probe', 'title': 'Probe starship', 'side': 'test'}
+}
+
+
+moc_elicitor_starship_mixin = {
+    'manifest': CAL_PATH + 'objects.Starship',
+    'required': True,
+    'attrs': {'id': 'elicitor', 'title': 'Elicitor starship', 'side': 'nontest'}
+}
+
+
+ParadigmDescription(
+    'moc_dpoae', 'MOC suppression (DPOAE)', 'ear', [
+        moc_probe_starship_mixin,
+        moc_elicitor_starship_mixin,
+        {'manifest': CFTS_PATH + 'moc.MOCManifest'},
+        {'manifest': CFTS_PATH + 'cfts_mixins.MOCInEarCalibrationMixinManifest', 'info': {'hide': True}},
+        multi_memr_microphone_mixin,
+        multi_memr_microphone_fft_mixin,
+        turntable_linear_velocity_view_mixin_required,
+        turntable_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['contra']},
+)

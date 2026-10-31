@@ -305,3 +305,70 @@ def plot_dpoae_spectra(x, fs, analysis, path):
     figure.suptitle('f1 (blue), f2 (orange), 2f1-f2 (red)', fontsize=10)
     figure.tight_layout()
     return save(figure, path)
+
+
+def plot_moc_timeline(probe, elicitor, fs, analysis, p, path, n=2):
+    '''
+    Both microphones over the first trials, with the elicitor windows shaded.
+    '''
+    t0 = analysis.trials.t0.iloc[0]
+    period = p['trial_duration']
+    lb = max(0, int((t0 - 0.2) * fs))
+    ub = min(len(probe), int((t0 + n * period) * fs))
+    t = np.arange(lb, ub) / fs
+    figure, axes = plt.subplots(2, 1, figsize=(10, 4.5), sharex=True)
+    for ax, x, label in ((axes[0], probe, 'Probe microphone (V)'),
+                         (axes[1], elicitor, 'Elicitor microphone (V)')):
+        ax.plot(t, x[lb:ub], 'k', lw=0.3)
+        ax.set_ylabel(label, fontsize=8)
+        for i in range(n):
+            onset = t0 + i * period + p['baseline_duration']
+            ax.axvspan(onset, onset + p['elicitor_duration'], color='C1',
+                       alpha=0.15, lw=0)
+            ax.axvline(t0 + i * period, color='C0', lw=1)
+    axes[-1].set_xlabel('Time (s)')
+    axes[0].set_title('Trial onsets (blue) and elicitor (shaded)')
+    figure.tight_layout()
+    return save(figure, path)
+
+
+def plot_moc_blocks(analysis, p, path):
+    '''
+    What psi reported for each block against time in the trial: the DP (each
+    trial and the running average) and noise floor, and the error in f1 and
+    f2.
+    '''
+    b = analysis.blocks
+    figure, axes = plt.subplots(1, 2, figsize=(12, 3.6))
+    ax = axes[0]
+    for trial, g in b.groupby('trial'):
+        ax.plot(g.time, g.dpoae_level, color='lightcoral', lw=0.8,
+                label='DP (each trial)' if trial == 0 else None)
+    last = b[b.trial == b.trial.max()]
+    ax.plot(last.time, last.avg_dpoae_level, color='darkred', lw=2,
+            label='DP (average)')
+    ax.plot(last.time, last.avg_dpoae_noise_floor, color='lightsteelblue',
+            lw=2, label='Noise floor (average)')
+    if 'dpoae_expected' in b:
+        ax.plot(last.time, last.dpoae_expected, 'k:', lw=1, label='Expected')
+    onset = p['baseline_duration']
+    for a in axes:
+        a.axvspan(onset, onset + p['elicitor_duration'], color='C1',
+                  alpha=0.15, lw=0)
+        a.set_xlabel('Time re trial onset (s)')
+    ax.set_ylabel('dB re 1 V')
+    ax.set_title('DPOAE as psi measured it')
+    ax.legend(fontsize=7)
+
+    ax = axes[1]
+    ax.plot(b.time, b.f1_level - b.f1_expected, '.', ms=3, label='f1')
+    ax.plot(b.time, b.f2_level - b.f2_expected, '.', ms=3, label='f2')
+    ax.axhline(0, color='k', lw=0.5)
+    lim = max(0.2, np.abs(np.r_[b.f1_level - b.f1_expected,
+                                b.f2_level - b.f2_expected]).max() * 1.2)
+    ax.set_ylim(-lim, lim)
+    ax.set_ylabel('Error (dB)')
+    ax.set_title('Primaries as psi measured them')
+    ax.legend(fontsize=7)
+    figure.tight_layout()
+    return save(figure, path)

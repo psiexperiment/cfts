@@ -1,0 +1,674 @@
+'''
+Contralateral suppression of DPOAEs by the medial olivocochlear (MOC) reflex.
+
+f1 and f2 play continuously in the probe (test) ear for the whole run. The
+elicitor, bandlimited noise in the opposite ear, plays as back-to-back trials
+of baseline, elicitor and recovery. The DPOAE level is measured in blocks of
+`response_window` through each trial (see `moc_pipeline`) and plotted against
+time in the trial as each block arrives, along with the average of the
+accepted trials.
+
+Defaults follow the mouse literature: f2 16 kHz, f2/f1 1.2 and L1 = L2 + 10
+(Maison et al. 2012, doi:10.1152/jn.01050.2011); broadband elicitor at 75 dB
+SPL, below the level (~95 dB) where acoustic crosstalk to the probe ear
+becomes a concern (Maison et al. 2012); and an elicitor long enough to see the
+suppression peak (1–3 s) and adapt (10–30 s) (Cederholm et al. 2022,
+doi:10.3389/fneur.2022.962227; Li et al. 2018, doi:10.1155/2018/6890613).
+'''
+import logging
+log = logging.getLogger(__name__)
+
+from collections import deque
+
+from atom.api import Float, Int, Str, Typed, Value
+from enaml.application import deferred_call
+from enaml.core.api import d_
+from enaml.widgets.api import Label
+from enaml.workbench.api import Extension
+from enaml.workbench.core.api import Command
+import numpy as np
+import pyqtgraph as pg
+
+from psiaudio.queue import FIFOSignalQueue
+
+from psi.context.api import (ContextGroup, ContextRow, EnumParameter,
+                             Expression, Parameter)
+from psi.controller.api import (ChannelOutOfRange, ContinuousInput,
+                                ControllerManifest, EpochOutput,
+                                ExperimentAction, ExtractEpochs,
+                                QueuedEpochOutput, Synchronized)
+from psi.core.enaml.api import make_color
+from psi.data.api import PlotContainer, ResultPlot, ViewBox
+from psi.data.plots import SinglePlot
+from psi.data.sinks.api import BinaryStore, SimpleCounter, TableStore
+from psi.experiment.api import StatusItem
+from psi.token.primitives import BandlimitedFIRNoise, Cos2Envelope, Tone
+
+from .cfts_mixins import check_range
+from .moc_pipeline import MOCAnalyzer
+
+EXPERIMENT = __name__.rsplit('.', 1)[-1]
+
+
+def configure_moc(event):
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    data = event.workbench.get_plugin('psi.data')
+
+    primary = controller.get_output('primary')
+    secondary = controller.get_output('secondary')
+    elicitor = controller.get_output('elicitor')
+    elicitor.queue = FIFOSignalQueue()
+
+    setting = context.get_values()
+    outputs = {
+        primary: {'level': 'primary_tone_level',
+                  'frequency': 'primary_tone_frequency'},
+        secondary: {'level': 'secondary_tone_level',
+                    'frequency': 'secondary_tone_frequency'},
+    }
+    _, bad_settings = check_range(outputs, [setting])
+    if bad_settings:
+        raise ValueError('The primaries exceed the maximum output of the '
+                         'probe Starship.')
+
+    try:
+        _, factory = elicitor.add_setting(
+            setting, averages=setting['trial_n'],
+            total_duration=setting['trial_duration'])
+    except ChannelOutOfRange as e:
+        raise ValueError(f'Elicitor level is {e.db:.1f} dB too high.')
+    sf = factory.max_amplitude() * 1.1
+    elicitor.channel.expected_range = (-sf, sf)
+
+    data.find_sink('moc_counter').requested_n = setting['trial_n']
+
+    # Each trial runs from 0 to trial_duration on the plot, with the elicitor
+    # shaded.
+    container = data.find_plot_container('moc_container')
+    container.x_min = 0
+    container.x_max = setting['trial_duration']
+    onset = setting['baseline_duration']
+    for name in ('moc_dpoae_elicitor', 'moc_primary_elicitor'):
+        region = data.find_plot(name)
+        region.lb = onset
+        region.ub = onset + setting['elicitor_duration']
+
+
+class AnalyzeMOC(ContinuousInput):
+    '''
+    Runs `moc_pipeline.MOCAnalyzer` on the probe microphone, with trials
+    timed by the elicitor's queue. Each block (one record, see
+    `MOCAnalyzer`) is saved to `block_store` and passed on to the plots; each
+    trial's summary is saved to `trial_store`, and accepted trials decrement
+    the elicitor's queue.
+    '''
+    f1 = d_(Float())
+    f2 = d_(Float())
+    response_window = d_(Float())
+    trial_duration = d_(Float())
+    elicitor_onset = d_(Float())
+    elicitor_duration = d_(Float())
+    elicitor_rise_time = d_(Float())
+    primary_rise_time = d_(Float())
+    requested_n = d_(Int())
+    max_noise_floor = d_(Float())
+    max_turntable_speed = d_(Float())
+
+    elicitor_output = d_(Value())
+    turntable_sink = d_(Value())
+    block_store = d_(Value())
+    trial_store = d_(Value())
+    counter = d_(Value())
+
+    #: Status, updated on the GUI thread.
+    n_trials = Int()
+    n_reject = Int()
+    suppression = Float(np.nan)
+    last_reject = Str()
+
+    _trials = Typed(deque, ())
+
+    def subscribe_to_queue(self, queue):
+        queue.connect(self._trials.append, 'added')
+
+    def reject_cb(self, info, summary):
+        nf = summary['max_block_noise_floor']
+        if nf > self.max_noise_floor:
+            return f'baseline noise floor {nf:.1f} dB SPL'
+        speed = self.turntable_sink.get_segment(
+            info['t0'], offset=0, duration=self.trial_duration,
+            preload=False, allow_partial=True)
+        speed = np.max(np.abs(speed)) if np.size(speed) else 0
+        if speed > self.max_turntable_speed:
+            return f'turntable speed {speed:.2f} cm/s'
+
+    def trial_cb(self, info, summary):
+        md = info['metadata']
+        row = {**summary}
+        for name in ('primary_tone_frequency', 'secondary_tone_frequency',
+                     'primary_tone_level', 'secondary_tone_level',
+                     'elicitor_bandlimited_noise_level',
+                     'elicitor_bandlimited_noise_fl',
+                     'elicitor_bandlimited_noise_fh'):
+            row[name] = md.get(name)
+        self.trial_store.process_table(row)
+
+        if summary['accepted']:
+            output = self.elicitor_output
+            with output.engine.lock:
+                try:
+                    output.queue.decrement_key(info['key'])
+                except KeyError:
+                    # The queue already has every trial it needs.
+                    pass
+        else:
+            log.info('Rejecting MOC trial %d: %s', summary['trial'],
+                     summary['reject_reason'])
+
+        def update():
+            self.n_trials += 1
+            if not summary['accepted']:
+                self.n_reject += 1
+                self.last_reject = summary['reject_reason']
+            self.suppression = summary['avg_suppression']
+            self.counter.current_n = summary['n_accepted']
+        deferred_call(update)
+
+    def configure_callback(self):
+        cb = super().configure_callback()
+
+        def block_cb(records):
+            self.block_store.process_table(records)
+            cb(records)
+
+        onset = self.elicitor_onset
+        analyzer = MOCAnalyzer(
+            fs=self.fs,
+            f1=self.f1,
+            f2=self.f2,
+            response_window=self.response_window,
+            trial_duration=self.trial_duration,
+            # The elicitor window leaves out its ramps.
+            baseline=(0, onset),
+            elicitor=(onset + self.elicitor_rise_time,
+                      onset + self.elicitor_duration
+                      - self.elicitor_rise_time),
+            calibration=self.calibration,
+            requested_n=self.requested_n,
+            trials=self._trials,
+            block_cb=block_cb,
+            reject_cb=self.reject_cb,
+            trial_cb=self.trial_cb,
+            # Same as the DPOAE paradigms' Discard.
+            discard=self.primary_rise_time * 4,
+        )
+        return analyzer.send
+
+
+class MOCTimecoursePlot(ResultPlot):
+    '''
+    Curve through the latest value at each x (e.g., time in the trial), so
+    that a record for an x already plotted replaces it. If `reset_column` is
+    set, the curve is cleared whenever that column changes (e.g., a new
+    trial).
+    '''
+    reset_column = d_(Str())
+    _last_reset = Value()
+
+    def _data_acquired(self, data):
+        for d in data:
+            key = self.group_key(d)
+            if key is None:
+                continue
+            if self.reset_column:
+                value = d[self.reset_column]
+                if value != self._last_reset:
+                    self._data_cache = {}
+                    self._last_reset = value
+            cache = self._data_cache.setdefault(key, {})
+            cache[d[self.x_column]] = d[self.y_column]
+            self.last_seen_key = key
+        self.request_update()
+
+    def update(self, event=None, tab_changed=False):
+        cache = self._data_cache.get((self.selected_tab, ()), {}).copy()
+        x = np.array(sorted(cache))
+        y = np.array([cache[k] for k in x])
+        self.plot.setData(x, y)
+
+    def _default_plot(self):
+        pen = pg.mkPen(make_color(self.color), width=self.pen_width)
+        return pg.PlotDataItem(pen=pen, antialias=self.antialias)
+
+
+class RegionPlot(SinglePlot):
+    '''
+    Shades the span from `lb` to `ub` (e.g., while the elicitor plays).
+    '''
+    lb = d_(Float())
+    ub = d_(Float())
+    color = d_(Value('LightGray'))
+
+    def _default_plot(self):
+        color = make_color(self.color)
+        color.setAlpha(80)
+        item = pg.LinearRegionItem(values=(self.lb, self.ub), movable=False,
+                                   brush=pg.mkBrush(color))
+        item.setZValue(-10)
+        return item
+
+    def _observe_lb(self, event):
+        self._update_region()
+
+    def _observe_ub(self, event):
+        self._update_region()
+
+    def _update_region(self):
+        if self.plot is not None:
+            deferred_call(self.plot.setRegion, (self.lb, self.ub))
+
+
+enamldef MOCManifest(ControllerManifest): manifest:
+
+    Extension:
+        id = EXPERIMENT + '.tokens'
+        point = 'psi.token.tokens'
+
+        Cos2Envelope:
+            name = 'tone'
+            label = 'tone'
+            hide = ['start_time']
+            Tone:
+                hide = ['phase', 'polarity']
+
+        Cos2Envelope:
+            name = 'noise'
+            BandlimitedFIRNoise:
+                hide = ['polarity']
+
+    Extension:
+        id = EXPERIMENT + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'hardware_settings'
+            label = 'Hardware'
+
+        ContextGroup:
+            name = 'moc'
+            label = 'MOC'
+
+            ContextRow:
+                name = 'primaries'
+                fmt = ['F2', f2_frequency, 'Hz at', f2_level,
+                       'dB SPL, F2/F1', f2_f1_ratio, 'L1-L2', l1_l2_diff,
+                       'dB']
+
+                Parameter: f2_frequency:
+                    name = 'f2_frequency'
+                    default = 16000
+
+                Parameter: f2_level:
+                    name = 'f2_level'
+                    default = 50
+
+                Parameter: f2_f1_ratio:
+                    name = 'f2_f1_ratio'
+                    default = 1.2
+
+                Parameter: l1_l2_diff:
+                    name = 'l1_l2_difference'
+                    default = 10
+
+            ContextRow:
+                name = 'elicitor'
+                fmt = ['Elicitor', elicitor_fl, 'to', elicitor_fh, 'Hz at',
+                       elicitor_level, 'dB SPL, eq. up to ±', elicitor_eq_max,
+                       'dB, apply', elicitor_audiogram, 'audiogram']
+
+                Parameter: elicitor_fl:
+                    name = 'elicitor_fl'
+                    default = 4e3
+
+                Parameter: elicitor_fh:
+                    name = 'elicitor_fh'
+                    default = 40e3
+
+                Parameter: elicitor_level:
+                    name = 'elicitor_level'
+                    default = 75
+
+                Parameter: elicitor_eq_max:
+                    name = 'elicitor_max_equalize'
+                    default = 20
+
+                EnumParameter: elicitor_audiogram:
+                    name = 'elicitor_audiogram_weighting'
+                    default = 'no'
+                    choices = {'no': None, 'mouse': "'mouse'"}
+
+            ContextRow:
+                name = 'trial_timing'
+                fmt = ['Trial:', baseline, 's baseline,', elicitor_dur,
+                       's elicitor (', elicitor_rise, 's ramp),', recovery,
+                       's recovery; repeat', trial_n, 'times']
+
+                Parameter: baseline:
+                    name = 'baseline_duration'
+                    default = 10
+
+                Parameter: elicitor_dur:
+                    name = 'elicitor_duration'
+                    default = 30
+
+                Parameter: elicitor_rise:
+                    name = 'elicitor_rise_time'
+                    default = 20e-3
+
+                Parameter: recovery:
+                    name = 'recovery_duration'
+                    default = 30
+
+                Parameter: trial_n:
+                    name = 'trial_n'
+                    default = 5
+
+            Parameter:
+                name = 'response_window'
+                label = 'Time resolution (s)'
+                default = 100e-3
+
+            ContextRow:
+                name = 'artifact_reject'
+                fmt = ['Reject if baseline noise floor >', max_nf,
+                       'dB SPL or speed >', max_speed, 'cm/s']
+
+                Parameter: max_nf:
+                    name = 'max_noise_floor'
+                    default = 30
+
+                Parameter: max_speed:
+                    name = 'max_turntable_speed'
+                    default = 0.5
+
+            Parameter:
+                name = 'trial_duration'
+                label = 'Trial duration (s)'
+
+        Expression:
+            parameter = 'trial_duration'
+            expression = 'baseline_duration + elicitor_duration + recovery_duration'
+
+        # The primaries are whole multiples of the frequency resolution, so
+        # each block holds whole cycles of f1, f2 and the DP.
+        Expression:
+            parameter = 'secondary_tone_frequency'
+            expression = 'imul(f2_frequency, 1/response_window)'
+
+        Expression:
+            parameter = 'primary_tone_frequency'
+            expression = 'imul(secondary_tone_frequency / f2_f1_ratio, 1/response_window)'
+
+        Expression:
+            parameter = 'secondary_tone_level'
+            expression = 'f2_level'
+
+        Expression:
+            parameter = 'primary_tone_level'
+            expression = 'f2_level + l1_l2_difference'
+
+        # The primaries play until the experiment stops. As in the DPOAE
+        # paradigms, an hour stands in for "indefinitely".
+        Expression:
+            parameter = 'secondary_tone_duration'
+            expression = '3600'
+
+        Expression:
+            parameter = 'primary_tone_duration'
+            expression = 'secondary_tone_duration'
+
+        Expression:
+            parameter = 'secondary_tone_rise_time'
+            expression = '25e-3'
+
+        Expression:
+            parameter = 'primary_tone_rise_time'
+            expression = '25e-3'
+
+        Expression:
+            parameter = 'elicitor_noise_start_time'
+            expression = 'baseline_duration'
+
+        Expression:
+            parameter = 'elicitor_noise_duration'
+            expression = 'elicitor_duration'
+
+        Expression:
+            parameter = 'elicitor_noise_rise_time'
+            expression = 'elicitor_rise_time'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_level'
+            expression = 'elicitor_level'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fl'
+            expression = 'elicitor_fl'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_fh'
+            expression = 'elicitor_fh'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_equalize'
+            expression = 'elicitor_max_equalize != 0'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_max_correction'
+            expression = 'elicitor_max_equalize'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_audiogram_weighting'
+            expression = 'elicitor_audiogram_weighting'
+
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_seed'
+            expression = '1'
+
+    Extension:
+        id = EXPERIMENT + '.io'
+        point = 'psi.controller.io'
+
+        ExtractEpochs: extract_elicitor:
+            source_name = 'elicitor_microphone'
+            name = 'moc_elicitor'
+            force_active = True
+
+        # The primaries start with the first trial, so trial onsets (and the
+        # elicitor) are on the same clock as the primaries.
+        Synchronized:
+            name = 'moc'
+
+            EpochOutput:
+                name = 'primary'
+                label = 'Primary'
+                target_name = 'probe_primary'
+                configurable = False
+                token = workbench.get_plugin('psi.token').get_token('tone')
+
+            EpochOutput:
+                name = 'secondary'
+                label = 'Secondary'
+                target_name = 'probe_secondary'
+                configurable = False
+                token = workbench.get_plugin('psi.token').get_token('tone')
+
+            QueuedEpochOutput:
+                name = 'elicitor'
+                label = 'Elicitor'
+                target_name = 'elicitor_secondary'
+                auto_decrement = False
+                token = workbench.get_plugin('psi.token').get_token('noise')
+                queue ::
+                    extract_elicitor.subscribe_to_queue(self.queue)
+                    analyze.subscribe_to_queue(self.queue)
+
+        AnalyzeMOC: analyze:
+            source_name = 'probe_microphone'
+            name = 'moc_analyze'
+            force_active = True
+            f1 = C.primary_tone_frequency
+            f2 = C.secondary_tone_frequency
+            response_window = C.response_window
+            trial_duration = C.trial_duration
+            elicitor_onset = C.baseline_duration
+            elicitor_duration = C.elicitor_duration
+            elicitor_rise_time = C.elicitor_rise_time
+            primary_rise_time = C.primary_tone_rise_time
+            requested_n = C.trial_n
+            max_noise_floor = C.max_noise_floor
+            max_turntable_speed = C.max_turntable_speed
+            elicitor_output = controller.get_output('elicitor')
+            turntable_sink = data.find_sink('turntable_store') \
+                .get_ai_signal('turntable_linear_velocity')
+            block_store = block_store
+            trial_store = trial_store
+            counter = counter
+
+    Extension:
+        id = EXPERIMENT + '.commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = 'psi.controller.configure_experiment'
+            handler = configure_moc
+
+    Extension:
+        id = EXPERIMENT + '.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentAction:
+            event = 'experiment_initialize'
+            command = 'psi.context.initialize'
+            kwargs = {'selector': None, 'cycles': 1}
+
+        ExperimentAction:
+            event = 'experiment_prepare'
+            command = 'psi.controller.configure_experiment'
+            weight = 11
+
+        ExperimentAction:
+            event = 'engines_configured'
+            command = 'moc.start'
+            kwargs = {'delay': 0.5}
+
+        ExperimentAction:
+            event = 'moc_elicitor_queue_end'
+            command = 'psi.controller.stop'
+
+    Extension:
+        id = EXPERIMENT + '.data'
+        point = 'psi.data.sinks'
+
+        BinaryStore:
+            name = 'moc_binary_store'
+            continuous_inputs = ['probe_microphone', 'elicitor_microphone']
+
+        TableStore: block_store:
+            name = 'moc_block_store'
+
+        TableStore: trial_store:
+            name = 'moc_trial_store'
+
+        SimpleCounter: counter:
+            name = 'moc_counter'
+            label = 'Trials acquired'
+
+    Extension:
+        id = EXPERIMENT + '.status'
+        point = 'psi.experiment.status'
+
+        StatusItem:
+            label = 'Trials rejected'
+            Label:
+                text << f'{analyze.n_reject} of {analyze.n_trials}' + \
+                    (f' ({analyze.last_reject})' if analyze.last_reject else '')
+
+        StatusItem:
+            label = 'Suppression'
+            Label:
+                text << f'{analyze.suppression:.2f} dB'
+
+    Extension:
+        id = EXPERIMENT + '.plots'
+        point = 'psi.data.plots'
+
+        PlotContainer:
+            name = 'moc_container'
+            label = 'DPOAE vs time'
+            x_label = 'Time re trial onset (s)'
+
+            ViewBox:
+                name = 'moc_dpoae_vb'
+                label = 'DPOAE (dB SPL)'
+                y_mode = 'mouse'
+                save_limits = True
+                y_min = -20
+                y_max = 40
+
+                RegionPlot:
+                    name = 'moc_dpoae_elicitor'
+
+                MOCTimecoursePlot:
+                    source_name = 'moc_analyze'
+                    x_column = 'time'
+                    y_column = 'dpoae_level'
+                    reset_column = 'trial'
+                    label = 'DPOAE (this trial)'
+                    color = 'lightcoral'
+
+                MOCTimecoursePlot:
+                    source_name = 'moc_analyze'
+                    x_column = 'time'
+                    y_column = 'avg_dpoae_noise_floor'
+                    label = 'Noise floor (average)'
+                    color = 'lightsteelblue'
+                    pen_width = 2
+
+                MOCTimecoursePlot:
+                    source_name = 'moc_analyze'
+                    x_column = 'time'
+                    y_column = 'avg_dpoae_level'
+                    label = 'DPOAE (average)'
+                    color = 'darkred'
+                    pen_width = 2
+
+            # A change in the primaries while the elicitor plays suggests the
+            # middle-ear muscle reflex rather than the MOC.
+            ViewBox:
+                name = 'moc_primary_vb'
+                label = 'Primaries (dB SPL)'
+                y_mode = 'mouse'
+                save_limits = True
+                y_min = 40
+                y_max = 80
+
+                RegionPlot:
+                    name = 'moc_primary_elicitor'
+
+                MOCTimecoursePlot:
+                    source_name = 'moc_analyze'
+                    x_column = 'time'
+                    y_column = 'avg_f1_level'
+                    label = 'F1 (average)'
+                    color = 'lightsalmon'
+                    pen_width = 2
+
+                MOCTimecoursePlot:
+                    source_name = 'moc_analyze'
+                    x_column = 'time'
+                    y_column = 'avg_f2_level'
+                    label = 'F2 (average)'
+                    color = 'indianred'
+                    pen_width = 2

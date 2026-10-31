@@ -1,0 +1,141 @@
+'''
+A synthetic DPOAE for the MOC paradigm, so its analysis can be checked
+through a loopback (which has no cochlea, so no DP).
+
+Adds a continuous tone at 2f1 - f2 to the probe Starship's primary output,
+`level` dB SPL, that drops by `suppression` dB (with cos² ramps of the
+elicitor's rise time) while the elicitor plays in every trial. It starts on
+the same sample as the primaries and the first trial, so in a loopback the
+DP the paradigm measures should be exactly this.
+'''
+from enaml.workbench.api import Extension
+
+from psi.context.api import Expression, Parameter
+from psi.controller.api import EpochOutput, ExperimentAction, Synchronized
+from psi.core.enaml.api import ExperimentManifest
+from psi.token.block import ContinuousBlock
+from psi.token.primitives import Cos2Envelope, Tone
+
+from synthetic_dp import SuppressionEnvelopeFactory
+
+
+enamldef SuppressionEnvelope(ContinuousBlock):
+
+    factory = SuppressionEnvelopeFactory
+    name = 'suppression'
+    label = 'suppression'
+
+    Parameter:
+        name = 'period'
+
+    Parameter:
+        name = 'start_time'
+
+    Parameter:
+        name = 'duration'
+
+    Parameter:
+        name = 'rise_time'
+
+    Parameter:
+        name = 'depth'
+
+
+enamldef SyntheticDPManifest(ExperimentManifest): manifest:
+
+    id = 'moc_synthetic_dp'
+
+    #: Level of the synthetic DP (dB SPL).
+    attr level = 20
+
+    #: How much it drops while the elicitor plays (dB).
+    attr suppression = 3
+
+    Extension:
+        id = manifest.id + '.tokens'
+        point = 'psi.token.tokens'
+
+        Cos2Envelope:
+            name = 'synthetic_dp'
+            label = 'synthetic DP'
+            SuppressionEnvelope:
+                Tone:
+                    pass
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        Expression:
+            parameter = 'synthetic_dp_synthetic_dp_start_time'
+            expression = '0'
+
+        # Same onset and duration as the primaries.
+        Expression:
+            parameter = 'synthetic_dp_synthetic_dp_duration'
+            expression = 'primary_tone_duration'
+
+        Expression:
+            parameter = 'synthetic_dp_synthetic_dp_rise_time'
+            expression = 'primary_tone_rise_time'
+
+        Expression:
+            parameter = 'synthetic_dp_suppression_period'
+            expression = 'trial_duration'
+
+        Expression:
+            parameter = 'synthetic_dp_suppression_start_time'
+            expression = 'baseline_duration'
+
+        Expression:
+            parameter = 'synthetic_dp_suppression_duration'
+            expression = 'elicitor_duration'
+
+        Expression:
+            parameter = 'synthetic_dp_suppression_rise_time'
+            expression = 'elicitor_rise_time'
+
+        Expression:
+            parameter = 'synthetic_dp_suppression_depth'
+            expression = str(manifest.suppression)
+
+        Expression:
+            parameter = 'synthetic_dp_tone_frequency'
+            expression = '2 * primary_tone_frequency - secondary_tone_frequency'
+
+        Expression:
+            parameter = 'synthetic_dp_tone_level'
+            expression = str(manifest.level)
+
+        Expression:
+            parameter = 'synthetic_dp_tone_phase'
+            expression = '0'
+
+        Expression:
+            parameter = 'synthetic_dp_tone_polarity'
+            expression = '1'
+
+    Extension:
+        id = manifest.id + '.io'
+        point = 'psi.controller.io'
+
+        Synchronized:
+            name = 'moc_synthetic'
+
+            EpochOutput:
+                name = 'synthetic_dp'
+                label = 'Synthetic DP'
+                target_name = 'probe_primary'
+                configurable = False
+                token = workbench.get_plugin('psi.token') \
+                    .get_token('synthetic_dp')
+
+    Extension:
+        id = manifest.id + '.actions'
+        point = 'psi.controller.actions'
+
+        # `moc_start` carries the sample the primaries start on as its
+        # timestamp, so this starts on that same sample.
+        ExperimentAction:
+            event = 'moc_start'
+            command = 'moc_synthetic.start'

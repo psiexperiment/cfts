@@ -432,6 +432,54 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             viewbox_name << probe_calibrate.viewbox_name
 
 
+enamldef MOCInEarCalibrationMixinManifest(ExperimentManifest): manifest:
+
+    id = 'moc_inear_calibration'
+    title = 'In-ear calibration'
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'inear_calibration'
+            label = 'In-ear calibration'
+
+            Parameter:
+                name = 'calibration_gain'
+                label = 'Gain (dB)'
+                dtype = 'float'
+                default = -30
+
+    Extension:
+        id = manifest.id + '.calibration'
+        point = 'psi.controller.calibration.channels'
+
+        ToneCalibrate: probe_calibrate:
+            name = 'moc_probe_calibration'
+            label = 'Probe tone calibration'
+            input_name = 'probe_microphone'
+            outputs = {
+                'primary': ['primary_tone_frequency'],
+                'secondary': ['secondary_tone_frequency'],
+            }
+            gain << C.calibration_gain
+            max_thd = None
+            min_snr = 5
+            duration = 0.1
+            trim = 0.01
+            iti = 0
+            get_values => (values):
+                return {si for i in values for si in i}
+
+        ChirpCalibrate:
+            name = 'moc_elicitor_calibration'
+            label = 'Elicitor calibration'
+            input_name = 'elicitor_microphone'
+            outputs = {'elicitor': []}
+            gain << C.calibration_gain
+
+
 def set_debug_calibration(event):
     '''
     Set Starship speakers to a calibration that returns scaling factors that

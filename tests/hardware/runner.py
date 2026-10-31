@@ -54,7 +54,7 @@ def eeg_env(gain=1):
 
 
 def run_paradigm(paradigm, path, settings, env=None, plugins=None,
-                 timeout=300):
+                 manifests=None, timeout=300):
     '''
     Run `paradigm` until it finishes, saving its data to `path`, with every
     output calibrated by `debug_calibration` (see
@@ -64,7 +64,7 @@ def run_paradigm(paradigm, path, settings, env=None, plugins=None,
     plugins = ['debug_calibration'] + list(plugins or [])
     return loopback_runner.run_paradigm(
         RIG, paradigm, path, settings, modules=PARADIGM_MODULES, env=env,
-        plugins=plugins, timeout=timeout, cwd=HERE)
+        plugins=plugins, manifests=manifests, timeout=timeout, cwd=HERE)
 
 
 def require_paradigm(paradigm):
