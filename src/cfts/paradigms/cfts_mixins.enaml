@@ -582,6 +582,8 @@ enamldef MOCInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             name = 'moc_probe_calibration'
             label = 'Probe tone calibration'
             input_name = 'probe_microphone'
+            # The MOC paradigm has no selector; f1 and f2 are fixed.
+            selector = None
             outputs = {
                 'primary': ['primary_tone_frequency'],
                 'secondary': ['secondary_tone_frequency'],
