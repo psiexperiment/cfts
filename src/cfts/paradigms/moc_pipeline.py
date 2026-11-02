@@ -79,6 +79,11 @@ class MOCAnalyzer:
         Window (s re trial onset) used as the trial's baseline.
     elicitor : (float, float)
         Window (s re trial onset) over which suppression is measured.
+    onset : (float, float), optional
+        Window (s re trial onset) early in the elicitor, over which
+        suppression is also measured. The MOC effect peaks within a few
+        seconds of the elicitor's onset and then adapts, so the mean over the
+        whole elicitor understates the peak.
     calibration : psiaudio calibration
         Probe microphone calibration.
     requested_n : int
@@ -105,7 +110,7 @@ class MOCAnalyzer:
 
     def __init__(self, fs, f1, f2, response_window, trial_duration,
                  baseline, elicitor, calibration, requested_n, trials,
-                 block_cb, reject_cb, trial_cb, discard=0):
+                 block_cb, reject_cb, trial_cb, discard=0, onset=None):
         self.fs = fs
         self.response_window = response_window
         self.block_n = int(round(response_window * fs))
@@ -125,6 +130,7 @@ class MOCAnalyzer:
         self.time = (np.arange(self.n_blocks) + 0.5) * response_window
         self.baseline_mask = self._window_mask(*baseline)
         self.elicitor_mask = self._window_mask(*elicitor)
+        self.onset_mask = None if onset is None else self._window_mask(*onset)
 
         n_f = len(self.frequencies)
         self.sum = np.zeros((self.n_blocks, n_f), dtype=complex)
@@ -258,7 +264,7 @@ class MOCAnalyzer:
                                                     self.baseline_mask)
         e_f1, e_f2, e_dp, e_nf = self.window_levels(phasors,
                                                     self.elicitor_mask)
-        return {
+        summary = {
             'baseline_dpoae_level': b_dp,
             'baseline_noise_floor': b_nf,
             'elicitor_dpoae_level': e_dp,
@@ -268,7 +274,15 @@ class MOCAnalyzer:
             # middle-ear muscle reflex.
             'f1_change': e_f1 - b_f1,
             'f2_change': e_f2 - b_f2,
+            # A rise in the noise floor during the elicitor suggests it is
+            # reaching the probe microphone (acoustic crosstalk).
+            'noise_floor_change': e_nf - b_nf,
         }
+        if self.onset_mask is not None:
+            o_dp = self.window_levels(phasors, self.onset_mask)[2]
+            summary['onset_dpoae_level'] = o_dp
+            summary['onset_suppression'] = b_dp - o_dp
+        return summary
 
     def average_phasors(self):
         with np.errstate(invalid='ignore'):

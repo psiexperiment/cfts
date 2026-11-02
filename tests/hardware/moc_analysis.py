@@ -56,16 +56,17 @@ class Analysis:
     span: tuple
 
 
-def elicitor_template(fs, p):
+def elicitor_template(fs, p, seed):
     '''
     One trial of the elicitor, as psi plays it (a `BandlimitedFIRNoise` in a
-    `Cos2Envelope`, seed 1), up to the end of the noise. The silence after it
-    is left out: the run stops partway through the last trial's recovery.
+    `Cos2Envelope`, with the trial's seed), up to the end of the noise. The
+    silence after it is left out: the run stops partway through a trial.
     '''
     calibration = FlatCalibration.from_db(OUTPUT_CAL_DB)
     noise = stim.BandlimitedFIRNoiseFactory(
-        fs, p['elicitor_fl'], p['elicitor_fh'], p['elicitor_level'], seed=1,
-        equalize=False, calibration=calibration)
+        fs, p['elicitor_fl'], p['elicitor_fh'], p['elicitor_level'],
+        seed=seed, equalize=False, calibration=calibration,
+        correct_level=True)
     factory = stim.Cos2EnvelopeFactory(fs, p['elicitor_duration'],
                                        p['elicitor_rise_time'], noise,
                                        start_time=p['baseline_duration'])
@@ -92,7 +93,8 @@ def analyze_moc(probe, elicitor, fs, trials, blocks, p, gain, latency,
     p : dict
         The paradigm's settings: `baseline_duration`, `elicitor_duration`,
         `recovery_duration`, `elicitor_rise_time`, `response_window`,
-        `trial_n`, `elicitor_level`, `elicitor_fl`, `elicitor_fh`, plus
+        `trial_n`, `elicitor_level`, `elicitor_fl`, `elicitor_fh`,
+        `elicitor_seed`, plus
         `trial_duration`.
     gain : dict
         Route gain (dB) of the 'primary', 'secondary' and 'elicitor' outputs
@@ -192,12 +194,22 @@ def analyze_moc(probe, elicitor, fs, trials, blocks, p, gain, latency,
                    'Level of the synthetic DP in the recording re requested.')
 
     # The elicitor, once per trial for as long as the recording lasts.
-    template = elicitor_template(fs, p)
     end = p['baseline_duration'] + p['elicitor_duration']
     onsets = start + period * np.arange(int((len(elicitor) / fs - start
                                              - end) // period) + 1)
-    fit = fit_stimuli(elicitor, fs, onsets, [template] * len(onsets),
-                      latency=0)
+    # Trial i's noise is seeded with the starting seed plus i.
+    seeds = p['elicitor_seed'] + np.arange(len(onsets))
+    checks.add('elicitor seeds',
+               list(trials.elicitor_bandlimited_noise_seed)
+               == list(seeds[:len(trials)]),
+               ', '.join(str(s) for s in trials.elicitor_bandlimited_noise_seed),
+               f'{p["elicitor_seed"]} plus the trial number')
+    checks.add('no extra trial', len(onsets) == p['trial_n'],
+               f'{len(onsets)} elicitors played', f'{p["trial_n"]}',
+               'The run stops once the last trial is accepted, before the '
+               "next trial's elicitor.")
+    templates = [elicitor_template(fs, p, s) for s in seeds]
+    fit = fit_stimuli(elicitor, fs, onsets, templates, latency=0)
     e = fit.epochs
     worst = np.nanmax(np.abs(e.lag))
     checks.add('elicitor timing', worst == 0,
@@ -216,7 +228,7 @@ def analyze_moc(probe, elicitor, fs, trials, blocks, p, gain, latency,
                and (unexplained <= RESIDUAL_LIMIT),
                f'worst trial {worst:.1f} dB; whole recording '
                f'{unexplained:.1f} dB', f'≤ {RESIDUAL_LIMIT} dB',
-               'Frozen noise, the same every trial, and nothing else on the '
+               'Each trial\'s noise from its seed, and nothing else on the '
                'elicitor microphone.')
 
     # What psi reported for each block.

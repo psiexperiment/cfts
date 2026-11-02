@@ -24,13 +24,15 @@ TRIAL = BASELINE + ELICITOR + RECOVERY
 START = 0.5
 DP_AMPLITUDE = 1e-3
 SUPPRESSION = 3
+#: Duration (s) of the early part of the elicitor.
+ONSET = 0.3
 
 
 def db(x):
     return 20 * np.log10(x / np.sqrt(2))
 
 
-def recording(n_trials, noise=0, seed=0):
+def recording(n_trials, noise=0, seed=0, peak=None):
     n = int((START + TRIAL * n_trials) * FS)
     t = np.arange(n) / FS
     x = 0.1 * np.cos(2 * np.pi * F1 * t) + 0.1 * np.cos(2 * np.pi * F2 * t)
@@ -39,6 +41,11 @@ def recording(n_trials, noise=0, seed=0):
     dp_amplitude = np.where(suppressed,
                             DP_AMPLITUDE * 10 ** (-SUPPRESSION / 20),
                             DP_AMPLITUDE)
+    if peak is not None:
+        # Suppression is `peak` for the first ONSET s of the elicitor, then
+        # adapts to SUPPRESSION.
+        early = (trial_time >= BASELINE) & (trial_time < BASELINE + ONSET)
+        dp_amplitude[early] = DP_AMPLITUDE * 10 ** (-peak / 20)
     # The DP's phase is arbitrary, but fixed re the primaries.
     x += dp_amplitude * np.cos(2 * np.pi * DP * t + 1.0)
     x[t < START] = 0
@@ -46,7 +53,7 @@ def recording(n_trials, noise=0, seed=0):
     return x
 
 
-def run(x, n_trials, requested_n, reject=()):
+def run(x, n_trials, requested_n, reject=(), onset=None):
     trials = deque({'t0': START + i * TRIAL, 'key': 'k', 'metadata': {}}
                    for i in range(n_trials))
     blocks, summaries = [], []
@@ -57,7 +64,7 @@ def run(x, n_trials, requested_n, reject=()):
         trials=trials, block_cb=blocks.extend,
         reject_cb=lambda info, s: 'test' if s['trial'] in reject else None,
         trial_cb=lambda info, s: summaries.append(s),
-        discard=0.1)
+        discard=0.1, onset=onset)
     # Odd-sized chunks so blocks straddle them.
     for lb in range(0, len(x), 3001):
         chunk = x[lb:lb + 3001][np.newaxis]
@@ -129,3 +136,16 @@ def test_rejected_and_extra_trials():
     assert summaries[1]['reject_reason'] == 'test'
     assert analyzer.n_accepted == 3
     assert not any(b['trial'] == 4 for b in blocks)
+
+
+def test_onset_suppression():
+    # Suppression peaks early and adapts: the mean over the elicitor
+    # understates it, the onset window doesn't.
+    _, _, summaries = run(recording(2, noise=1e-5, peak=6), 2,
+                          requested_n=2, onset=(BASELINE, BASELINE + ONSET))
+    s = summaries[-1]
+    assert s['onset_suppression'] == pytest.approx(6, abs=0.05)
+    assert s['avg_onset_suppression'] == pytest.approx(6, abs=0.05)
+    assert 3.5 < s['suppression'] < 5
+    # The noise is the same throughout.
+    assert s['noise_floor_change'] == pytest.approx(0, abs=3)

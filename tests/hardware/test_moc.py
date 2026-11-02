@@ -35,6 +35,9 @@ PARAMETERS = {
     'elicitor_rise_time': 20e-3,
     'recovery_duration': 1.0,
     'trial_n': 3,
+    # Not the default, to check that each trial adds its number to it.
+    'elicitor_seed': 7,
+    'elicitor_frozen': False,
     'elicitor_level': 70,
     'elicitor_fl': 4e3,
     'elicitor_fh': 32e3,

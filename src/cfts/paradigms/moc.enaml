@@ -8,19 +8,37 @@ of baseline, elicitor and recovery. The DPOAE level is measured in blocks of
 time in the trial as each block arrives, along with the average of the
 accepted trials.
 
-Defaults follow the mouse literature: f2 16 kHz, f2/f1 1.2 and L1 = L2 + 10
-(Maison et al. 2012, doi:10.1152/jn.01050.2011); broadband elicitor at 75 dB
-SPL, below the level (~95 dB) where acoustic crosstalk to the probe ear
-becomes a concern (Maison et al. 2012); and an elicitor long enough to see the
-suppression peak (1–3 s) and adapt (10–30 s) (Cederholm et al. 2022,
-doi:10.3389/fneur.2022.962227; Li et al. 2018, doi:10.1155/2018/6890613).
+Suppression is the drop in the DP from the baseline, both over the whole
+elicitor and over its first few seconds (the onset window), since the effect
+peaks within a few seconds of the elicitor's onset and then adapts: at ~3 s
+and adapted by 15 s with 96 dB SPL noise, at ~6 s and adapted by ~30 s with
+82 dB SPL (Cederholm et al. 2022, doi:10.3389/fneur.2022.962227), within 1 s
+and adapted by 10 s with 76 dB SPL (Li et al. 2018,
+doi:10.1155/2018/6890613). The change in the noise floor during the elicitor
+flags acoustic crosstalk; the change in f1 and f2, the middle-ear muscle
+reflex.
+
+Defaults follow the mouse literature: equal primaries at 60 dB SPL, f2 16 kHz
+and f2/f1 1.2 (Li et al. 2018). Maison et al. 2012 (doi:10.1152/jn.01050.2011)
+found that contralateral noise suppresses DPOAEs evoked by low-level
+primaries through a pathway other than the MOC system, and only those evoked
+by high-level primaries through the MOC system. The elicitor (broadband, 85
+dB SPL) is above the 82 dB SPL that Cederholm et al. 2022 found just above
+threshold for suppression. These studies used ketamine/xylazine, under which
+the middle-ear muscle reflex is unlikely; check `f1_change`/`f2_change`
+otherwise.
+
+Each trial's elicitor is a new noise (seeded with the starting seed plus the
+trial's number, so a run can be regenerated), so that any of it reaching
+the probe microphone averages out over trials rather than adding up as
+frozen noise would; frozen noise is an option.
 '''
 import logging
 log = logging.getLogger(__name__)
 
 from collections import deque
 
-from atom.api import Float, Int, Str, Typed, Value
+from atom.api import Event, Float, Int, Str, Typed, Value
 from enaml.application import deferred_call
 from enaml.core.api import d_
 from enaml.widgets.api import Label
@@ -31,12 +49,13 @@ import pyqtgraph as pg
 
 from psiaudio.queue import FIFOSignalQueue
 
-from psi.context.api import (ContextGroup, ContextRow, EnumParameter,
-                             Expression, Parameter)
+from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
+                             EnumParameter, Expression, Parameter)
 from psi.controller.api import (ChannelOutOfRange, ContinuousInput,
                                 ControllerManifest, EpochOutput,
-                                ExperimentAction, ExtractEpochs,
-                                QueuedEpochOutput, Synchronized)
+                                ExperimentAction, ExperimentEvent,
+                                ExtractEpochs, QueuedEpochOutput,
+                                Synchronized)
 from psi.core.enaml.api import make_color
 from psi.data.api import PlotContainer, ResultPlot, ViewBox
 from psi.data.plots import SinglePlot
@@ -49,6 +68,35 @@ from .moc_pipeline import MOCAnalyzer
 
 EXPERIMENT = __name__.rsplit('.', 1)[-1]
 
+#: Context name of the elicitor noise's seed.
+SEED = 'elicitor_bandlimited_noise_seed'
+
+
+class SeededTrialQueue(FIFOSignalQueue):
+    '''
+    FIFO queue that reseeds the elicitor noise for each trial with the
+    starting seed plus the number of trials played before it (rejected
+    trials included). Each trial's noise differs, but the sequence is the
+    same every run. The seed is in each trial's metadata.
+
+    The stimulus is the `Cos2Envelope` around the `BandlimitedFIRNoise`.
+    Only the noise's seed changes: the queue resets the stimulus as each
+    trial starts, which restarts the noise from its (new) seed. Building a
+    new noise per trial instead would design its filter again, which takes
+    longer than an output block.
+    '''
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._n_played = 0
+
+    def pop_key(self, key, decrement=True):
+        data = super().pop_key(key, decrement)
+        md = dict(data['metadata'])
+        md[SEED] = md[SEED] + self._n_played
+        self._n_played += 1
+        data['source'].input_factory.seed = md[SEED]
+        return {**data, 'metadata': md}
+
 
 def configure_moc(event):
     context = event.workbench.get_plugin('psi.context')
@@ -58,9 +106,13 @@ def configure_moc(event):
     primary = controller.get_output('primary')
     secondary = controller.get_output('secondary')
     elicitor = controller.get_output('elicitor')
-    elicitor.queue = FIFOSignalQueue()
-
     setting = context.get_values()
+    if setting['elicitor_frozen']:
+        # The same noise every trial (the factory restarts from its seed).
+        elicitor.queue = FIFOSignalQueue()
+    else:
+        elicitor.queue = SeededTrialQueue()
+
     outputs = {
         primary: {'level': 'primary_tone_level',
                   'frequency': 'primary_tone_frequency'},
@@ -102,6 +154,11 @@ class AnalyzeMOC(ContinuousInput):
     `MOCAnalyzer`) is saved to `block_store` and passed on to the plots; each
     trial's summary is saved to `trial_store`, and accepted trials decrement
     the elicitor's queue.
+
+    The queue starts each trial as the previous one ends, before that one
+    is analyzed, so it always starts one trial more than it needs.
+    `complete` fires once `requested_n` trials are accepted, to stop the run
+    in that extra trial's baseline, before its elicitor.
     '''
     f1 = d_(Float())
     f2 = d_(Float())
@@ -110,6 +167,9 @@ class AnalyzeMOC(ContinuousInput):
     elicitor_onset = d_(Float())
     elicitor_duration = d_(Float())
     elicitor_rise_time = d_(Float())
+    #: Duration (s) of the window at the start of the elicitor (after its
+    #: ramp) over which suppression is also measured.
+    elicitor_onset_window = d_(Float())
     primary_rise_time = d_(Float())
     requested_n = d_(Int())
     max_noise_floor = d_(Float())
@@ -121,10 +181,13 @@ class AnalyzeMOC(ContinuousInput):
     trial_store = d_(Value())
     counter = d_(Value())
 
+    complete = d_(Event(), writable=False)
+
     #: Status, updated on the GUI thread.
     n_trials = Int()
     n_reject = Int()
     suppression = Float(np.nan)
+    onset_suppression = Float(np.nan)
     last_reject = Str()
 
     _trials = Typed(deque, ())
@@ -150,7 +213,7 @@ class AnalyzeMOC(ContinuousInput):
                      'primary_tone_level', 'secondary_tone_level',
                      'elicitor_bandlimited_noise_level',
                      'elicitor_bandlimited_noise_fl',
-                     'elicitor_bandlimited_noise_fh'):
+                     'elicitor_bandlimited_noise_fh', SEED):
             row[name] = md.get(name)
         self.trial_store.process_table(row)
 
@@ -165,6 +228,8 @@ class AnalyzeMOC(ContinuousInput):
         else:
             log.info('Rejecting MOC trial %d: %s', summary['trial'],
                      summary['reject_reason'])
+        if summary['accepted'] and summary['n_accepted'] == self.requested_n:
+            self.complete = True
 
         def update():
             self.n_trials += 1
@@ -172,6 +237,7 @@ class AnalyzeMOC(ContinuousInput):
                 self.n_reject += 1
                 self.last_reject = summary['reject_reason']
             self.suppression = summary['avg_suppression']
+            self.onset_suppression = summary['avg_onset_suppression']
             self.counter.current_n = summary['n_accepted']
         deferred_call(update)
 
@@ -202,6 +268,11 @@ class AnalyzeMOC(ContinuousInput):
             trial_cb=self.trial_cb,
             # Same as the DPOAE paradigms' Discard.
             discard=self.primary_rise_time * 4,
+            onset=(onset + self.elicitor_rise_time,
+                   onset + self.elicitor_rise_time
+                   + min(self.elicitor_onset_window,
+                         self.elicitor_duration
+                         - 2 * self.elicitor_rise_time)),
         )
         return analyzer.send
 
@@ -311,7 +382,7 @@ enamldef MOCManifest(ControllerManifest): manifest:
 
                 Parameter: f2_level:
                     name = 'f2_level'
-                    default = 50
+                    default = 60
 
                 Parameter: f2_f1_ratio:
                     name = 'f2_f1_ratio'
@@ -319,7 +390,7 @@ enamldef MOCManifest(ControllerManifest): manifest:
 
                 Parameter: l1_l2_diff:
                     name = 'l1_l2_difference'
-                    default = 10
+                    default = 0
 
             ContextRow:
                 name = 'elicitor'
@@ -337,7 +408,7 @@ enamldef MOCManifest(ControllerManifest): manifest:
 
                 Parameter: elicitor_level:
                     name = 'elicitor_level'
-                    default = 75
+                    default = 85
 
                 Parameter: elicitor_eq_max:
                     name = 'elicitor_max_equalize'
@@ -349,10 +420,26 @@ enamldef MOCManifest(ControllerManifest): manifest:
                     choices = {'no': None, 'mouse': "'mouse'"}
 
             ContextRow:
+                name = 'elicitor_noise'
+                fmt = ['Frozen noise?', elicitor_frozen, 'Starting seed',
+                       elicitor_seed]
+
+                BoolParameter: elicitor_frozen:
+                    name = 'elicitor_frozen'
+                    label = 'Frozen noise?'
+                    default = False
+
+                Parameter: elicitor_seed:
+                    name = 'elicitor_seed'
+                    label = 'Starting seed'
+                    default = 1
+
+            ContextRow:
                 name = 'trial_timing'
                 fmt = ['Trial:', baseline, 's baseline,', elicitor_dur,
-                       's elicitor (', elicitor_rise, 's ramp),', recovery,
-                       's recovery; repeat', trial_n, 'times']
+                       's elicitor (', elicitor_rise, 's ramp, onset window',
+                       onset_window, 's),', recovery, 's recovery; repeat',
+                       trial_n, 'times']
 
                 Parameter: baseline:
                     name = 'baseline_duration'
@@ -365,6 +452,11 @@ enamldef MOCManifest(ControllerManifest): manifest:
                 Parameter: elicitor_rise:
                     name = 'elicitor_rise_time'
                     default = 20e-3
+
+                Parameter: onset_window:
+                    name = 'elicitor_onset_window'
+                    label = 'Onset window (s)'
+                    default = 6
 
                 Parameter: recovery:
                     name = 'recovery_duration'
@@ -472,9 +564,17 @@ enamldef MOCManifest(ControllerManifest): manifest:
             parameter = 'elicitor_bandlimited_noise_audiogram_weighting'
             expression = 'elicitor_audiogram_weighting'
 
+        # Frozen noise uses this seed every trial; otherwise trial i (from
+        # 0, rejected trials included) uses this seed plus i.
         Expression:
-            parameter = 'elicitor_bandlimited_noise_seed'
-            expression = '1'
+            parameter = SEED
+            expression = 'elicitor_seed'
+
+        # The elicitor's level is the band's overall level (see
+        # `BandlimitedFIRNoiseFactory`).
+        Expression:
+            parameter = 'elicitor_bandlimited_noise_correct_level'
+            expression = 'True'
 
     Extension:
         id = EXPERIMENT + '.io'
@@ -525,6 +625,7 @@ enamldef MOCManifest(ControllerManifest): manifest:
             elicitor_onset = C.baseline_duration
             elicitor_duration = C.elicitor_duration
             elicitor_rise_time = C.elicitor_rise_time
+            elicitor_onset_window = C.elicitor_onset_window
             primary_rise_time = C.primary_tone_rise_time
             requested_n = C.trial_n
             max_noise_floor = C.max_noise_floor
@@ -535,6 +636,9 @@ enamldef MOCManifest(ControllerManifest): manifest:
             block_store = block_store
             trial_store = trial_store
             counter = counter
+            complete ::
+                controller = workbench.get_plugin('psi.controller')
+                deferred_call(controller.invoke_actions, 'moc_trials_complete')
 
     Extension:
         id = EXPERIMENT + '.commands'
@@ -563,6 +667,14 @@ enamldef MOCManifest(ControllerManifest): manifest:
             command = 'moc.start'
             kwargs = {'delay': 0.5}
 
+        ExperimentEvent:
+            name = 'moc_trials_complete'
+
+        ExperimentAction:
+            event = 'moc_trials_complete'
+            command = 'psi.controller.stop'
+
+        # Should the queue run out first.
         ExperimentAction:
             event = 'moc_elicitor_queue_end'
             command = 'psi.controller.stop'
@@ -598,7 +710,8 @@ enamldef MOCManifest(ControllerManifest): manifest:
         StatusItem:
             label = 'Suppression'
             Label:
-                text << f'{analyze.suppression:.2f} dB'
+                text << f'{analyze.suppression:.2f} dB, onset ' \
+                    f'{analyze.onset_suppression:.2f} dB'
 
     Extension:
         id = EXPERIMENT + '.plots'
