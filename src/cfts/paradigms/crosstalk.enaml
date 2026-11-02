@@ -77,9 +77,9 @@ def configure_crosstalk(state, event):
     controller = event.workbench.get_plugin('psi.controller')
     data = event.workbench.get_plugin('psi.data')
 
+    # The ears' outputs and microphones may be on different engines;
+    # `Synchronized` starts the outputs together.
     outputs = {ear: controller.get_output(OUTPUTS[ear]) for ear in EARS}
-    if outputs['left'].engine is not outputs['right'].engine:
-        raise ValueError('Both ears must be on the same engine')
     setting = context.get_values()
     averages = setting['crosstalk_averages']
     duration = setting['crosstalk_chirp_duration']
@@ -108,10 +108,9 @@ def configure_crosstalk(state, event):
                 output.channel.expected_range = (-sf, sf)
 
     mics = {ear: controller.get_input(MICROPHONES[ear]) for ear in EARS}
-    fs = mics['left'].fs
-    n = int(round((duration + EPOCH_TAIL) * fs))
     state.analyzer = CrosstalkAnalyzer(
-        fs, n, {ear: mic.calibration for ear, mic in mics.items()})
+        {ear: mic.fs for ear, mic in mics.items()}, duration + EPOCH_TAIL,
+        {ear: mic.calibration for ear, mic in mics.items()})
     state.averages = averages
     state.flb = setting['crosstalk_start_frequency']
     state.fub = setting['crosstalk_end_frequency']

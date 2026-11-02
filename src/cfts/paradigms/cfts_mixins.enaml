@@ -603,6 +603,49 @@ enamldef MOCInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             gain << C.calibration_gain
 
 
+enamldef CrosstalkInEarCalibrationMixinManifest(ExperimentManifest): manifest:
+    '''
+    Chirp calibration of each Starship in its own ear, so the crosstalk
+    chirp plays at the requested level in dB SPL.
+    '''
+    id = 'crosstalk_inear_calibration'
+    title = 'In-ear calibration'
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'inear_calibration'
+            label = 'In-ear calibration'
+
+            Parameter:
+                name = 'calibration_gain'
+                label = 'Gain (dB)'
+                dtype = 'float'
+                default = -30
+
+    Extension:
+        id = manifest.id + '.calibration'
+        point = 'psi.controller.calibration.channels'
+
+        ChirpCalibrate: left_calibrate:
+            name = 'crosstalk_left_calibration'
+            label = 'Calibration'
+            input_name = 'left_microphone'
+            outputs = {'left_target': []}
+            gain << C.calibration_gain
+
+        ChirpCalibrate:
+            name = 'crosstalk_right_calibration'
+            input_name = 'right_microphone'
+            outputs = {'right_target': []}
+            gain << C.calibration_gain
+            # Both ears on one plot, for comparison.
+            show_widget = False
+            viewbox_name << left_calibrate.viewbox_name
+
+
 def set_debug_calibration(event):
     '''
     Set Starship speakers to a calibration that returns scaling factors that

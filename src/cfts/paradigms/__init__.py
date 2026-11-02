@@ -704,6 +704,9 @@ ParadigmDescription(
         {'manifest': CFTS_PATH + 'crosstalk.CrosstalkManifest'},
         multi_microphone_mixin,
         multi_microphone_fft_mixin,
+        {'manifest': CFTS_PATH +
+         'cfts_mixins.CrosstalkInEarCalibrationMixinManifest',
+         'info': {'hide': True}},
     ] + COMMON_PLUGINS,
     info={'modes': ['binaural']},
 )

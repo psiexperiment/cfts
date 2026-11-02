@@ -45,19 +45,22 @@ class CrosstalkAnalyzer:
 
     Parameters
     ----------
-    fs : float
-        Sampling rate of the microphones.
-    n : int
-        Samples per epoch (longer epochs are truncated).
+    fs : dict
+        Sampling rate of each ear's microphone (`left`, `right`). They may
+        differ (e.g., microphones on different engines).
+    duration : float
+        Epoch duration (s); each microphone's epochs are truncated to this
+        many of its samples. The band levels depend on the duration, not the
+        sampling rate, so the ears are comparable when the rates differ.
     calibrations : dict
-        Calibration of each ear's microphone (`left`, `right`), to convert
-        volts to dB SPL.
+        Calibration of each ear's microphone, to convert volts to dB SPL.
     '''
-    def __init__(self, fs, n, calibrations):
-        self.fs = fs
-        self.n = n
+    def __init__(self, fs, duration, calibrations):
+        self.fs = dict(fs)
+        self.n = {mic: int(round(duration * f)) for mic, f in self.fs.items()}
         self.calibrations = calibrations
-        self.frequency = np.fft.rfftfreq(n, 1 / fs)
+        self.frequency = {mic: np.fft.rfftfreq(n, 1 / self.fs[mic])
+                          for mic, n in self.n.items()}
         # Sum of the even and odd epochs for each (stimulated ear,
         # microphone), and how many of each.
         self._sums = {}
@@ -68,10 +71,11 @@ class CrosstalkAnalyzer:
         Add one epoch of `mic`'s recording with the chirp in `ear`.
         '''
         key = ear, mic
-        sums = self._sums.setdefault(key, np.zeros((2, self.n)))
+        n = self.n[mic]
+        sums = self._sums.setdefault(key, np.zeros((2, n)))
         counts = self._counts.setdefault(key, [0, 0])
         i = (counts[0] + counts[1]) % 2
-        sums[i] += np.asarray(epoch)[:self.n]
+        sums[i] += np.asarray(epoch)[:n]
         counts[i] += 1
 
     def count(self, ear, mic):
@@ -95,14 +99,13 @@ class CrosstalkAnalyzer:
         # (the same when n_even == n_odd).
         noise = (even - odd) / 2 \
             * np.sqrt(4 / (n_total * (1 / counts[0] + 1 / counts[1])))
-        cal = self.calibrations[mic]
-        return (self._db(cal, average), self._db(cal, noise))
+        return (self._db(mic, average), self._db(mic, noise))
 
-    def _db(self, cal, x):
+    def _db(self, mic, x):
         # RMS of the sinusoid in each bin.
-        rms = np.abs(np.fft.rfft(x)) / self.n * np.sqrt(2)
+        rms = np.abs(np.fft.rfft(x)) / self.n[mic] * np.sqrt(2)
         with np.errstate(divide='ignore'):
-            return cal.get_db(self.frequency, rms)
+            return self.calibrations[mic].get_db(self.frequency[mic], rms)
 
     def bands(self, flb, fub, fraction=3):
         '''
@@ -125,13 +128,16 @@ class CrosstalkAnalyzer:
             contra = self.spectrum(ear, other(ear))
             if ipsi is None or contra is None:
                 continue
+            f_ipsi = self.frequency[ear]
+            f_contra = self.frequency[other(ear)]
             for centre, (lb, ub) in zip(centres, edges, strict=True):
-                mask = (self.frequency >= lb) & (self.frequency < ub)
-                if not mask.any():
+                i_mask = (f_ipsi >= lb) & (f_ipsi < ub)
+                c_mask = (f_contra >= lb) & (f_contra < ub)
+                if not (i_mask.any() and c_mask.any()):
                     continue
-                i_level = band_level(ipsi[0][mask])
-                c_level = band_level(contra[0][mask])
-                c_noise = band_level(contra[1][mask])
+                i_level = band_level(ipsi[0][i_mask])
+                c_level = band_level(contra[0][c_mask])
+                c_noise = band_level(contra[1][c_mask])
                 rows.append({
                     'ear': ear,
                     'frequency': centre,
