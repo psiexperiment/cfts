@@ -14,12 +14,12 @@ from psi.loopback.plots import plot_timing, save  # noqa: F401
 
 def format_key(names, values):
     '''
-    Label for a panel, e.g. "4 kHz, 60 dB".
+    Label for a panel, e.g. "4 kHz, 60 dB". A frequency of 0 is a click.
     '''
     parts = []
     for name, value in zip(names, values):
         if name in ('frequency', 'fc'):
-            parts.append(f'{value / 1e3:g} kHz')
+            parts.append(f'{value / 1e3:g} kHz' if value else 'click')
         elif name in ('level', 'l2', 'elicitor_level'):
             parts.append(f'{value:g} dB')
         elif name == 'burst':
@@ -370,5 +370,89 @@ def plot_moc_blocks(analysis, p, path):
     ax.set_ylabel('Error (dB)')
     ax.set_title('Primaries as psi measured them')
     ax.legend(fontsize=7)
+    figure.tight_layout()
+    return save(figure, path)
+
+
+def plot_bic(results, path):
+    '''
+    For each frequency and level (+ polarity), the binaural averages at each
+    ITD on the sum of the monaural averages (left column; each has its own
+    sum, dashed), and the BIC at each ITD with what the loopback should give
+    (right column).
+    '''
+    results = [r for r in results if r['polarity'] == 1]
+    figure, axes = plt.subplots(len(results), 2, squeeze=False,
+                                figsize=(9, 2.2 * len(results)), sharex=True)
+    for (ax_overlay, ax_bic), r in zip(axes, results, strict=True):
+        t = r['time'] * 1e3
+        sums = r['sums']
+        for i, (value, y) in enumerate(sorted(r['binaural'].items())):
+            color = f'C{i}'
+            label = f'{value:g} µs'
+            ax_overlay.plot(t[:len(y)], y, color=color, lw=1, label=label)
+            s = sums[value]
+            ax_overlay.plot(t[:len(s)], s, color=color, lw=2, ls='--',
+                            alpha=0.6)
+            bic = r['bic'][value]
+            ax_bic.plot(t[:len(bic)], bic, color=color, lw=1,
+                        label=f'{label} ({r["error_db"][value]:.0f} dB)')
+            expected = r['expected_bic'][value]
+            ax_bic.plot(t[:len(expected)], expected, 'k:', lw=1)
+        key = format_key(['frequency', 'level'], [r['frequency'], r['level']])
+        ax_overlay.set_title(f'{key}: binaural vs. monaural (sums dashed)',
+                             fontsize=9)
+        ax_bic.set_title(f'{key}: BIC (expected dotted)', fontsize=9)
+        ax_overlay.legend(fontsize=7, loc='upper right')
+        ax_bic.legend(fontsize=7, loc='upper right')
+    for ax in axes[-1]:
+        ax.set_xlabel('Time re epoch start (ms)')
+    figure.tight_layout()
+    return save(figure, path)
+
+
+def plot_itd(waveforms, table, path):
+    '''
+    For each frequency, both microphones at each ITD (left), and the
+    measured ITD of every binaural burst against the requested one (right).
+
+    The start of each trial, one row per ITD (left black, right coloured),
+    so which ear starts first, and by how much, shows.
+    '''
+    frequencies = sorted({w['frequency'] for w in waveforms})
+    values = sorted({w['value'] for w in waveforms})
+    colors = {v: f'C{i}' for i, v in enumerate(values)}
+    height = 0.9 * len(values) + 1
+    figure, axes = plt.subplots(len(frequencies), 2, squeeze=False,
+                                figsize=(9, height * len(frequencies)),
+                                gridspec_kw={'width_ratios': [2, 1]})
+    for (ax_wave, ax_itd), frequency in zip(axes, frequencies, strict=True):
+        rows = [w for w in waveforms if w['frequency'] == frequency]
+        for i, w in enumerate(sorted(rows, key=lambda w: w['value'])):
+            offset = -2.5 * i
+            t = w['x'] * 1e3
+            ax_wave.plot(t, w['left'] + offset, 'k', lw=0.8)
+            ax_wave.plot(t, w['right'] + offset, color=colors[w['value']],
+                         lw=0.8, alpha=0.8)
+            ax_wave.text(t[-1], offset, f' {w["value"]:g} µs',
+                         va='center', fontsize=7, color=colors[w['value']])
+        ax_wave.set_yticks([])
+        ax_wave.set_xlabel('Time re trial start (ms)')
+        ax_wave.set_title(f'{format_key(["frequency"], [frequency])}: '
+                          'onsets, left black, right coloured', fontsize=9)
+
+        g = table[table.frequency == frequency]
+        ax_itd.plot([min(values), max(values)], [min(values), max(values)],
+                    'k:', lw=1)
+        ax_itd.scatter(g.requested, g.measured, s=12,
+                       c=[colors[v] for v in g.requested])
+        ax_itd.set_xticks(values)
+        ax_itd.set_yticks(values)
+        ax_itd.tick_params(labelsize=7)
+        ax_itd.set_xlabel('Requested ITD (µs)')
+        ax_itd.set_ylabel('Measured ITD (µs)')
+        ax_itd.set_title(f'{format_key(["frequency"], [frequency])}: '
+                         'every binaural burst',
+                         fontsize=9)
     figure.tight_layout()
     return save(figure, path)

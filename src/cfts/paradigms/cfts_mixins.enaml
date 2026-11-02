@@ -166,7 +166,36 @@ CONTEXT_ITEM_DETAIL = {
         'user_friendly_name': 'level',
         'step_unit': 'dB',
         'unit': 'dB SPL',
-    }
+    },
+
+    # Binaural interaction component of the ABR
+    'bic_frequency': {
+        'user_friendly_name': 'frequency',
+        'user_friendly_name_plural': 'frequencies',
+        'step_unit': 'octave',
+        'unit': 'kHz',
+        'order_user_managed': False,
+        'transform_fn': lambda x: round(x * 1e3, 0),
+        'inverse_transform_fn': lambda x: x * 1e-3,
+        'round_values': True,
+        'range_fn': octave_space,
+    },
+    'bic_level': {
+        'user_friendly_name': 'level',
+        'step_unit': 'dB',
+        'unit': 'dB SPL',
+        'order_user_managed': True,
+    },
+    # Laumen et al. 2016 (doi:10.1016/j.heares.2016.04.009).
+    'bic_itd': {
+        'user_friendly_name': 'ITD',
+        'step_unit': 'µs',
+        'unit': 'µs',
+        'order_user_managed': True,
+        'start': -1000,
+        'end': 1000,
+        'step': 250,
+    },
 }
 
 
@@ -430,6 +459,100 @@ enamldef MEMRInEarCalibrationMixinManifest(ExperimentManifest): manifest:
             # comparision).
             show_widget = False
             viewbox_name << probe_calibrate.viewbox_name
+
+
+enamldef BICInEarCalibrationMixinManifest(ExperimentManifest): manifest:
+
+    id = 'bic_inear_calibration'
+    title = 'In-ear calibration'
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'inear_calibration'
+            label = 'In-ear calibration'
+
+            Parameter:
+                name = 'calibration_gain'
+                label = 'Gain (dB)'
+                dtype = 'float'
+                default = -30
+
+    Extension:
+        id = manifest.id + '.calibration'
+        point = 'psi.controller.calibration.channels'
+
+        ToneCalibrate:
+            name = 'bic_left_tone_calibration'
+            label = 'Left tone calibration'
+            input_name = 'left_microphone'
+            outputs = {'left_target': ['left_target_tone_frequency']}
+            gain << C.calibration_gain
+            max_thd = None
+            min_snr = 5
+            duration = 0.1
+            trim = 0.01
+            iti = 0
+            get_values => (values):
+                return {si for i in values for si in i}
+
+        ToneCalibrate:
+            name = 'bic_right_tone_calibration'
+            label = 'Right tone calibration'
+            input_name = 'right_microphone'
+            outputs = {'right_target': ['right_target_tone_frequency']}
+            gain << C.calibration_gain
+            max_thd = None
+            min_snr = 5
+            duration = 0.1
+            trim = 0.01
+            iti = 0
+            get_values => (values):
+                return {si for i in values for si in i}
+
+
+enamldef BICClickInEarCalibrationMixinManifest(ExperimentManifest): manifest:
+
+    id = 'bic_click_inear_calibration'
+    title = 'In-ear calibration'
+
+    Extension:
+        id = manifest.id + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'inear_calibration'
+            label = 'In-ear calibration'
+
+            Parameter:
+                name = 'calibration_gain'
+                label = 'Gain (dB)'
+                dtype = 'float'
+                default = -30
+
+    Extension:
+        id = manifest.id + '.calibration'
+        point = 'psi.controller.calibration.channels'
+
+        ClickCalibrate:
+            name = 'bic_left_click_calibration'
+            label = 'Left click calibration'
+            input_name = 'left_microphone'
+            outputs = {'left_target': []}
+            gain << C.calibration_gain
+            duration << C.bic_click_duration
+            iti << (1 / C.rate) - C.bic_click_duration
+
+        ClickCalibrate:
+            name = 'bic_right_click_calibration'
+            label = 'Right click calibration'
+            input_name = 'right_microphone'
+            outputs = {'right_target': []}
+            gain << C.calibration_gain
+            duration << C.bic_click_duration
+            iti << (1 / C.rate) - C.bic_click_duration
 
 
 enamldef MOCInEarCalibrationMixinManifest(ExperimentManifest): manifest:

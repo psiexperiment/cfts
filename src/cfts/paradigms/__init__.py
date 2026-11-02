@@ -688,3 +688,39 @@ ParadigmDescription(
     ] + COMMON_PLUGINS,
     info={'modes': ['contra']},
 )
+
+
+################################################################################
+# Two-starship paradigms for the binaural interaction component of the ABR
+################################################################################
+def bic_mixins(manifest, calibration='BICInEarCalibrationMixinManifest'):
+    return [
+        eeg_dec_mixin,
+        {'manifest': CAL_PATH + 'objects.Starship', 'required': True,
+         'attrs': {'id': 'left', 'title': 'Left starship', 'side': 'left',
+                   'output_mode': 'select'}},
+        {'manifest': CAL_PATH + 'objects.Starship', 'required': True,
+         'attrs': {'id': 'right', 'title': 'Right starship', 'side': 'right',
+                   'output_mode': 'select'}},
+        {'manifest': CFTS_PATH + manifest},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+        {'manifest': CFTS_PATH + 'cfts_mixins.' + calibration,
+         'info': {'hide': True}},
+    ] + COMMON_PLUGINS
+
+
+ParadigmDescription(
+    'abr_bic', 'ABR binaural interaction (tone)', 'ear',
+    bic_mixins('bic.BICManifest'),
+    info={'modes': ['binaural']},
+)
+
+
+ParadigmDescription(
+    'abr_bic_click', 'ABR binaural interaction (click)', 'ear',
+    bic_mixins('bic.BICClickManifest',
+               'BICClickInEarCalibrationMixinManifest'),
+    info={'modes': ['binaural']},
+)

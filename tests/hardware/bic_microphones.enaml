@@ -1,0 +1,21 @@
+'''
+Saves both Starships' microphones during `abr_bic` (which doesn't record
+them), so the loopback can check what each ear got.
+'''
+from enaml.workbench.api import Extension
+
+from psi.core.enaml.api import ExperimentManifest
+from psi.data.sinks.api import BinaryStore
+
+
+enamldef BICMicrophonesManifest(ExperimentManifest): manifest:
+
+    id = 'bic_microphones'
+
+    Extension:
+        id = manifest.id + '.sinks'
+        point = 'psi.data.sinks'
+
+        BinaryStore:
+            name = 'bic_microphone_store'
+            continuous_inputs = ['left_microphone', 'right_microphone']
