@@ -249,7 +249,10 @@ def configure_click_queue(event, iti):
 
     data = event.workbench.get_plugin('psi.data')
     counter = data.find_sink('valid_erp_counter')
-    counter.requested_n = target.queue.count_requested_trials()
+    # The counter's progress bar shows requested_n, so set it on the GUI
+    # thread (this runs on the dispatcher thread).
+    deferred_call(setattr, counter, 'requested_n',
+                  target.queue.count_requested_trials())
     counter.requested_group_n = averages
 
 

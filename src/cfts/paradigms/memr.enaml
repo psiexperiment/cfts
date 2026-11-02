@@ -121,7 +121,10 @@ def configure_memr(event, duration_attr, iti_attr=None, selector='default'):
         probe.channel.expected_range = (-probe_sf, probe_sf)
         elicitor.channel.expected_range = (-elicitor_sf, elicitor_sf)
 
-    counter.requested_n = probe.queue.count_requested_trials()
+    # The counter's progress bar shows requested_n, so set it on the GUI
+    # thread (this runs on the dispatcher thread).
+    deferred_call(setattr, counter, 'requested_n',
+                  probe.queue.count_requested_trials())
 
     for i, k in enumerate(probe.queue._ordering):
         log.info(f'{i}: {k}')

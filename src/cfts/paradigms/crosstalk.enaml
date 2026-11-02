@@ -117,7 +117,10 @@ def configure_crosstalk(state, event):
     state.criterion = setting['crosstalk_criterion']
     state.done = False
     state.n_added = 0
-    data.find_sink('crosstalk_counter').requested_n = averages * 2
+    # The counter's progress bar shows requested_n, so set it on the GUI
+    # thread (this runs on the dispatcher thread).
+    counter = data.find_sink('crosstalk_counter')
+    deferred_call(setattr, counter, 'requested_n', averages * 2)
     container = data.find_plot_container('crosstalk_container')
     deferred_call(setattr, container, 'freq_lb', state.flb)
     deferred_call(setattr, container, 'freq_ub', state.fub)

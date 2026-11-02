@@ -133,7 +133,10 @@ def configure_moc(event):
     sf = factory.max_amplitude() * 1.1
     elicitor.channel.expected_range = (-sf, sf)
 
-    data.find_sink('moc_counter').requested_n = setting['trial_n']
+    # The counter's progress bar shows requested_n, so set it on the GUI
+    # thread (this runs on the dispatcher thread).
+    counter = data.find_sink('moc_counter')
+    deferred_call(setattr, counter, 'requested_n', setting['trial_n'])
 
     # Each trial runs from 0 to trial_duration on the plot, with the elicitor
     # shaded.
