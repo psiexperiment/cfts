@@ -691,6 +691,25 @@ ParadigmDescription(
 
 
 ################################################################################
+# Binaural crosstalk, to check the setup before a binaural experiment
+################################################################################
+ParadigmDescription(
+    'binaural_crosstalk', 'Binaural crosstalk (interaural attenuation)', 'ear', [
+        {'manifest': CAL_PATH + 'objects.Starship', 'required': True,
+         'attrs': {'id': 'left', 'title': 'Left starship', 'side': 'left',
+                   'output_mode': 'select'}},
+        {'manifest': CAL_PATH + 'objects.Starship', 'required': True,
+         'attrs': {'id': 'right', 'title': 'Right starship', 'side': 'right',
+                   'output_mode': 'select'}},
+        {'manifest': CFTS_PATH + 'crosstalk.CrosstalkManifest'},
+        multi_microphone_mixin,
+        multi_microphone_fft_mixin,
+    ] + COMMON_PLUGINS,
+    info={'modes': ['binaural']},
+)
+
+
+################################################################################
 # Two-starship paradigms for the binaural interaction component of the ABR
 ################################################################################
 def bic_mixins(manifest, calibration='BICInEarCalibrationMixinManifest'):

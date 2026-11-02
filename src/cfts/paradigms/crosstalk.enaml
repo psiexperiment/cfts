@@ -1,0 +1,553 @@
+'''
+Binaural crosstalk: how much of the sound played into one ear reaches the
+other ear's microphone (see `crosstalk_util`). Run it before a binaural
+experiment, such as the BIC, with both Starships in place.
+
+Each ear has its own Starship. A chirp plays in the left and right ear in
+turn, `averages` times each, and both microphones are recorded. The
+interaural attenuation (stimulated ear minus other ear, in 1/3-octave bands)
+is plotted as the averages build up and saved, with each ear's levels and
+the other ear's noise floor, to `crosstalk_bands.csv`. Where the other ear
+is near its noise floor, the attenuation is at least what is shown (open
+symbols): raise the level or the averages to measure it.
+
+Laumen et al. 2016 (doi:10.1016/j.heares.2016.04.009) required at least
+30 dB interaural attenuation for the BIC, the default criterion here.
+'''
+import logging
+log = logging.getLogger(__name__)
+
+from atom.api import Enum, Str
+from enaml.application import deferred_call
+from enaml.core.api import d_
+from enaml.widgets.api import Label
+from enaml.workbench.api import Extension
+from enaml.workbench.core.api import Command
+import numpy as np
+import pyqtgraph as pg
+
+from psiaudio.queue import InterleavedFIFOSignalQueue
+
+from psi.context.api import (ContextGroup, ContextRow, Expression,
+                             Parameter)
+from psi.controller.api import (ChannelOutOfRange, ControllerManifest,
+                                ExperimentAction, ExperimentEvent,
+                                ExtractEpochs, QueuedEpochOutput,
+                                Synchronized)
+from psi.core.enaml.api import make_color
+from psi.data.api import FFTContainer, ViewBox
+from psi.data.plots import SinglePlot
+from psi.data.sinks.api import BinaryStore, SimpleCounter, TableStore
+from psi.experiment.api import StatusItem
+from psi.token.primitives import Chirp
+
+from .crosstalk_util import CrosstalkAnalyzer, EAR, EARS, summarize
+
+
+EXPERIMENT = __name__.rsplit('.', 1)[-1]
+
+#: Output driving each ear, and its microphone.
+OUTPUTS = {'left': 'left_target', 'right': 'right_target'}
+MICROPHONES = {'left': 'left_microphone', 'right': 'right_microphone'}
+
+#: Extra epoch after the chirp, for the sound to reach the microphone.
+EPOCH_TAIL = 5e-3
+
+#: Redraw after this many epochs.
+UPDATE_EVERY = 8
+
+
+class CrosstalkState:
+    '''
+    What the commands share: the analyzer, the settings it is summarized
+    with and the status bar's labels.
+    '''
+    def __init__(self):
+        self.analyzer = None
+        self.averages = 0
+        self.flb = self.fub = 0
+        self.criterion = 30
+        self.done = False
+        self.n_added = 0
+        self.status = CrosstalkStatus()
+
+
+def configure_crosstalk(state, event):
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    data = event.workbench.get_plugin('psi.data')
+
+    outputs = {ear: controller.get_output(OUTPUTS[ear]) for ear in EARS}
+    if outputs['left'].engine is not outputs['right'].engine:
+        raise ValueError('Both ears must be on the same engine')
+    setting = context.get_values()
+    averages = setting['crosstalk_averages']
+    duration = setting['crosstalk_chirp_duration']
+    iti = 1 / setting['crosstalk_rate'] - duration
+    if iti <= 0:
+        raise ValueError('The rate is too fast for the chirp duration')
+
+    # Both queues get the same trials in the same order: the chirp in one
+    # ear, silence in the other.
+    for output in outputs.values():
+        output.queue = InterleavedFIFOSignalQueue()
+    for ear in EARS:
+        s = {**setting, EAR: ear}
+        for e in EARS:
+            name = f'{OUTPUTS[e]}_chirp_level'
+            s[name] = setting['crosstalk_level'] if e == ear else -np.inf
+        for e, output in outputs.items():
+            try:
+                _, factory = output.add_setting(s, averages, iti)
+            except ChannelOutOfRange as exc:
+                raise ValueError(
+                    f'The chirp is {exc.db:.1f} dB more than the {e} '
+                    'Starship can play') from exc
+            if e == ear:
+                sf = factory.max_amplitude() * 1.01
+                output.channel.expected_range = (-sf, sf)
+
+    mics = {ear: controller.get_input(MICROPHONES[ear]) for ear in EARS}
+    fs = mics['left'].fs
+    n = int(round((duration + EPOCH_TAIL) * fs))
+    state.analyzer = CrosstalkAnalyzer(
+        fs, n, {ear: mic.calibration for ear, mic in mics.items()})
+    state.averages = averages
+    state.flb = setting['crosstalk_start_frequency']
+    state.fub = setting['crosstalk_end_frequency']
+    state.criterion = setting['crosstalk_criterion']
+    state.done = False
+    state.n_added = 0
+    data.find_sink('crosstalk_counter').requested_n = averages * 2
+    container = data.find_plot_container('crosstalk_container')
+    deferred_call(setattr, container, 'freq_lb', state.flb)
+    deferred_call(setattr, container, 'freq_ub', state.fub)
+
+
+def add_epochs(state, mic, event):
+    if state.done:
+        return
+    analyzer = state.analyzer
+    for epoch in event.parameters['data']:
+        analyzer.add(epoch.metadata[EAR], mic, np.asarray(epoch).ravel())
+        state.n_added += 1
+    counts = [analyzer.count(ear, m) for ear in EARS for m in EARS]
+    complete = min(counts) >= state.averages
+    data = event.workbench.get_plugin('psi.data')
+    counter = data.find_sink('crosstalk_counter')
+    n = sum(analyzer.count(ear, ear) for ear in EARS)
+    deferred_call(setattr, counter, 'current_n', n)
+    if complete or state.n_added % UPDATE_EVERY == 0:
+        update_plots(state, data)
+    if complete:
+        state.done = True
+        bands = analyzer.bands(state.flb, state.fub)
+        data.find_sink('crosstalk_bands').process_table(
+            bands.to_dict('records'))
+        summary = summarize(bands, state.criterion)
+        rows = [{'ear': ear, 'criterion': state.criterion, **s}
+                for ear, s in summary.items()]
+        data.find_sink('crosstalk_summary').process_table(rows)
+        for row in rows:
+            log.info('Crosstalk from the %s ear: at least %.1f dB '
+                     'attenuation (worst at %.0f Hz)', row['ear'],
+                     row['min_attenuation'],
+                     row['min_attenuation_frequency'])
+        controller = event.workbench.get_plugin('psi.controller')
+        deferred_call(controller.invoke_actions, 'crosstalk_complete')
+
+
+def update_plots(state, data):
+    bands = state.analyzer.bands(state.flb, state.fub)
+    if bands.empty:
+        return
+    for ear in EARS:
+        for kind in ('attenuation', 'ipsi_level', 'contra_level',
+                     'contra_noise_floor'):
+            plot = data.find_plot(f'crosstalk_{ear}_{kind}')
+            plot.set_bands(bands)
+    summary = summarize(bands, state.criterion)
+    deferred_call(state.status.update, summary)
+
+
+class BandPlot(SinglePlot):
+    '''
+    One column of `CrosstalkAnalyzer.bands` for one stimulated ear, against
+    frequency. Bands that are only a lower bound are open symbols.
+    '''
+    ear = d_(Enum(*EARS))
+    column = d_(Str())
+    symbol = d_(Str('o'))
+    show_in_legend = True
+
+    def _default_name(self):
+        return f'crosstalk_{self.ear}_{self.column}'
+
+    def _default_plot(self):
+        return pg.PlotDataItem(pen=self.pen, antialias=self.antialias,
+                               symbol=self.symbol or None, symbolSize=6,
+                               symbolPen=self.pen)
+
+    def set_bands(self, bands):
+        g = bands[bands.ear == self.ear]
+        x = self.container.x_transform(g.frequency.values)
+        # Infinite where a microphone records digital silence.
+        y = g[self.column].values
+        y = np.where(np.isfinite(y), y, np.nan)
+        kw = {}
+        if self.symbol:
+            color = make_color(self.pen_color)
+            brushes = [pg.mkBrush(None) if lb else pg.mkBrush(color)
+                       for lb in g.lower_bound]
+            kw['symbolBrush'] = brushes
+        deferred_call(self.plot.setData, x, y, **kw)
+
+
+class CrosstalkStatus:
+    '''
+    Holds the latest summary for the status bar.
+    '''
+    def __init__(self):
+        self.labels = {}
+
+    def update(self, summary):
+        for ear, label in self.labels.items():
+            s = summary.get(ear)
+            if s is None:
+                continue
+            bound = '≥ ' if s['min_attenuation_lower_bound'] else ''
+            ok = 'OK' if s['passed'] else 'BELOW CRITERION'
+            label.text = (f'{bound}{s["min_attenuation"]:.1f} dB at '
+                          f'{s["min_attenuation_frequency"] / 1e3:.1f} kHz '
+                          f'({ok})')
+
+
+enamldef CrosstalkManifest(ControllerManifest): manifest:
+
+    attr state = CrosstalkState()
+
+    Extension:
+        id = EXPERIMENT + '.tokens'
+        point = 'psi.token.tokens'
+
+        Chirp:
+            name = 'chirp'
+            label = 'chirp'
+
+    Extension:
+        id = EXPERIMENT + '.context'
+        point = 'psi.context.items'
+
+        ContextGroup:
+            name = 'hardware_settings'
+            label = 'Hardware'
+
+        ContextGroup:
+            name = 'crosstalk'
+            label = 'Crosstalk'
+
+            ContextRow:
+                name = 'crosstalk_chirp'
+                fmt = ['Chirp from', flb, 'to', fub, 'Hz at', level,
+                       'dB SPL,', duration, 's']
+
+                Parameter: flb:
+                    name = 'crosstalk_start_frequency'
+                    default = 4e3
+
+                Parameter: fub:
+                    name = 'crosstalk_end_frequency'
+                    default = 45e3
+
+                Parameter: level:
+                    name = 'crosstalk_level'
+                    default = 90
+
+                Parameter: duration:
+                    name = 'crosstalk_chirp_duration'
+                    default = 20e-3
+
+            ContextRow:
+                name = 'crosstalk_averaging'
+                fmt = ['Average', averages, 'chirps per ear at', rate,
+                       '/s. Require', criterion, 'dB attenuation']
+
+                Parameter: averages:
+                    name = 'crosstalk_averages'
+                    default = 256
+
+                Parameter: rate:
+                    name = 'crosstalk_rate'
+                    default = 20
+
+                Parameter: criterion:
+                    name = 'crosstalk_criterion'
+                    default = 30
+
+        Expression:
+            parameter = 'left_target_chirp_start_frequency'
+            expression = 'crosstalk_start_frequency'
+
+        Expression:
+            parameter = 'right_target_chirp_start_frequency'
+            expression = 'crosstalk_start_frequency'
+
+        Expression:
+            parameter = 'left_target_chirp_end_frequency'
+            expression = 'crosstalk_end_frequency'
+
+        Expression:
+            parameter = 'right_target_chirp_end_frequency'
+            expression = 'crosstalk_end_frequency'
+
+        Expression:
+            parameter = 'left_target_chirp_duration'
+            expression = 'crosstalk_chirp_duration'
+
+        Expression:
+            parameter = 'right_target_chirp_duration'
+            expression = 'crosstalk_chirp_duration'
+
+        # `configure_crosstalk` sets the level per ear.
+        Expression:
+            parameter = 'left_target_chirp_level'
+            expression = 'crosstalk_level'
+
+        Expression:
+            parameter = 'right_target_chirp_level'
+            expression = 'crosstalk_level'
+
+        Expression:
+            parameter = 'left_target_chirp_window'
+            expression = "'hann'"
+
+        Expression:
+            parameter = 'right_target_chirp_window'
+            expression = "'hann'"
+
+        # Flat in volts: the attenuation is a difference, so it doesn't
+        # depend on the spectrum, and nothing is boosted to make up for a
+        # speaker's weak frequencies.
+        Expression:
+            parameter = 'left_target_chirp_equalize'
+            expression = 'False'
+
+        Expression:
+            parameter = 'right_target_chirp_equalize'
+            expression = 'False'
+
+        Expression:
+            parameter = 'left_target_chirp_max_correction'
+            expression = '0'
+
+        Expression:
+            parameter = 'right_target_chirp_max_correction'
+            expression = '0'
+
+        Expression:
+            parameter = 'left_target_chirp_audiogram_weighting'
+            expression = 'None'
+
+        Expression:
+            parameter = 'right_target_chirp_audiogram_weighting'
+            expression = 'None'
+
+    Extension:
+        id = EXPERIMENT + '.io'
+        point = 'psi.controller.io'
+
+        Synchronized:
+            name = 'crosstalk'
+
+            QueuedEpochOutput: left_output:
+                name = OUTPUTS['left']
+                label = 'Left'
+                target_name = 'left_output'
+                configurable = False
+                auto_decrement = True
+                token = workbench.get_plugin('psi.token').get_token('chirp')
+                queue ::
+                    # Both microphones' epochs come from the left ear's
+                    # queue; the right ear's plays in step with it.
+                    left_epochs.subscribe_to_queue(self.queue)
+                    right_epochs.subscribe_to_queue(self.queue)
+
+            QueuedEpochOutput:
+                name = OUTPUTS['right']
+                label = 'Right'
+                target_name = 'right_output'
+                configurable = False
+                auto_decrement = True
+                token = workbench.get_plugin('psi.token').get_token('chirp')
+
+        ExtractEpochs: left_epochs:
+            name = 'left_mic_epoch'
+            source_name = MICROPHONES['left']
+            epoch_size = C.crosstalk_chirp_duration + EPOCH_TAIL
+
+        ExtractEpochs: right_epochs:
+            name = 'right_mic_epoch'
+            source_name = MICROPHONES['right']
+            epoch_size = C.crosstalk_chirp_duration + EPOCH_TAIL
+
+    Extension:
+        id = EXPERIMENT + '.commands'
+        point = 'enaml.workbench.core.commands'
+
+        Command:
+            id = EXPERIMENT + '.configure'
+            handler = lambda e: configure_crosstalk(manifest.state, e)
+
+        Command:
+            id = EXPERIMENT + '.add_left'
+            handler = lambda e: add_epochs(manifest.state, 'left', e)
+
+        Command:
+            id = EXPERIMENT + '.add_right'
+            handler = lambda e: add_epochs(manifest.state, 'right', e)
+
+    Extension:
+        id = EXPERIMENT + '.actions'
+        point = 'psi.controller.actions'
+
+        ExperimentEvent:
+            name = 'crosstalk_complete'
+
+        ExperimentAction:
+            event = 'experiment_initialize'
+            command = 'psi.context.initialize'
+            kwargs = {'selector': None, 'cycles': 1}
+
+        ExperimentAction:
+            event = 'experiment_prepare'
+            command = EXPERIMENT + '.configure'
+            weight = 11
+
+        ExperimentAction:
+            event = 'engines_configured'
+            command = 'crosstalk.start'
+            kwargs = {'delay': 1}
+
+        ExperimentAction:
+            event = 'left_mic_epoch_acquired'
+            command = EXPERIMENT + '.add_left'
+
+        ExperimentAction:
+            event = 'right_mic_epoch_acquired'
+            command = EXPERIMENT + '.add_right'
+
+        ExperimentAction:
+            event = 'crosstalk_complete'
+            command = 'psi.controller.stop'
+
+    Extension:
+        id = EXPERIMENT + '.sinks'
+        point = 'psi.data.sinks'
+
+        BinaryStore:
+            name = 'crosstalk_mic'
+            continuous_inputs = list(MICROPHONES.values())
+
+        TableStore:
+            name = 'crosstalk_bands'
+
+        TableStore:
+            name = 'crosstalk_summary'
+
+        SimpleCounter:
+            name = 'crosstalk_counter'
+            label = 'Chirps acquired'
+
+    Extension:
+        id = EXPERIMENT + '.plots'
+        point = 'psi.data.plots'
+
+        FFTContainer:
+            name = 'crosstalk_container'
+            label = 'Crosstalk'
+            # Set to the chirp's range by `configure_crosstalk`.
+            freq_lb = 4e3
+            freq_ub = 45e3
+            axis_scale = 'octave'
+
+            ViewBox:
+                name = 'crosstalk_attenuation_viewbox'
+                y_label = 'Interaural attenuation (dB)'
+                y_min = 0
+                y_max = 80
+                save_limits = True
+
+                BandPlot:
+                    ear = 'left'
+                    column = 'attenuation'
+                    pen_color = 'DarkCyan'
+                    pen_width = 2
+                    label = 'From left'
+
+                BandPlot:
+                    ear = 'right'
+                    column = 'attenuation'
+                    pen_color = 'DarkMagenta'
+                    pen_width = 2
+                    label = 'From right'
+
+            ViewBox:
+                name = 'crosstalk_level_viewbox'
+                y_label = 'Level (dB SPL per band)'
+                save_limits = True
+
+                BandPlot:
+                    ear = 'left'
+                    column = 'ipsi_level'
+                    pen_color = 'DarkCyan'
+                    label = 'Left chirp, left ear'
+
+                BandPlot:
+                    ear = 'left'
+                    column = 'contra_level'
+                    pen_color = 'DarkCyan'
+                    symbol = ''
+                    label = 'Left chirp, right ear'
+
+                BandPlot:
+                    ear = 'left'
+                    column = 'contra_noise_floor'
+                    pen_color = 'LightGray'
+                    symbol = ''
+                    label = 'Noise floor, right ear'
+
+                BandPlot:
+                    ear = 'right'
+                    column = 'ipsi_level'
+                    pen_color = 'DarkMagenta'
+                    label = 'Right chirp, right ear'
+
+                BandPlot:
+                    ear = 'right'
+                    column = 'contra_level'
+                    pen_color = 'DarkMagenta'
+                    symbol = ''
+                    label = 'Right chirp, left ear'
+
+                BandPlot:
+                    ear = 'right'
+                    column = 'contra_noise_floor'
+                    pen_color = 'DarkGray'
+                    symbol = ''
+                    label = 'Noise floor, left ear'
+
+    Extension:
+        id = EXPERIMENT + '.status'
+        point = 'psi.experiment.status'
+
+        StatusItem:
+            label = 'From left'
+            Label: left_status:
+                initialized ::
+                    manifest.state.status.labels['left'] = self
+
+        StatusItem:
+            label = 'From right'
+            Label: right_status:
+                initialized ::
+                    manifest.state.status.labels['right'] = self
