@@ -100,6 +100,12 @@ def configure_sequence(manifest, event, burst_duration):
     if pause < 0:
         raise ValueError('Pause between sequences cannot be negative.')
 
+    # A burst's window must end by the next burst's onset, or every burst but
+    # the last would include the next one's stimulus and response.
+    manifest.burst_span = min(manifest.max_burst_span, 1 / rate)
+    if manifest.burst_span < manifest.max_burst_span:
+        log.warning('Per-burst epochs shortened to the %.1f msec burst period',
+                    manifest.burst_span * 1e3)
     manifest.n_bursts = n
     manifest.burst_rate = rate
     manifest.erp_span = (n - 1) / rate + manifest.burst_span
@@ -125,7 +131,10 @@ enamldef ABRAdaptationBaseManifest(ABRIOBaseManifest): manifest:
     Subclasses must define the burst train token and the context parameters
     `n_bursts`, `rate`, `sequence_pause` and `averages`.
     '''
-    #: Duration of the epoch extracted for each burst in the sequence.
+    #: Duration of the epoch extracted for each burst in the sequence, up to
+    #: the burst period (`burst_span` is set when the experiment is
+    #: configured).
+    attr max_burst_span = 8.5e-3
     attr burst_span = 8.5e-3
 
     #: Updated from the context when the experiment is configured. The
@@ -377,6 +386,8 @@ enamldef ABRAdaptationClickManifest(ABRAdaptationBaseManifest): manifest:
                     'rare.': '"rarefaction"',
                     'alt.': '"alternating"',
                 }
+                # Cancels the click artifact, which lands on wave I.
+                default = 'alt.'
                 scope = 'trial'
 
     Extension:

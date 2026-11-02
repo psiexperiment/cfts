@@ -82,8 +82,8 @@ def configure_tone_queue(key_map, event, iti):
     alternate_polarity = context.get_value('alternate_polarity')
     averages = context.get_value('averages')
     if alternate_polarity and (averages % 2):
-        # Round to the nearest multiple of 2
-        averages = (round(averages/2) + 1) * 2
+        # Round up to a multiple of 2
+        averages += 1
 
     # Configure the queues
     if ordering == 'interleaved_ramp':
@@ -214,8 +214,8 @@ def configure_click_queue(event, iti):
     polarity = context.get_value('click_polarity')
     averages = context.get_value('averages')
     if (polarity == 'alternating') and (averages % 2):
-        # Round to the nearest multiple of 2
-        averages = (round(averages/2) + 1) * 2
+        # Round up to a multiple of 2
+        averages += 1
 
     # Configure the queues
     if polarity == 'alternating':
