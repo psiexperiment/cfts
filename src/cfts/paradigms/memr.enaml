@@ -840,6 +840,7 @@ enamldef InterleavedClickProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_duration'
             expression = 'probe_bandlimited_click_window'
+            allow_missing = True
 
         Expression:
             parameter = 'probe_bandlimited_click_flb'
@@ -1172,6 +1173,7 @@ enamldef SimultaneousClickProbeMixin(ExperimentManifest):
         Expression:
             parameter = 'probe_duration'
             expression = 'probe_bandlimited_click_window'
+            allow_missing = True
 
         Expression:
             parameter = 'probe_bandlimited_click_flb'
@@ -1403,6 +1405,7 @@ enamldef SimultaneousMEMRManifest(BaseMEMRManifest): manifest:
         Expression:
             parameter = 'probe_n'
             expression = 'trial_duration * probe_rate'
+            allow_missing = True
 
         Expression:
             parameter = 'elicitor_noise_start_time'
@@ -1570,6 +1573,7 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
         Expression:
             parameter = 'probe_duration'
             expression = 'probe_bandlimited_click_window'
+            allow_missing = True
 
         Expression:
             parameter = 'probe_click_delay'
@@ -1652,6 +1656,7 @@ enamldef SweptMEMRManifest(BaseMEMRManifest): manifest:
         Expression:
             parameter = 'probe_n'
             expression = 'int(trial_duration * probe_rate)'
+            allow_missing = True
 
         Expression:
             parameter = 'elicitor_noise_duration'
