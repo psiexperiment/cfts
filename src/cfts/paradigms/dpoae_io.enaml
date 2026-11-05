@@ -231,7 +231,7 @@ def configure_dpoaeio_gui(event):
 
     pc.x_min = min(levels) - 10
     pc.x_max = max(levels) + 10
-    vb.y_min = min(levels) - 10
+    vb.y_min = -30
     vb.y_max = max(levels) + 10
 
     lb, ub = min(f2) / 1.2, max(f2) * 1.2
@@ -388,7 +388,7 @@ def configure_dual_dpoaeio_gui(event):
         vb = data.find_viewbox(f'dpoae_io_{side}_viewbox')
         pc.x_min = min(levels) - 10
         pc.x_max = max(levels) + 10
-        vb.y_min = -20
+        vb.y_min = -30
         vb.y_max = max(vb.y_max, max(levels) + 10)
 
     # This demonstrates how to modify a plugin that may or may not have been
