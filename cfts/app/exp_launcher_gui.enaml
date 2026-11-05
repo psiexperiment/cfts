@@ -145,8 +145,8 @@ class Experiment(_Experiment):
         mode : str
             One of the modes the paradigm can be run under (e.g., 'run',
             'ipsi', 'contra').
-        ear : {'selected', 'left', 'right'}
-            Ear to run experiment on. When set to a specific ear, the
+        ear : {'selected', 'left', 'right', 'diotic'}
+            Ear to run experiment on. When set to 'left' or 'right', the
             configuration must have two starships (one for each ear). When set
             to 'selected', the ear currently selected in the GUI will be used.
 
@@ -173,7 +173,7 @@ class FrozenExperiment(_FrozenExperiment):
     for sequences).
     '''
     #: If either, then ear will be drawn from what is selected.
-    ear = Enum('selected', 'left', 'right')
+    ear = Enum('selected', 'left', 'right', 'diotic')
 
     #: See Experiment.monitor_input_config.
     monitor_input_config = Dict()
