@@ -238,6 +238,11 @@ def configure_click_queue(event, iti):
             target.add_setting(setting, averages / 2, iti)
             setting['target_click_polarity'] = -1
             target.add_setting(setting, averages / 2, iti)
+    else:
+        # Otherwise nothing is queued and the experiment ends at once, as if
+        # every trial had been run.
+        # (No !r in f-strings: enaml's parser can't handle the conversion.)
+        raise ValueError('Unknown click polarity ' + repr(polarity))
 
     # Set the expected range given the maximum click level. This will trigger
     # some checks that ensure tha tthe max_sf is achievable prior to actually
