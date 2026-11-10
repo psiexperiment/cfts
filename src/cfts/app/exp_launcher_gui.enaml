@@ -30,7 +30,9 @@ from cftscal.api import (
     list_input_amplifier_connections, list_speaker_connections,
     list_starship_connections, list_inputs, list_outputs, resolve_io,
 )
-from cftscal.plugins.settings import MultiTypeSensorReference, OutputCalibrationReference
+from cftscal.plugins.settings import (
+    MultiTypeSensorReference, SpeakerCalibrationReference,
+)
 from cftscal.plugins.widgets import SensorView
 
 from .branding import load_app_icon
@@ -219,7 +221,7 @@ class Settings(LauncherSettings):
 
     #: Global calibration for each configurable output (hw_ao) channel --
     #: configured once via File > Settings > Outputs. Maps output channel
-    #: name -> an OutputCalibrationReference. Populated lazily -- see
+    #: name -> a SpeakerCalibrationReference. Populated lazily -- see
     #: output_sensor_for(). Does NOT cover a starship's own primary/
     #: secondary channels -- those aren't independently configured (see
     #: equipment_calibration()). Persisted to a shared hardware config
@@ -230,7 +232,7 @@ class Settings(LauncherSettings):
     def output_sensor_for(self, channel_name):
         if channel_name not in self.output_sensors:
             self.output_sensors[channel_name] = self._watch_sensor(
-                OutputCalibrationReference(device_type='Speaker')
+                SpeakerCalibrationReference()
             )
         return self.output_sensors[channel_name]
 
@@ -264,16 +266,24 @@ class Settings(LauncherSettings):
         Outputs list instead (`<key>` is already the speaker's own output
         channel name).
 
+        Either may also be given a 'Nominal' sensitivity, for a device with
+        no calibration on file (e.g., cftscal's keyboard IO manifest): mV/Pa
+        on a starship's microphone, dB SPL at 1 Vrms on a speaker (the same
+        `SpeakerCalibrationReference` the abts launcher uses). A microphone
+        offers other types too, so only those two are accepted there: not
+        'Unity', the default for an input channel nobody has configured.
+
         Returns the configured sensor, or None if unconfigured or the
         wrong type is selected there.
         '''
         if expected_type == 'Starship':
             sensor = self.monitor_input_sensors.get(f'{key}_microphone')
+            if sensor is not None and \
+                    sensor.device_type not in ('Starship', 'Nominal'):
+                return None
         else:
             sensor = self.output_sensors.get(key)
-        if sensor is None:
-            return None
-        if sensor.device_type != expected_type or not sensor.is_configured():
+        if sensor is None or not sensor.is_configured():
             return None
         return sensor
 
@@ -424,7 +434,8 @@ class Settings(LauncherSettings):
             sensor = self.equipment_calibration(k, 'Starship')
             if sensor is None:
                 raise ValueError(
-                    f'No calibration configured for {k} -- select one for '
+                    f'No calibration configured for {k} -- select a '
+                    f'Starship calibration (or a Nominal sensitivity) for '
                     f'its microphone channel in File > Settings'
                 )
             env[f'CFTSCAL_STARSHIP_{k.upper()}'] = sensor.get_calibration().to_string()
@@ -433,8 +444,9 @@ class Settings(LauncherSettings):
             sensor = self.equipment_calibration(k, 'Speaker')
             if sensor is None:
                 raise ValueError(
-                    f'No calibration configured for {k} -- select one under '
-                    f'Outputs in File > Settings'
+                    f'No calibration configured for {k} -- select a Speaker '
+                    f'calibration (or a Nominal sensitivity) under Outputs '
+                    f'in File > Settings'
                 )
             # No _GAIN env var here -- unlike inputs/starships, an output's
             # `initialize_output()` handler (cftscal/paradigms/objects.enaml)
@@ -629,8 +641,16 @@ class Settings(LauncherSettings):
 
         output_sensors = {}
         for channel, c in info.pop('output_sensors', {}).items():
-            sensor = self._watch_sensor(OutputCalibrationReference(device_type='Speaker'))
-            sensor.set_persistence(c)
+            sensor = self._watch_sensor(SpeakerCalibrationReference())
+            try:
+                sensor.set_persistence(c)
+            except ValueError:
+                # E.g., a starship calibration, which outputs used to offer.
+                # Left unconfigured, so the launcher asks for a speaker
+                # calibration rather than refusing to load the file.
+                log.warning('Ignoring the calibration saved for %s (%r)',
+                            channel, c)
+                sensor = self._watch_sensor(SpeakerCalibrationReference())
             output_sensors[channel] = sensor
         self.output_sensors = output_sensors
 
