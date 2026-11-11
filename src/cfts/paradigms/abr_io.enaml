@@ -303,6 +303,10 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
     attr erp_span = 8.5e-3
     attr erp_type = 'ABR'
 
+    #: Number of new epochs a plot group must accumulate before it is
+    #: redrawn. Batching keeps the GUI responsive at fast stimulus rates.
+    attr n_update = 8
+
     Extension:
         id = EXPERIMENT + '.context'
         point = 'psi.context.items'
@@ -346,7 +350,7 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
                 StackedEpochAveragePlot: plot:
                     label << '{} average plot'.format(manifest.erp_type)
                     source_name = 'valid_erp'
-                    n_update = 8
+                    n_update << manifest.n_update
                     tab_grouping = C.get_names()[:-1]
                     plot_grouping = C.get_names()[-1:]
                     fmt_plot_label_cb << C.get_selector().get_formatter(plot_grouping)

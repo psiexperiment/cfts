@@ -142,6 +142,10 @@ enamldef ABRAdaptationBaseManifest(ABRIOBaseManifest): manifest:
     attr n_bursts = 1
     attr burst_rate = 1.0
 
+    #: Each trial is a full sequence followed by a long pause, so trials
+    #: arrive slowly. Redraw the plots after every trial instead of batching.
+    n_update = 1
+
     Extension:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'
@@ -174,7 +178,7 @@ enamldef ABRAdaptationBaseManifest(ABRIOBaseManifest): manifest:
                 GroupedEpochAveragePlot: burst_plot:
                     label << '{} burst average plot'.format(manifest.erp_type)
                     source_name = 'valid_erp_burst'
-                    n_update = 8
+                    n_update << manifest.n_update
                     tab_grouping = C.get_names()
                     plot_grouping = ['burst']
                     plot_keys << [(i,) for i in range(manifest.n_bursts)]
