@@ -23,8 +23,10 @@ default range, ±1000 µs in 250 µs steps, is Laumen et al.'s.
 Run `binaural_crosstalk` first to check that sound from one ear's Starship
 does not reach the other ear.
 
-The ears' queues are filled identically, so every trial starts in both ears
-on the same sample; the silent ear of a monaural trial plays at -inf dB SPL.
+The ears' queues are filled identically and linked (`bic_util.link_queues`),
+so every trial starts in both ears on the same sample, even with the ears'
+outputs on different engines; the silent ear of a monaural trial plays at
+-inf dB SPL.
 Epochs are extracted from the EEG once per trial, using the left ear's queue.
 
 The BIC is the binaural ABR minus the sum of the monaural ABRs. The plot
@@ -74,8 +76,8 @@ from psi.token.primitives import Click, Cos2Envelope, Repeat, Tone
 from .abr_io import delays
 from .bic_util import (bic_conditions, bic_traces, CLICK, click_window,
                        CONDITION, ear_delays, ear_iti, FREQUENCY, ITD, LEFT,
-                       LEVEL, make_queue, plot_key, queue_stimuli, RIGHT,
-                       RIGHT_KEY, TONE)
+                       LEVEL, link_queues, make_queue, plot_key,
+                       queue_stimuli, RIGHT, RIGHT_KEY, TONE)
 from .cfts_mixins import CFTSSelector
 
 
@@ -146,11 +148,9 @@ def configure_bic(key_map, stim, event):
     data = event.workbench.get_plugin('psi.data')
     left = controller.get_output(LEFT)
     right = controller.get_output(RIGHT)
-    # The ears stay in step only if both queues are read in the same
-    # callback (so both have queued the same trials when one is counted)
-    # and at the same rate.
-    if left.engine is not right.engine:
-        raise ValueError('Both ears must be on the same engine')
+    # The ears may be on different engines (the queues are linked below), but
+    # must play at the same rate: each queue rounds stimuli and intervals to
+    # its own samples, so different rates would drift apart.
     if left.fs != right.fs:
         raise ValueError('Both ears must play at the same sampling rate')
     fs = left.fs
@@ -169,6 +169,10 @@ def configure_bic(key_map, stim, event):
                                   averages, stim)
     left.queue = make_queue(ordering, size)
     right.queue = make_queue(ordering, size)
+    # Filled with each stimulus's keys as it is queued.
+    right_keys = {}
+    order = link_queues(left.queue, right.queue, right_keys)
+    left.queue.linked_order = right.queue.linked_order = order
     values = list(dict.fromkeys(c[ITD] for c in conditions
                                 if c[CONDITION] == 'binaural'))
     max_delay = max(max(ear_delays(v, fs)) for v in values)
@@ -210,6 +214,7 @@ def configure_bic(key_map, stim, event):
             max_sf[output.name] = max(max_sf[output.name],
                                       factory.max_amplitude())
             setting = {**setting, RIGHT_KEY: keys[RIGHT]}
+        right_keys[keys[LEFT]] = keys[RIGHT]
         if FREQUENCY in stim.groups:
             key_map.setdefault(setting[FREQUENCY], []) \
                 .append((keys[LEFT], keys[RIGHT]))
@@ -238,6 +243,7 @@ def decrement_keys(event):
     with ExitStack() as stack:
         for engine in engines:
             stack.enter_context(engine.lock)
+        stack.enter_context(left.queue.linked_order.lock)
         for (left_key, right_key), n in counts.items():
             for output, key in ((left, left_key), (right, right_key)):
                 try:
@@ -271,6 +277,7 @@ def skip_keys(event, frequency, keys):
     with ExitStack() as stack:
         for engine in engines:
             stack.enter_context(engine.lock)
+        stack.enter_context(left.queue.linked_order.lock)
         for left_key, right_key in keys:
             for output, key in ((left, left_key), (right, right_key)):
                 try:

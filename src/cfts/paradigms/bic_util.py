@@ -10,12 +10,15 @@ a tone burst, envelope and carrier) is delayed. Positive means the right ear
 leads (the left is delayed).
 
 The two ears are driven by separate outputs whose queues are filled
-identically, so they stay in step trial by trial.
+identically and linked (`link_queues`), so they play the same trial at the
+same time even when the outputs are on different engines.
 
 Pure Python (no Qt or enaml), so it can be tested without hardware.
 '''
 from collections import Counter
 from dataclasses import dataclass
+from functools import partial
+import threading
 
 import numpy as np
 
@@ -199,6 +202,56 @@ class GroupedRandomSignalQueue(GroupedFIFOSignalQueue):
         super().remove_key(key)
         # The block indexes the group, which has changed.
         self._block = []
+
+
+class LinkedOrder:
+    '''
+    The order of trials shared by both ears' queues (see `link_queues`).
+
+    The left queue's own ordering picks the n-th trial the first time
+    either queue needs it, and both play that choice. The outputs read
+    their queues ahead of playback, by different amounts if they are on
+    different engines, so without this a change to the queue (a trial
+    decremented, a group completed, a frequency skipped) would land on a
+    different trial in each ear and the ears would drift apart.
+
+    Hold `lock` while changing either queue (`decrement_key`,
+    `remove_key`) so the change doesn't race a choice.
+    '''
+    def __init__(self, left, right, right_keys):
+        self.lock = threading.RLock()
+        self._left_next_key = left.next_key
+        #: Right ear's key for each left key.
+        self.right_keys = right_keys
+        #: Left key of each trial chosen so far; None once the queue ends.
+        self._trials = []
+        self._n = {LEFT: 0, RIGHT: 0}
+        left.next_key = partial(self.next_key, LEFT)
+        right.next_key = partial(self.next_key, RIGHT)
+
+    def next_key(self, ear):
+        with self.lock:
+            n = self._n[ear]
+            if n == len(self._trials):
+                try:
+                    self._trials.append(self._left_next_key())
+                except QueueEmptyError:
+                    self._trials.append(None)
+            key = self._trials[n]
+            if key is None:
+                raise QueueEmptyError
+            self._n[ear] = n + 1
+        return key if ear == LEFT else self.right_keys[key]
+
+
+def link_queues(left, right, right_keys):
+    '''
+    Make `right` play the same trials as `left`, in the same order, however
+    far ahead each is read. `right_keys` maps each of the left queue's keys
+    to the right queue's key for the same stimulus (it may be filled after
+    linking, before the queues play). Returns the `LinkedOrder`.
+    '''
+    return LinkedOrder(left, right, right_keys)
 
 
 def make_queue(ordering, size, seed=0):

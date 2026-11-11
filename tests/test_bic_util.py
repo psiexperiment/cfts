@@ -1,3 +1,5 @@
+from collections import Counter
+
 import numpy as np
 import pytest
 
@@ -7,8 +9,9 @@ from cfts.paradigms.bic_util import (bic_conditions, bic_traces, CLICK,
                                      click_window, CONDITION, delay,
                                      ear_delays, ear_iti, FREQUENCY,
                                      GroupedRandomSignalQueue, ITD, LEFT,
-                                     LEVEL, make_queue, ORDERINGS, plot_key,
-                                     queue_stimuli, RIGHT, RIGHT_KEY, TONE)
+                                     LEVEL, link_queues, make_queue,
+                                     ORDERINGS, plot_key, queue_stimuli,
+                                     RIGHT, RIGHT_KEY, TONE)
 
 
 def selector_settings(frequencies, levels, itds):
@@ -106,6 +109,81 @@ def test_queues_in_step(ordering, alternate_polarity):
             counts[md[RIGHT_KEY]] = counts.get(md[RIGHT_KEY], 0) + 1
     for (_, n), (_, right_key) in zip(stimuli, keys, strict=True):
         assert counts.get(right_key, 0) >= n
+
+
+def play_linked(queues, keys, lead, reject_every=0, skip_at=None):
+    '''
+    Like `play`, but with the queues linked and each read `lead[ear]`
+    trials ahead of playback, as outputs on different engines are. Each
+    trial is counted (both queues decremented) when it plays, and at trial
+    `skip_at` the rest of the first frequency is skipped. Returns each
+    ear's keys in the order queued.
+    '''
+    left, right = queues
+    right_keys = dict(keys)
+    order = link_queues(left, right, right_keys)
+    queued = {LEFT: [], RIGHT: []}
+    done = set()
+
+    def read(ear, q, upto):
+        while ear not in done and len(queued[ear]) < upto:
+            try:
+                queued[ear].append(q.pop_next(decrement=False))
+            except QueueEmptyError:
+                done.add(ear)
+
+    i = 0
+    while True:
+        read(LEFT, left, i + 1 + lead[LEFT])
+        read(RIGHT, right, i + 1 + lead[RIGHT])
+        if i >= min(len(queued[LEFT]), len(queued[RIGHT])):
+            break
+        lk, ld = queued[LEFT][i]
+        rk, _ = queued[RIGHT][i]
+        with order.lock:
+            if skip_at is not None and i == skip_at:
+                first = ld['metadata'][FREQUENCY]
+                for l, r in keys:
+                    if left.get_info(l)['metadata'][FREQUENCY] == first:
+                        for q, k in ((left, l), (right, r)):
+                            try:
+                                q.remove_key(k)
+                            except ValueError:
+                                pass
+            if not (reject_every and (i + 1) % reject_every == 0):
+                for q, k in ((left, lk), (right, rk)):
+                    try:
+                        q.decrement_key(k)
+                    except KeyError:
+                        pass
+        i += 1
+        assert i < 10000
+    return ([k for k, _ in queued[LEFT]], [k for k, _ in queued[RIGHT]],
+            [d['metadata'] for _, d in queued[LEFT]])
+
+
+@pytest.mark.parametrize('ordering', ORDERINGS)
+@pytest.mark.parametrize('lead', [(0, 40), (40, 0), (7, 23)])
+@pytest.mark.parametrize('skip', [False, True])
+def test_linked_queues_read_unevenly(ordering, lead, skip):
+    # The ears' outputs on different engines read their queues different
+    # amounts ahead. The linked queues still play the same trials in the
+    # same order, and each ear plays the same number.
+    if skip and ordering != 'sequential':
+        pytest.skip('Skipping a frequency is only offered when sequential')
+    queues, keys, stimuli = fill(ordering, True)
+    lead = dict(zip((LEFT, RIGHT), lead))
+    left_keys, right_keys, md = play_linked(queues, keys, lead,
+                                            reject_every=7,
+                                            skip_at=30 if skip else None)
+    assert len(left_keys) == len(right_keys) > 0
+    pair = dict(keys)
+    assert [pair[k] for k in left_keys] == right_keys
+    assert [m[RIGHT_KEY] for m in md] == right_keys
+    if not skip:
+        counts = Counter(k for i, k in enumerate(left_keys) if (i + 1) % 7)
+        for (_, n), (left_key, _) in zip(stimuli, keys, strict=True):
+            assert counts[left_key] >= n
 
 
 def test_sequential_groups():
