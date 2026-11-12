@@ -573,12 +573,6 @@ enamldef MOCManifest(ControllerManifest): manifest:
             parameter = SEED
             expression = 'elicitor_seed'
 
-        # The elicitor's level is the band's overall level (see
-        # `BandlimitedFIRNoiseFactory`).
-        Expression:
-            parameter = 'elicitor_bandlimited_noise_correct_level'
-            expression = 'True'
-
     Extension:
         id = EXPERIMENT + '.io'
         point = 'psi.controller.io'

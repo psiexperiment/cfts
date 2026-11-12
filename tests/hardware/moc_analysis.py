@@ -65,8 +65,7 @@ def elicitor_template(fs, p, seed):
     calibration = FlatCalibration.from_db(OUTPUT_CAL_DB)
     noise = stim.BandlimitedFIRNoiseFactory(
         fs, p['elicitor_fl'], p['elicitor_fh'], p['elicitor_level'],
-        seed=seed, equalize=False, calibration=calibration,
-        correct_level=True)
+        seed=seed, equalize=False, calibration=calibration)
     factory = stim.Cos2EnvelopeFactory(fs, p['elicitor_duration'],
                                        p['elicitor_rise_time'], noise,
                                        start_time=p['baseline_duration'])
