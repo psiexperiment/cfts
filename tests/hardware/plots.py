@@ -12,21 +12,43 @@ from psi.loopback.fit import gain_db
 from psi.loopback.plots import plot_timing, save  # noqa: F401
 
 
-def format_key(names, values):
+def format_key(names, values, sep=', '):
     '''
     Label for a panel, e.g. "4 kHz, 60 dB". A frequency of 0 is a click.
     '''
     parts = []
     for name, value in zip(names, values):
-        if name in ('frequency', 'fc'):
+        if name in ('frequency', 'fc', 'f2'):
             parts.append(f'{value / 1e3:g} kHz' if value else 'click')
         elif name in ('level', 'l2', 'elicitor_level'):
             parts.append(f'{value:g} dB')
+        elif name == 'fm':
+            parts.append(f'fm {value:g} Hz')
         elif name == 'burst':
             parts.append(f'burst {value + 1}')
+        elif name == 'stimulus':
+            parts.append(str(value))
         else:
             parts.append(f'{name} {value}')
-    return ', '.join(parts)
+    return sep.join(parts)
+
+
+def polarity_sign(polarity):
+    return '+' if polarity > 0 else '−'
+
+
+def trial_labels(table, columns, sep='\n'):
+    '''
+    One label per row of `table`: its value of each of `columns`, then its
+    polarity (if it has one).
+    '''
+    labels = []
+    for _, r in table.iterrows():
+        label = format_key(columns, [r[c] for c in columns], sep)
+        if 'polarity' in table:
+            label += f'{sep}({polarity_sign(r.polarity)})'
+        labels.append(label)
+    return labels
 
 
 def panel_grid(keys, row, col, panel_size=(3, 2.2), sharex=True):
@@ -57,29 +79,99 @@ def as_tuple(key):
     return key if isinstance(key, tuple) else (key,)
 
 
-def plot_timeline(fit, onsets, epoch_span, path, n=6):
+def plot_timeline(fit, onsets, epoch_span, path, n=6, labels=None,
+                  extra=()):
     '''
     The start of the recording, with the logged onsets and the window psi
     averages for each, to show where the stimuli landed relative to them.
+
+    Parameters
+    ----------
+    labels : list of str, optional
+        What each stimulus was (e.g., from `trial_labels`), written above
+        its onset.
+    extra : list of (name, signal, fs)
+        Other inputs recorded alongside (e.g., each ear's microphone), drawn
+        below on the same time axis.
     '''
     fs = fit.fs
     t_start = onsets[0] - 0.005
     t_end = max(onsets[min(n, len(onsets) - 1)] + epoch_span,
                 onsets[0] + fit.latency / fs) + 0.005
-    lb, ub = int(t_start * fs), int(t_end * fs)
-    t = np.arange(lb, ub) / fs
-    figure, ax = plt.subplots(figsize=(10, 3))
-    ax.plot(t * 1e3, fit.recorded[lb:ub], 'k', lw=0.6, label='Recorded')
-    for i, t0 in enumerate(onsets[:n + 1]):
-        ax.axvspan(t0 * 1e3, (t0 + epoch_span) * 1e3, color='C0', alpha=0.15,
-                   label='Epoch psi averages' if i == 0 else None)
-        ax.axvline(t0 * 1e3, color='C0', lw=1,
-                   label='Logged onset' if i == 0 else None)
-    ax.set_xlabel('Time (ms)')
-    ax.set_ylabel('Signal (V)')
-    ax.set_title(f'Stimuli arrive {fit.latency} samples '
-                 f'({fit.latency / fs * 1e3:.2f} ms) after their logged onset')
+    traces = [('Recorded', fit.recorded, fs), *extra]
+    height = 3 + 1.6 * len(extra) + (0.6 if labels is not None else 0)
+    figure, axes = plt.subplots(len(traces), 1, figsize=(10, height),
+                                sharex=True, squeeze=False)
+    axes = axes[:, 0]
+    for ax, (name, x, x_fs) in zip(axes, traces):
+        lb, ub = int(t_start * x_fs), min(int(t_end * x_fs), len(x))
+        t = np.arange(lb, ub) / x_fs
+        ax.plot(t * 1e3, x[lb:ub], 'k', lw=0.6, label=name)
+        for i, t0 in enumerate(onsets[:n + 1]):
+            ax.axvspan(t0 * 1e3, (t0 + epoch_span) * 1e3, color='C0',
+                       alpha=0.15,
+                       label='Epoch psi averages' if i == 0 else None)
+            ax.axvline(t0 * 1e3, color='C0', lw=1,
+                       label='Logged onset' if i == 0 else None)
+        ax.set_ylabel(f'{name} (V)' if extra else 'Signal (V)', fontsize=8)
+    ax = axes[0]
     ax.legend(loc='upper right', fontsize=8)
+    if labels is not None:
+        for t0, label in zip(onsets[:n + 1], labels):
+            ax.text(t0 * 1e3, 1.02, label, transform=ax.get_xaxis_transform(),
+                    ha='left', va='bottom', fontsize=7, color='C0')
+    title = (f'Stimuli arrive {fit.latency} samples '
+             f'({fit.latency / fs * 1e3:.2f} ms) after their logged onset')
+    if labels is not None:
+        figure.suptitle(title)
+    else:
+        ax.set_title(title)
+    axes[-1].set_xlabel('Time (ms)')
+    figure.tight_layout()
+    return save(figure, path)
+
+
+def plot_sequence(trials, conditions, path, title='Order of presentation',
+                  unit='trial'):
+    '''
+    Every trial in the order played (x), on the row of its condition (y),
+    coloured by polarity, so the ordering, interleaving and balance of the
+    design can be checked by eye.
+
+    `trials` has one row per trial; it is sorted by `onset`, `t0` or `start`
+    if it has one of them.
+    '''
+    for column in ('onset', 't0', 'start'):
+        if column in trials:
+            trials = trials.sort_values(column, kind='stable')
+            break
+    trials = trials.reset_index(drop=True)
+    keys = list(trials[conditions].itertuples(index=False, name=None))
+    rows = sorted(set(keys))
+    y = np.array([rows.index(k) for k in keys])
+    x = np.arange(len(trials)) + 1
+
+    figure, ax = plt.subplots(figsize=(10, 1 + 0.28 * max(len(rows), 3)))
+    if 'polarity' in trials:
+        for polarity, color in ((1, 'C0'), (-1, 'C3')):
+            mask = trials.polarity.values == polarity
+            ax.plot(x[mask], y[mask], '|', color=color, ms=8, mew=1.2,
+                    label=f'{polarity_sign(polarity)} polarity')
+        ax.legend(loc='upper left', bbox_to_anchor=(1.0, 1.0), fontsize=8)
+    else:
+        ax.plot(x, y, '|', color='k', ms=8, mew=1.2)
+    # Connect successive trials so the path through the conditions shows.
+    ax.plot(x, y, color='0.6', lw=0.4, zorder=0)
+    counts = np.bincount(y, minlength=len(rows))
+    ax.set_yticks(range(len(rows)),
+                  [f'{format_key(conditions, k)} (n={c})'
+                   for k, c in zip(rows, counts)], fontsize=7)
+    ax.set_ylim(len(rows) - 0.5, -0.5)
+    ax.set_xlim(0.5, len(trials) + 0.5)
+    ax.set_xlabel(f'{unit.capitalize()} (order played)')
+    ax.set_title(f'{title}: {len(trials)} {unit}s, {len(rows)} conditions',
+                 fontsize=10)
+    figure.tight_layout()
     return save(figure, path)
 
 
@@ -454,5 +546,123 @@ def plot_itd(waveforms, table, path):
         ax_itd.set_title(f'{format_key(["frequency"], [frequency])}: '
                          'every binaural burst',
                          fontsize=9)
+    figure.tight_layout()
+    return save(figure, path)
+
+
+EAR_COLORS = {'left': 'C0', 'right': 'C1'}
+
+
+def plot_bic_trials(left, right, fs, onsets, labels, path, n=8, first=0):
+    '''
+    `n` consecutive trials as each ear's microphone recorded them, sample
+    for sample: both ears over the whole stretch (top two rows, with the
+    interval from each burst to the ear's next one), then each trial's
+    onset close up with both ears overlaid (bottom row).
+
+    Dashed lines are where the requested ITD says each ear's burst should
+    start; `onsets` is from `bic_analysis.burst_onsets` and `labels` has one
+    entry per trial.
+    '''
+    trials = sorted(onsets.trial.unique())[first:first + n]
+    o = onsets[onsets.trial.isin(trials)]
+    # The logged onset (plus latency) of each trial, in samples.
+    start = {t: g.expected.min() for t, g in o.groupby('trial')}
+    t_ref = onsets[onsets.trial == trials[0]].expected.min()
+    lb = t_ref - int(0.003 * fs)
+    ub = o.measured.max() + int(0.012 * fs)
+
+    figure = plt.figure(figsize=(max(12, 1.7 * len(trials)), 8.5))
+    grid = figure.add_gridspec(3, len(trials), height_ratios=[1, 1, 1.3],
+                               hspace=0.55)
+    ax_l = figure.add_subplot(grid[0, :])
+    ax_r = figure.add_subplot(grid[1, :], sharex=ax_l, sharey=ax_l)
+    t = (np.arange(lb, ub) - t_ref) / fs * 1e3
+    for ax, name, x in ((ax_l, 'left', left), (ax_r, 'right', right)):
+        ax.plot(t, x[lb:ub], color='k', lw=0.4)
+        g = o[o.ear == name]
+        for r in g.itertuples():
+            ax.axvline((r.expected - t_ref) / fs * 1e3,
+                       color=EAR_COLORS[name], ls='--', lw=0.8)
+        # The interval from each burst to this ear's next one, measured,
+        # and its error re what the logged onsets and ITDs call for.
+        m, e = g.measured.values, g.expected.values
+        for i in range(len(g) - 1):
+            interval = (m[i + 1] - m[i]) / fs * 1e3
+            error = (m[i + 1] - m[i]) - (e[i + 1] - e[i])
+            mid = ((m[i] + m[i + 1]) / 2 - t_ref) / fs * 1e3
+            ax.text(mid, 0.97, f'{interval:.3f} ms\n({error:+d} samples)',
+                    transform=ax.get_xaxis_transform(), ha='center',
+                    va='top', fontsize=7)
+        ax.set_ylabel(f'{name.capitalize()} mic (V)', fontsize=8)
+    for trial, label in zip(trials, labels):
+        ax_l.text((start[trial] - t_ref) / fs * 1e3, 1.03, label,
+                  transform=ax_l.get_xaxis_transform(), ha='left',
+                  va='bottom', fontsize=7)
+    ax_r.set_xlabel('Time re first trial\'s logged onset + latency (ms)')
+    ax_l.set_xlim(t[0], t[-1])
+
+    # Close-ups: from just before the trial to just after the later ear
+    # starts.
+    for j, trial in enumerate(trials):
+        ax = figure.add_subplot(grid[2, j])
+        g = o[o.trial == trial]
+        s0 = start[trial]
+        z_lb = s0 - int(0.0003 * fs)
+        z_ub = g.expected.max() + int(0.0015 * fs)
+        tz = (np.arange(z_lb, z_ub) - s0) / fs * 1e6
+        for r in g.itertuples():
+            x = left if r.ear == 'left' else right
+            ax.plot(tz, x[z_lb:z_ub], color=EAR_COLORS[r.ear], lw=0.8)
+            ax.axvline((r.expected - s0) / fs * 1e6,
+                       color=EAR_COLORS[r.ear], ls='--', lw=0.8)
+        parts = labels[j].split('\n')
+        title = ' '.join(parts[:2]) + '\n' + ' '.join(parts[2:])
+        if len(g) == 2:
+            l, r = g.set_index('ear').measured[['left', 'right']]
+            lead = (l - r) / fs * 1e6
+            title += f'\nmeasured: R {"leads" if lead >= 0 else "lags"} ' \
+                     f'{abs(lead):.0f} µs'
+        ax.set_title(title, fontsize=6.5)
+        ax.tick_params(labelsize=6)
+        ax.set_xlabel('µs re onset', fontsize=7)
+        if j == 0:
+            ax.set_ylabel('V', fontsize=7)
+    figure.suptitle(f'Trials {trials[0] + 1}–{trials[-1] + 1}: left mic '
+                    '(blue), right mic (orange); dashed, where each burst '
+                    'should start for the requested ITD', fontsize=10)
+    return save(figure, path)
+
+
+def plot_bic_intervals(onsets, fs, path):
+    '''
+    Every burst of the run, per ear: where it started re where it should
+    have, the interval since the ear's previous burst, and that interval's
+    error.
+    '''
+    figure, axes = plt.subplots(3, 1, figsize=(10, 7.5), sharex=True)
+    for name, g in onsets.groupby('ear'):
+        style = dict(color=EAR_COLORS[name], ms=3, label=name,
+                     marker='o' if name == 'left' else 'x', ls='none')
+        trial = g.trial.values + 1
+        axes[0].plot(trial, g.error, **style)
+        m, e = g.measured.values, g.expected.values
+        axes[1].plot(trial[1:], np.diff(m) / fs * 1e3, **style)
+        axes[2].plot(trial[1:], np.diff(m) - np.diff(e), **style)
+    axes[0].set_ylabel('Onset error\n(samples)')
+    axes[0].set_title('Burst onset on each microphone re the logged onset '
+                      '+ requested ITD delay', fontsize=9)
+    axes[1].set_ylabel('Interval (ms)')
+    axes[1].set_title('Interval from the same ear\'s previous burst',
+                      fontsize=9)
+    axes[2].set_ylabel('Interval error\n(samples)')
+    axes[2].set_title('Interval re the logged onsets and requested ITDs',
+                      fontsize=9)
+    for ax in (axes[0], axes[2]):
+        ax.axhline(0, color='k', lw=0.5)
+        lim = max(2, np.nanmax(np.abs(ax.get_ylim())))
+        ax.set_ylim(-lim, lim)
+    axes[0].legend(fontsize=8, loc='upper right')
+    axes[-1].set_xlabel('Trial')
     figure.tight_layout()
     return save(figure, path)

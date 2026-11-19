@@ -47,6 +47,8 @@ class BICAnalysis:
     itd: pd.DataFrame
     #: Both microphones for each frequency and ITD (see `itd_waveforms`).
     waveforms: list
+    #: Where each ear's burst starts on its microphone (see `burst_onsets`).
+    onsets: pd.DataFrame
 
 
 def tone_burst(fs, frequency, level, duration, rise_time, polarity, phase,
@@ -259,6 +261,101 @@ def check_itd_shift(checks, table):
                'minus at the smallest ITD, per frequency and level.')
 
 
+def burst_onsets(left, right, fs, md, latency, search=0.002):
+    '''
+    Where each ear's burst (or click) starts on its microphone, found
+    without the templates or the delays psi logged: each burst is
+    cross-correlated with a reference, the first burst of the same
+    frequency played to the left ear alone (which has no delay), cut from
+    the left microphone. The reference starts at its trial's logged onset
+    (plus the latency), so a burst that lines up with it at sample `k`
+    started at `k`.
+
+    `expected` is the logged onset (plus the latency) plus the delay the
+    requested ITD calls for (positive: the right ear leads, so the left is
+    delayed; see `bic_util.ear_delays`), so a wrong delay, or a drift
+    between the ears' queues, shows up in `error` (samples). The reference
+    is from the left ear, so a constant offset of the right ear shows too.
+    One row per burst played (silent ears are left out), in trial order.
+    '''
+    md = md.reset_index(drop=True)
+    t0 = np.round(md.t0.values * fs).astype(int) + latency
+    period = int(np.median(np.diff(t0))) if len(t0) > 1 else int(fs)
+    ends = np.r_[t0[1:], t0[-1] + period]
+    n_search = int(round(search * fs))
+
+    references = {}
+    for frequency, g in md.groupby('bic_frequency'):
+        alone = g[(g.bic_condition == 'left')
+                  & np.isfinite(g[f'{LEFT}_level'])]
+        if not len(alone):
+            continue
+        i = alone.index[0]
+        x = left[t0[i]:ends[i]]
+        # The reference runs from the logged onset to the end of the burst.
+        support = np.flatnonzero(np.abs(x) > 0.01 * np.abs(x).max())
+        references[frequency] = x[:support[-1] + 1]
+
+    rows = []
+    for ear, name, x in ((LEFT, 'left', left), (RIGHT, 'right', right)):
+        for i, r in md.iterrows():
+            ref = references.get(r.bic_frequency)
+            if ref is None or not np.isfinite(r[f'{ear}_level']):
+                continue
+            if r.bic_condition == 'binaural':
+                delays = ear_delays_samples(r[ITD], fs)
+                delay = delays[0] if ear == LEFT else delays[1]
+            else:
+                delay = 0
+            expected = t0[i] + delay
+            lb = expected - n_search
+            ub = expected + len(ref) + n_search
+            if lb < 0 or ub > len(x):
+                continue
+            c = signal.correlate(x[lb:ub], ref, 'valid')
+            # The polarity alternates, so the peak may be negative.
+            k = int(np.argmax(np.abs(c)))
+            rows.append({
+                'trial': i,
+                'ear': name,
+                'condition': r.bic_condition,
+                'frequency': r.bic_frequency,
+                'level': r.bic_level,
+                'itd': r[ITD],
+                'polarity': r[f'{ear}_polarity'],
+                't0': r.t0,
+                'expected': expected,
+                'measured': lb + k,
+                'error': lb + k - expected,
+            })
+    return pd.DataFrame(rows).sort_values(['trial', 'ear'], kind='stable') \
+        .reset_index(drop=True)
+
+
+def ear_delays_samples(itd, fs):
+    '''
+    Delay, in samples, of the left and right ear at `itd` (µs; positive:
+    the right ear leads).
+    '''
+    delay = int(round(abs(itd) * 1e-6 * fs))
+    return (delay, 0) if itd > 0 else (0, delay)
+
+
+def check_onsets(checks, onsets):
+    worst = int(np.abs(onsets.error).max())
+    by_ear = ', '.join(
+        f'{ear} {int(np.abs(g.error).max())}'
+        for ear, g in onsets.groupby('ear'))
+    checks.add('burst onsets', worst <= 1,
+               f'worst {worst} samples ({by_ear})', '± 1 sample',
+               'Where each ear\'s burst starts on its microphone (by '
+               'correlation with a burst played to the left ear alone) re '
+               'the logged onset plus the delay the '
+               'requested ITD calls for, independent of the delays psi '
+               'logged. Catches a wrong delay and the ears\' queues '
+               'drifting apart.')
+
+
 def itd_waveforms(left, right, fs, md, latency):
     '''
     Both microphones, averaged over the binaural bursts of each frequency
@@ -362,6 +459,9 @@ def analyze_bic(eeg, eeg_fs, left_mic, right_mic, mic_fs, md, gains,
     check_itd_shift(checks, table)
     waveforms = itd_waveforms(left_mic, right_mic, mic_fs, md,
                               fits['left'].latency)
+    onsets = burst_onsets(left_mic, right_mic, mic_fs, md,
+                          fits['left'].latency)
+    check_onsets(checks, onsets)
 
     # The BIC psi plots, from the epochs it averages.
     expected = np.zeros_like(a.epochs.values)
@@ -378,4 +478,4 @@ def analyze_bic(eeg, eeg_fs, left_mic, right_mic, mic_fs, md, gains,
                'each ear\'s burst was), per polarity, against what the '
                'loopback should give.')
     return BICAnalysis(checks, a, fits['left'], fits['right'], stimuli,
-                       templates, bic, table, waveforms)
+                       templates, bic, table, waveforms, onsets)

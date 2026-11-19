@@ -116,8 +116,9 @@ def run_bic(variant, ordering, jitter_ms, routing, results_dir):
                                  'starship_B_microphone').gain_db,
     }
     engine, = run.wrapup['engines'].values()
-    a = analyze_bic(np.asarray(eeg[:])[0], eeg_fs,
-                    np.asarray(left_mic[:])[0], np.asarray(right_mic[:])[0],
+    left_x = np.asarray(left_mic[:])[0]
+    right_x = np.asarray(right_mic[:])[0]
+    a = analyze_bic(np.asarray(eeg[:])[0], eeg_fs, left_x, right_x,
                     mic_fs, md, gains, latency, engine, epoch_n,
                     OUTPUT_CAL_DB)
     checks = a.checks
@@ -147,8 +148,17 @@ def run_bic(variant, ordering, jitter_ms, routing, results_dir):
     run_dir = path.parent
     epoch_span = epoch_n / eeg_fs
     figures = [
+        plots.plot_sequence(stimuli, CONDITIONS, run_dir / 'sequence.png'),
         plots.plot_timeline(a.eeg.fit, stimuli.onset.values, epoch_span,
-                            run_dir / 'timeline.png'),
+                            run_dir / 'timeline.png',
+                            labels=plots.trial_labels(stimuli, CONDITIONS),
+                            extra=[('Left microphone', left_x, mic_fs),
+                                   ('Right microphone', right_x, mic_fs)]),
+        plots.plot_bic_trials(left_x, right_x, mic_fs, a.onsets,
+                              plots.trial_labels(stimuli.iloc[:8],
+                                                 CONDITIONS),
+                              run_dir / 'trials.png', n=8),
+        plots.plot_bic_intervals(a.onsets, mic_fs, run_dir / 'intervals.png'),
         plots.plot_timing(a.eeg.fit, run_dir / 'timing.png', expected_ioi),
         plots.plot_waveforms(stimuli, a.eeg.fit, a.templates,
                              run_dir / 'waveforms.png', ['stimulus'],
@@ -237,6 +247,9 @@ class TestBIC:
 
     def test_itd(self, checks):
         checks.assert_passed('ITD')
+
+    def test_burst_onsets(self, checks):
+        checks.assert_passed('burst onsets')
 
     def test_itd_shift(self, checks):
         checks.assert_passed('ITD shifts')

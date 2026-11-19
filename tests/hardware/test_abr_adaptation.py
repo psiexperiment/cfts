@@ -105,7 +105,7 @@ def analyze_trains(run, stimuli, templates, conditions, n_conditions, title,
     expected_ioi = [burst_period,
                     train_period - (N_BURSTS - 1) * burst_period]
     write_abr_report(run, title, stimuli, templates, a, row, ['burst'],
-                     expected_ioi, info)
+                     conditions, expected_ioi, info, trials=md)
     return a.checks
 
 

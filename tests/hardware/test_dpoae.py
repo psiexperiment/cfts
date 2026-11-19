@@ -136,6 +136,9 @@ def analyze_side(x, fs, segments, routing, starship, latency, engine,
 
 def write_dpoae_report(run_dir, title, x, fs, a, info):
     figures = [
+        plots.plot_sequence(a.segments, ['f2', 'l2'],
+                            run_dir / 'sequence.png',
+                            'Order of the settings', 'setting'),
         plots.plot_dpoae_timeline(x, fs, a, run_dir / 'timeline.png'),
         plots.plot_dpoae_timing(a, run_dir / 'timing.png'),
         plots.plot_dpoae_levels(a, run_dir / 'levels.png'),

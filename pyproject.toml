@@ -41,6 +41,12 @@ cfts = [
     "icons/*.png",
 ]
 
+[tool.pytest.ini_options]
+# The --fireface option and the loopback fixtures for tests/hardware. Loaded
+# here rather than from tests/hardware/conftest.py so the option is known
+# however pytest is pointed at the tests (e.g., `pytest tests --fireface`).
+addopts = "-p psi.loopback.pytest_plugin"
+
 [build-system]
 requires = ["setuptools>=61.2", "wheel", "setuptools_scm[toml]>=3.4.3"]
 build-backend = "setuptools.build_meta"

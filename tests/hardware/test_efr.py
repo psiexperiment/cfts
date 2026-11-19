@@ -61,7 +61,8 @@ def analyze_efr(run, templates, level_name, title):
                         run.engine)
     check_gaps(a.checks, md, fs, len(templates[0]))
     check_sequence(a.checks, stimuli, ['fc', 'fm'], 1, AVERAGES)
-    write_abr_report(run, title, stimuli, templates, a, [], ['fc'])
+    write_abr_report(run, title, stimuli, templates, a, [], ['fc'],
+                     ['fc', 'fm'])
     return a.checks
 
 

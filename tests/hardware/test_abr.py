@@ -104,12 +104,21 @@ def stimulus_table(md, fs):
 
 
 def write_abr_report(run, title, stimuli, templates, analysis, row, col,
-                     expected_ioi=None, info=None):
+                     conditions, expected_ioi=None, info=None, trials=None):
+    '''
+    `conditions` are the columns that make up a condition, for the plot of
+    the order the trials played in; `trials` has one row per trial if
+    `stimuli` has more (e.g., one per burst of a train).
+    '''
     a = analysis
     epoch_span = run.epoch_n / run.fs
+    trials = stimuli if trials is None else trials
+    label_columns = list(dict.fromkeys(conditions + row + col))
     figures = [
+        plots.plot_sequence(trials, conditions, run.run_dir / 'sequence.png'),
         plots.plot_timeline(a.fit, stimuli.onset.values, epoch_span,
-                            run.run_dir / 'timeline.png'),
+                            run.run_dir / 'timeline.png',
+                            labels=plots.trial_labels(stimuli, label_columns)),
         plots.plot_timing(a.fit, run.run_dir / 'timing.png', expected_ioi),
         plots.plot_levels(stimuli, a.fit, a.expected_gain_db,
                           run.run_dir / 'levels.png'),
@@ -158,7 +167,7 @@ def abr_tone(request, routing, results_dir):
     check_sequence(a.checks, md, conditions,
                    len(FREQUENCIES) * len(LEVELS), AVERAGES)
     write_abr_report(run, f'ABR (tone), {ordering}', stimuli, templates, a,
-                     ['level'], ['frequency'], 1 / RATE,
+                     ['level'], ['frequency'], conditions, 1 / RATE,
                      {'Ordering': ordering})
     return a.checks
 
@@ -204,7 +213,7 @@ def abr_click(request, routing, results_dir):
         expected_ioi = 1 / RATE
     check_sequence(a.checks, md, conditions, len(LEVELS), AVERAGES)
     write_abr_report(run, f'ABR (click), {label}', stimuli, templates, a,
-                     [], ['level'], expected_ioi,
+                     [], ['level'], conditions, expected_ioi,
                      {'Rate jitter': f'{jitter_ms} ms'})
     return a.checks
 
