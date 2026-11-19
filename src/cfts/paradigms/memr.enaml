@@ -20,6 +20,7 @@ from psiaudio import util
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, Expression, ImportedSymbol, Parameter)
+from psi.controller.api import CALIBRATION_START_WEIGHT
 from psi.controller.api import (
     Blocked, ChannelOutOfRange, ContinuousInput, ControllerManifest, Coroutine,
     EpochInput, ExperimentAction, ExtractEpochs, Synchronized,
@@ -633,7 +634,7 @@ enamldef BaseMEMRManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_prepare'
             command = 'psi.controller.configure_experiment'
-            weight = 11
+            weight = CALIBRATION_START_WEIGHT + 1
 
         ExperimentAction:
             event = 'experiment_initialize'

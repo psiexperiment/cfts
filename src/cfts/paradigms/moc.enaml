@@ -51,6 +51,7 @@ from psiaudio.queue import FIFOSignalQueue
 
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, Expression, Parameter)
+from psi.controller.api import CALIBRATION_START_WEIGHT
 from psi.controller.api import (ChannelOutOfRange, ContinuousInput,
                                 ControllerManifest, EpochOutput,
                                 ExperimentAction, ExperimentEvent,
@@ -657,7 +658,7 @@ enamldef MOCManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_prepare'
             command = 'psi.controller.configure_experiment'
-            weight = 11
+            weight = CALIBRATION_START_WEIGHT + 1
 
         ExperimentAction:
             event = 'engines_configured'

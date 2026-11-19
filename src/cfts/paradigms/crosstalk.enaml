@@ -30,6 +30,7 @@ from psiaudio.queue import InterleavedFIFOSignalQueue
 
 from psi.context.api import (ContextGroup, ContextRow, Expression,
                              Parameter)
+from psi.controller.api import CALIBRATION_START_WEIGHT
 from psi.controller.api import (ChannelOutOfRange, ControllerManifest,
                                 ExperimentAction, ExperimentEvent,
                                 ExtractEpochs, QueuedEpochOutput,
@@ -423,7 +424,7 @@ enamldef CrosstalkManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_prepare'
             command = EXPERIMENT + '.configure'
-            weight = 11
+            weight = CALIBRATION_START_WEIGHT + 1
 
         ExperimentAction:
             event = 'engines_configured'

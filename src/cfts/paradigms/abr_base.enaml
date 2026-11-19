@@ -13,6 +13,7 @@ from psiaudio.util import db
 
 from psi.context.api import (ContextGroup, ContextRow, Parameter,
                              BoolParameter, EnumParameter)
+from psi.controller.api import CALIBRATION_START_WEIGHT
 from psi.controller.api import ExperimentAction
 from psi.controller.api import (
     ControllerManifest, Detrend, ExtractEpochs, RejectEpochs, QueuedEpochOutput
@@ -144,7 +145,7 @@ enamldef ABRBaseManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_prepare'
             command = 'psi.controller.configure_experiment'
-            weight = 11
+            weight = CALIBRATION_START_WEIGHT + 1
 
         ExperimentAction:
             event = 'experiment_initialize'

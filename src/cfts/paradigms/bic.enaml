@@ -63,6 +63,7 @@ import pyqtgraph as pg
 from psi.context.api import (BoolParameter, ContextGroup, ContextRow,
                              EnumParameter, Expression, OrderedContextMeta,
                              Parameter)
+from psi.controller.api import CALIBRATION_START_WEIGHT
 from psi.controller.api import (ChannelOutOfRange, ControllerManifest,
                                 Detrend, ExperimentAction, ExperimentEvent,
                                 ExtractEpochs, QueuedEpochOutput,
@@ -581,7 +582,7 @@ enamldef BICBaseManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_prepare'
             command = EXPERIMENT + '.configure'
-            weight = 11
+            weight = CALIBRATION_START_WEIGHT + 1
 
         ExperimentAction:
             event = 'engines_configured'

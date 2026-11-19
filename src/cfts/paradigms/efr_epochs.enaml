@@ -11,6 +11,7 @@ from psiaudio import util
 from psiaudio.pipeline import coroutine
 from psiaudio import queue
 
+from psi.controller.api import CALIBRATION_START_WEIGHT
 from psi.controller.api import (
     ControllerManifest, ExperimentEvent, ExtractEpochs, ExperimentAction,
     Input, QueuedEpochOutput,
@@ -174,7 +175,7 @@ enamldef BaseEFRManifest(ControllerManifest): manifest:
         ExperimentAction:
             event = 'experiment_prepare'
             command = 'psi.controller.configure_experiment'
-            weight = 11
+            weight = CALIBRATION_START_WEIGHT + 1
             kwargs = {
                 'fc_name': manifest.fc_name,
                 'level_name': manifest.level_name,
