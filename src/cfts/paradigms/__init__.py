@@ -315,6 +315,23 @@ ParadigmDescription(
 
 
 ParadigmDescription(
+    # Masker tone burst, gap and probe tone burst; ABR to the probe.
+    'abr_forward_masking', 'ABR forward masking (tone)', 'ear', [
+        eeg_dec_mixin,
+        selectable_starship_mixin,
+        {'manifest': CFTS_PATH + 'abr_forward_masking.ABRForwardMaskingManifest'},
+        temperature_mixin,
+        eeg_view_mixin,
+        eeg_fft_view_mixin,
+        {'manifest': CFTS_PATH + 'abr_forward_masking.ABRForwardMaskingInEarCalibrationMixinManifest',
+         'info': {'hide': True}
+         },
+    ] + COMMON_PLUGINS,
+    info={'modes': ['either']},
+)
+
+
+ParadigmDescription(
     'mlr_llr_io', 'MLR/LLR (tone)', 'ear', [
         eeg_dec_mixin,
         selectable_starship_mixin,

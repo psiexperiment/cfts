@@ -37,9 +37,13 @@ def delays(rng, low, high):
         yield rng.uniform(low, high)
 
 
-def add_setting(target, setting, averages, iti, key_map):
+def add_setting(target, setting, averages, iti, key_map,
+                frequency_name='target_tone_frequency'):
+    if callable(iti):
+        # The ITI depends on the setting (e.g., on the forward-masking gap).
+        iti = iti(setting)
     key, _ = target.add_setting(setting, averages, iti)
-    freq = setting['target_tone_frequency']
+    freq = setting[frequency_name]
     key_map.setdefault(freq, []).append(key)
 
 
@@ -68,11 +72,36 @@ def configure_experiment_tone(key_map, event):
     configure_tone_queue(key_map, event, iti)
 
 
-def configure_tone_queue(key_map, event, iti):
+def configure_tone_queue(key_map, event, iti, settings=None,
+                         frequency_name='target_tone_frequency',
+                         level_name='target_tone_level',
+                         polarity_names=('target_tone_polarity',),
+                         tones=None, interleave=interleave_octaves):
     '''
     Queue the tone settings using the requested ordering and polarity. Shared
-    with the ABR adaptation paradigm, which uses the same context names for
-    ordering, polarity and averages.
+    with the ABR adaptation and forward-masking paradigms, which use the same
+    context names for ordering, polarity and averages.
+
+    Parameters
+    ----------
+    iti : float, generator or callable
+        Time between trials. A callable is passed each setting and returns
+        its ITI.
+    settings : list of dict
+        Settings to queue. Defaults to the settings of the `default` selector.
+    frequency_name, level_name : str
+        Settings the interleaved orderings sort by: `frequency_name` is
+        interleaved (by `interleave`) and `level_name` is ramped. Frequency
+        also keys `key_map` (for skipping a frequency).
+    polarity_names : sequence of str
+        Settings set to +1 or -1 when alternating polarity. All are flipped
+        together.
+    tones : list of (frequency name, level name)
+        Tones in the stimulus, to set the output's expected range. Defaults to
+        `[(frequency_name, level_name)]`.
+    interleave : callable
+        Given the set of `frequency_name` values, returns them in the order
+        the interleaved orderings present them.
     '''
     context = event.workbench.get_plugin('psi.context')
     controller = event.workbench.get_plugin('psi.controller')
@@ -100,13 +129,13 @@ def configure_tone_queue(key_map, event, iti):
     else:
         raise ValueError('Unrecognized ordering {}'.format(ordering))
 
-    freq_name = 'target_tone_frequency'
-    level_name = 'target_tone_level'
-    settings = list(context.iter_settings('default', 1))
+    freq_name = frequency_name
+    if settings is None:
+        settings = list(context.iter_settings('default', 1))
     frequencies = {s[freq_name] for s in settings}
 
     if ordering.startswith('interleaved'):
-        int_freq = interleave_octaves(frequencies)
+        int_freq = list(interleave(frequencies))
         sorters = {
             'interleaved_random': lambda a: (a[freq_name], a[level_name]),
             'interleaved_ramp': lambda a: (int_freq.index(a[freq_name]), a[level_name]),
@@ -118,40 +147,40 @@ def configure_tone_queue(key_map, event, iti):
     for s in settings:
         log.debug('%f\t%f', s[freq_name], s[level_name])
 
+    def add(setting, n):
+        add_setting(target, setting, n, iti, key_map, freq_name)
+
+    def set_polarity(setting, polarity):
+        for name in polarity_names:
+            setting[name] = polarity
+
     key_map.clear()
     if not alternate_polarity:
         for setting in settings:
-            add_setting(target, setting, averages, iti, key_map)
+            add(setting, averages)
     elif ordering in ('interleaved_ramp', 'interleaved_plateau'):
         for setting in settings:
-            setting['target_tone_polarity'] = 1
-            add_setting(target, setting, averages/2, iti, key_map)
+            set_polarity(setting, 1)
+            add(setting, averages/2)
         for setting in settings:
-            setting['target_tone_polarity'] = -1
-            add_setting(target, setting, averages/2, iti, key_map)
+            set_polarity(setting, -1)
+            add(setting, averages/2)
     elif ordering in ('sequential', 'interleaved_random'):
         for setting in settings:
-            setting['target_tone_polarity'] = 1
-            add_setting(target, setting, averages/2, iti, key_map)
-            setting['target_tone_polarity'] = -1
-            add_setting(target, setting, averages/2, iti, key_map)
+            set_polarity(setting, 1)
+            add(setting, averages/2)
+            set_polarity(setting, -1)
+            add(setting, averages/2)
     else:
         raise ValueError('Unrecognized ordering {}'.format(ordering))
 
-    # Now, identify the maximum level on a per-frequency setting
-    max_level = {}
-    for setting in settings:
-        frequency = setting['target_tone_frequency']
-        level = setting['target_tone_level']
-        max_level[frequency] = max(level, max_level.get(frequency, -np.inf))
-
-    # Then figure out the maximum scaling factor required for that level.
-    # Multiply to convert from RMS to peak to peak and add 1% headroom.
-    max_sf = {}
-    for frequency, level in max_level.items():
-        sf = target.calibration.get_sf(frequency, level)
-        max_sf[frequency] = sf
-    max_sf = max(max_sf.values()) * np.sqrt(2) * 1.01
+    # Find the largest scaling factor any tone needs. Multiply to convert
+    # from RMS to peak to peak and add 1% headroom.
+    if tones is None:
+        tones = [(frequency_name, level_name)]
+    max_sf = max(target.calibration.get_sf(s[f], s[l])
+                 for s in settings for f, l in tones)
+    max_sf = max_sf * np.sqrt(2) * 1.01
     target.channel.expected_range = (-max_sf, max_sf)
 
     data = event.workbench.get_plugin('psi.data')
@@ -312,6 +341,17 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
     #: redrawn. Batching keeps the GUI responsive at fast stimulus rates.
     attr n_update = 8
 
+    #: Epochs shown in the waterfall plot, and their duration (None for
+    #: `erp_span`).
+    attr plot_source = 'valid_erp'
+    attr plot_span = None
+
+    #: Settings that select the tab (`tab_grouping`) and the stacked trace
+    #: within the tab (`plot_grouping`). If None, the last setting in the
+    #: selector is stacked and the others select the tab.
+    attr tab_grouping = None
+    attr plot_grouping = None
+
     Extension:
         id = EXPERIMENT + '.context'
         point = 'psi.context.items'
@@ -340,7 +380,8 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
 
         EpochTimeContainer: time_container:
             label << '{} average'.format(manifest.erp_type)
-            span << manifest.erp_span
+            span << (manifest.erp_span if manifest.plot_span is None
+                     else manifest.plot_span)
             allow_auto_select << C.ordering == 'sequential'
             fmt_button_cb << C.get_selector().get_formatter(plot.tab_grouping)
 
@@ -354,10 +395,14 @@ enamldef ABRIOBaseManifest(ABRBaseManifest): manifest:
 
                 StackedEpochAveragePlot: plot:
                     label << '{} average plot'.format(manifest.erp_type)
-                    source_name = 'valid_erp'
+                    source_name = manifest.plot_source
                     n_update << manifest.n_update
-                    tab_grouping = C.get_names()[:-1]
-                    plot_grouping = C.get_names()[-1:]
+                    tab_grouping = (C.get_names()[:-1]
+                                    if manifest.tab_grouping is None
+                                    else manifest.tab_grouping)
+                    plot_grouping = (C.get_names()[-1:]
+                                     if manifest.plot_grouping is None
+                                     else manifest.plot_grouping)
                     fmt_plot_label_cb << C.get_selector().get_formatter(plot_grouping)
                     pen_width = 2
                     pen_color_cycle = ['k']

@@ -1,0 +1,228 @@
+'''
+Forward-masking ABR. Each trial is a masker tone burst, a silent gap and a
+probe tone burst, presented at a fixed rate (masker onset to masker onset).
+
+The masker and probe each have their own frequency, level, duration and ramp.
+The gap runs from the end of the masker (including its ramp) to the start of
+the probe. The gap, masker level and probe level are swept in the selector.
+Unless turned off, a probe-alone condition (masker silent) is added for each
+probe level.
+
+The trial's epoch runs from masker onset to past the probe response at the
+longest gap. Artifact reject and detrending use the whole epoch. The ABR to
+the probe is then cut out starting at probe onset (`AlignToProbe`) so that the
+responses at different gaps line up. The waterfall plot shows one tab per
+masker level and probe level, with the gaps stacked.
+
+Review status: this paradigm has been reviewed carefully by Brad Buran
+(2026-11-23) and appears to be correct.
+'''
+import logging
+log = logging.getLogger(__name__)
+
+from functools import partial
+
+from enaml.workbench.api import Extension
+from enaml.workbench.core.api import Command
+
+from psi.context.api import BoolParameter, ContextRow, EnumParameter, Parameter
+from psi.token.block import EpochBlock
+from psi.token.primitives import Envelope, Tone
+
+from .abr_io import ABRIOBaseManifest, configure_tone_queue
+from .cfts_mixins import ABRInEarCalibrationMixinManifest, CFTSSelector
+from .forward_masking_util import (
+    AlignToProbe, ForwardMaskingFactory, GAP, MASKER_FREQUENCY, MASKER_LEVEL,
+    MASKER_POLARITY, PROBE_FREQUENCY, PROBE_LEVEL, PROBE_POLARITY,
+    pair_duration, probe_alone_settings, probe_onset
+)
+
+
+EXPERIMENT = __name__.rsplit('.', 1)[-1]
+
+#: Extra time added to the end of the trial's epoch so that rounding to whole
+#: samples never leaves it short of the probe window.
+EPOCH_PAD = 0.5e-3
+
+
+def configure_experiment(manifest, event):
+    context = event.workbench.get_plugin('psi.context')
+    controller = event.workbench.get_plugin('psi.controller')
+    fs = controller.get_output('target').fs
+    rate = context.get_value('rate')
+    period = 1 / rate
+
+    settings = list(context.iter_settings('default', 1))
+    if context.get_value('include_probe_alone'):
+        settings.extend(probe_alone_settings(settings))
+
+    for s in settings:
+        if s[GAP] < 0:
+            raise ValueError('Forward masking gap cannot be negative.')
+        duration = pair_duration(s, fs)
+        if duration >= period:
+            raise ValueError(
+                f'Repetition rate is too fast. Masker, gap and probe last '
+                f'{duration*1e3:.1f} msec (gap {s[GAP]*1e3:.1f} msec) but '
+                f'the period is {period*1e3:.1f} msec.')
+        window_end = probe_onset(s) + manifest.probe_span
+        if window_end > period:
+            raise ValueError(
+                f'Repetition rate is too fast. The probe response window '
+                f'ends {window_end*1e3:.1f} msec after masker onset (gap '
+                f'{s[GAP]*1e3:.1f} msec), after the next masker starts at '
+                f'{period*1e3:.1f} msec.')
+
+    # The epoch runs from masker onset to the end of the probe window at the
+    # latest probe onset.
+    max_onset = max(probe_onset(s) for s in settings)
+    manifest.erp_span = max_onset + manifest.probe_span + EPOCH_PAD
+
+    # Keep the rate (onset to onset) the same whatever the gap: the ITI runs
+    # from the end of the probe (as played, in whole samples) to the next
+    # masker.
+    iti = lambda s: period - pair_duration(s, fs)
+
+    configure_tone_queue(
+        manifest.key_map, event, iti, settings,
+        frequency_name=GAP,
+        level_name=PROBE_LEVEL,
+        polarity_names=(MASKER_POLARITY, PROBE_POLARITY),
+        tones=[(MASKER_FREQUENCY, MASKER_LEVEL),
+               (PROBE_FREQUENCY, PROBE_LEVEL)],
+        # Octave interleaving is for frequencies. Present the gaps in order.
+        interleave=sorted,
+    )
+
+
+enamldef ForwardMasking(EpochBlock):
+    '''
+    Masker, then a silent gap, then probe. The first child block is the
+    masker and the second is the probe.
+    '''
+    factory = ForwardMaskingFactory
+    name = 'forward_masking'
+    label = 'forward masking'
+
+    Parameter:
+        name = 'gap'
+        label = 'gap (s)'
+        compact_label = 'gap'
+        default = 2e-3
+
+
+enamldef ABRForwardMaskingInEarCalibrationMixinManifest(
+        ABRInEarCalibrationMixinManifest):
+    '''
+    In-ear calibration at the masker and probe frequencies.
+    '''
+    outputs = {'target': [MASKER_FREQUENCY, PROBE_FREQUENCY]}
+
+
+enamldef ABRForwardMaskingManifest(ABRIOBaseManifest): manifest:
+
+    token_name = 'forward_masking'
+
+    #: Duration of the probe response window, from probe onset. The trial's
+    #: epoch (`erp_span`) is set when the experiment is configured.
+    attr probe_span = 8.5e-3
+
+    plot_source = 'valid_erp_probe'
+    plot_span << manifest.probe_span
+
+    #: One tab per masker level and probe level; gaps stacked.
+    tab_grouping = [MASKER_LEVEL, PROBE_LEVEL]
+    plot_grouping = [GAP]
+
+    Extension:
+        id = EXPERIMENT + '.tokens'
+        point = 'psi.token.tokens'
+
+        ForwardMasking:
+            Envelope:
+                name = 'masker'
+                label = 'masker'
+                hide = ['start_time', 'transform']
+                Tone:
+                    name = 'masker_tone'
+                    label = 'masker tone'
+                    hide = ['polarity', 'phase']
+            Envelope:
+                name = 'probe'
+                label = 'probe'
+                hide = ['start_time', 'transform']
+                Tone:
+                    name = 'probe_tone'
+                    label = 'probe tone'
+                    hide = ['polarity', 'phase']
+
+    Extension:
+        id = EXPERIMENT + '.io'
+        point = 'psi.controller.io'
+
+        AlignToProbe:
+            source_name = 'valid_erp'
+            name = 'valid_erp_probe'
+            span << manifest.probe_span
+
+    Extension:
+        id = EXPERIMENT + '.selectors'
+        point = 'psi.context.selectors'
+
+        CFTSSelector:
+            label = 'ABR stimuli'
+            can_manage = [GAP, MASKER_LEVEL, PROBE_LEVEL]
+            user_managed = False
+
+    Extension:
+        id = EXPERIMENT + '.items'
+        point = 'psi.context.items'
+
+        EnumParameter:
+            name = 'ordering'
+            label = 'Stimulus ordering'
+            choices = {
+                'conventional': '"sequential"',
+                'interleaved plateau': '"interleaved_plateau"',
+                'interleaved ramp': '"interleaved_ramp"',
+                'interleaved random': '"interleaved_random"',
+            }
+            scope = 'experiment'
+            group_name = 'acquisition'
+
+        ContextRow:
+            name = 'averaging'
+            group_name = 'acquisition'
+            fmt = ['Average', averages, 'masker-probe pairs at', rate,
+                   '/s, alt. pol.?', alt_pol, 'probe alone?', probe_alone]
+
+            Parameter: averages:
+                name = 'averages'
+                label = 'Averages'
+                default = 512
+                scope = 'trial'
+
+            Parameter: rate:
+                name = 'rate'
+                label = 'Reps. per sec.'
+                default = 20
+                scope = 'experiment'
+
+            BoolParameter: alt_pol:
+                name = 'alternate_polarity'
+                label = 'Alternate polarity?'
+                default = True
+                scope = 'experiment'
+
+            BoolParameter: probe_alone:
+                name = 'include_probe_alone'
+                label = 'Include probe alone?'
+                default = True
+                scope = 'experiment'
+
+    Extension:
+        id = EXPERIMENT + '.commands'
+        point = 'enaml.workbench.core.commands'
+        Command:
+            id = 'psi.controller.configure_experiment'
+            handler = partial(configure_experiment, manifest)

@@ -196,6 +196,31 @@ CONTEXT_ITEM_DETAIL = {
         'end': 1000,
         'step': 250,
     },
+
+    # Forward-masking ABR. The gap is entered in ms and stored in s.
+    'target_forward_masking_gap': {
+        'user_friendly_name': 'gap',
+        'step_unit': 'ms',
+        'unit': 'ms',
+        'order_user_managed': True,
+        'transform_fn': lambda x: x * 1e-3,
+        'inverse_transform_fn': lambda x: round(x * 1e3, 3),
+        'start': 2,
+        'end': 32,
+        'step': 10,
+    },
+    'target_masker_tone_level': {
+        'user_friendly_name': 'masker level',
+        'step_unit': 'dB',
+        'unit': 'dB SPL',
+        'order_user_managed': True,
+    },
+    'target_probe_tone_level': {
+        'user_friendly_name': 'probe level',
+        'step_unit': 'dB',
+        'unit': 'dB SPL',
+        'order_user_managed': True,
+    },
 }
 
 
